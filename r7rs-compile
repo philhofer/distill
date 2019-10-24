@@ -1,0 +1,4 @@
+#!/bin/execlineb
+# shorthand for chicken options; may be replaced by another R7RS
+# implementation at some point
+elgetpositionals csc -R r7rs -X r7rs -d0 -O3 -explicit-use -clustering -s -J $@
