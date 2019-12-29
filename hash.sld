@@ -9,5 +9,6 @@
     (srfi 4)
     (chicken base)
     (chicken blob)
-    (chicken foreign))
+    (chicken foreign)
+    (chicken type))
   (include "hash.scm"))

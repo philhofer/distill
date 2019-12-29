@@ -57,8 +57,10 @@ simple_hash_file(unsigned char *restrict dst, const char *fname)
 		err = blake2b_update(&S, dbuf, rd);
 		assert(err == 0);
 	}
+	err = errno;
+	while(fclose(f) < 0 && errno == EINTR) ;
 	if (rd < 0)
-		return errno;
+		return err;
 	err = blake2b_final(&S, dbuf, 32);
 	assert(err == 0);
 	hash_to_base64(dst, dbuf);

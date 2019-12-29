@@ -1,0 +1,5 @@
+*.so
+*.import.scm
+*.o
+*.types
+
