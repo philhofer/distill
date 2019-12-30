@@ -72,7 +72,7 @@
 	   (deps (lib-depends form))
 	   (name (lib-name form)))
       (display (string-append name ".import.scm "))
-      (display (string-append name ".so: "))
+      (display (string-append name ".o: "))
       (display file)
       (display " ")
       (display (string-join deps " "))

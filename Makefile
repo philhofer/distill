@@ -1,27 +1,34 @@
 
 R7RSI:=csi -R r7rs -s
-CSC_FLAGS:=-O3 -explicit-use
-R7RSC:=csc -X r7rs -R r7rs $(CSC_FLAGS) -s -J
+CSC_FLAGS:=-O3
+R7RSC:=csc -X r7rs -R r7rs $(CSC_FLAGS)
 
-Makefile.dep: $(wildcard *.sld)
+Makefile.dep: $(wildcard *.sld) autodep.scm
 	$(R7RSI) autodep.scm > $@
 
 include Makefile.dep
 
-%.import.scm %.types %.so:
-	$(R7RSC) -ot $*.types $<
+UNITS:=hash plan execline filepath log
+
+%.import.scm %.types %.o:
+	$(R7RSC) -setup-mode -D compiling-extension -D compiling-static-extension -unit $* -static -J -ot $*.types -c $<
+
+%.import.so: %.import.scm
+	$(R7RSC) -O3 -s $<
+
+sysplan: sysplan.scm ${UNITS:%=%.o} ${UNITS:%=%.import.so}
+	csc -X r7rs -R r7rs -setup-mode -m main -O3 -static $< -o $@
 
 TESTS:=$(wildcard *-test.scm)
 .PHONY: test all
 
-test: $(TESTS) ${TESTS:%-test.scm=%.so}
-	@for x in $(TESTS); do $(R7RSI) $$x; echo $$x OK; done
-	@for x in "*-test.sh"; do ./$$x; echo $$x OK; done
+test: sysplan $(TESTS)
+	./sysplan $(TESTS)
 
-all: hash.so plan.so execline.so filepath.so log.so
+all: sysplan ${UNITS:%=%.o} ${UNITS:%=%.import.so}
 
 bootstrap.tar.xz:
 	./mkbootstrap.sh
 
 clean:
-	$(RM) *.import.scm *.so *.o
+	$(RM) sysplan *.types *.import.scm *.so *.o *.link

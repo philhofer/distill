@@ -1,10 +1,11 @@
-#!/bin/csi -s
 (import
   (chicken file)
   (execline)
   (log)
   (hash)
   (plan))
+
+(include "test-helpers.scm")
 
 (trace-log #t)
 
@@ -20,16 +21,10 @@
     (for-each
       (lambda (p)
 	(let* ((k  (car p))
-	       (v  (cdr p))
-	       (v0 (lookup tab k)))
-	  ;; values are never copied when inserted
-	  ;; into the table, so the must be 'eq?' to
-	  ;; their inputs
-	  (unless (eq? v v0)
-	    (error "for key" k "want" v "got" v0))))
+	       (v  (cdr p)))
+	  (test eq? v (lookup tab k))))
       data)
-    (when (lookup tab 'not-a-key)
-      (error "erroneous lookup succeeded?"))))
+    (test eq? #f (lookup tab 'not-a-key))))
 
 ;; test a simple plan execution
 (let ()
@@ -53,9 +48,7 @@
 		(table '((artifact-dir . "./test-artifacts")
 			 (plan-dir     . "./test-plans"))))))
     (build-tree! conf p)
-    (let ((out  (plan-outputs conf p))
-	  (want `(#("/out" ,(hash-string "hi there!\n") #o644))))
-      (unless (equal? out want)
-	(error "not equal:"
-	       out want)))))
+    (test
+      `(#("/out" ,(hash-string "hi there!\n") #o644))
+      (plan-outputs conf p))))
 

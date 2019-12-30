@@ -1,4 +1,3 @@
-#!/bin/csi -s
 (import (execline) fmt)
 
 (define conf "/etc/sysctl.conf")
