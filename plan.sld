@@ -48,7 +48,7 @@
     package-build
     package-overlay
     update-package
-    build-tree!
+    build-package!
     filepath-join
     memoize-eq)
   (import (scheme)

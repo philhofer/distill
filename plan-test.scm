@@ -37,18 +37,21 @@
   ;; run a trivial plan ("echo hi > /sysroot/out") in
   ;; the bootstrap leaf and ensure that the output is
   ;; a valid interned file in the right place
-  (let ((p (make-plan
-	     #:name "test-plan"
-	     #:recipe (make-recipe
-			#:script (execline*
-				   (redirfd -w 1 /sysroot/out)
-				   (echo hi there!)))
-	     #:inputs (list bootstrap-input)))
+  (let ((p (lambda (conf)
+	     (make-package
+	       #:label  "test-package"
+	       #:src    bootstrap-input
+	       #:inputs '()
+	       #:tools  '()
+	       #:build (make-recipe
+			  #:script (execline*
+				     (redirfd -w 1 /sysroot/out)
+				     (echo hi there!))))))
 	(conf (table->proc
 		(table '((artifact-dir . "./test-artifacts")
 			 (plan-dir     . "./test-plans"))))))
-    (build-tree! conf p)
-    (test
-      `(#("/out" ,(hash-string "hi there!\n") #o644))
-      (plan-outputs conf p))))
+    (let ((plan (build-package! p conf conf)))
+      (test
+	`(#("/out" ,(hash-string "hi there!\n") #o644))
+	(plan-outputs conf plan)))))
 

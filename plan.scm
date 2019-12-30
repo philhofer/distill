@@ -152,9 +152,11 @@
       (require ok-plan-name? (package-label pkg))
       (package-build pkg)
       (input-sort
-	(append (map (cut %package->plan <> host host) (package-tools pkg))
-		(map (cut %package->plan <> host target) (package-inputs pkg))
-		(package-overlay pkg))))))
+	(cons
+	  (package-src pkg)
+	  (append (map (cut %package->plan <> host host) (package-tools pkg))
+		  (map (cut %package->plan <> host target) (package-inputs pkg))
+		  (package-overlay pkg)))))))
 
 ;; since we use plans in filepaths, disallow
 ;; plans that begin with '.' or contain '/' or whitespace, etc.
@@ -632,3 +634,9 @@
       (when (and (plan? p) (not (file-exists? (plan-outputs-file conf p))))
 	(do-plan! conf p)))
     p))
+
+(: build-package! (package-lambda conf-lambda conf-lambda -> (struct plan)))
+(define (build-package! proc host target)
+  (let ((plan (%package->plan proc host target)))
+    (build-tree! target plan)
+    plan))
