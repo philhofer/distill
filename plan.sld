@@ -11,19 +11,8 @@
     leaf-hash
     leaf-format
     update-leaf
-    leaf->alist
-    alist->leaf
-    make-plan
-    plan?
-    plan-name
-    plan-recipe
-    plan-inputs
-    plan-hash
-    plan-outputs
-    update-plan
-    plan->alist
-    alist->plan
     make-interned-file
+    interned
     interned-file?
     interned-file-abspath
     interned-file-hash
@@ -31,8 +20,6 @@
     interned-file-usr
     interned-file-grp
     update-interned-file
-    interned-file->alist
-    alist->interned-file
     make-recipe
     recipe-env
     recipe-script
@@ -49,27 +36,33 @@
     package-overlay
     update-package
     build-package!
-    filepath-join
     memoize-eq)
+
+  ;; for non-r7rs imports, please try to keep
+  ;; the requisite imported functions explicit
+  ;; so that it's obvious what needs to be replaced
+  ;; for a non-chicken implementation
+  (cond-expand
+    (chicken
+      (import
+        (chicken type) ;; type hints can be replaced with a no-op
+	(only (chicken file) file-exists? move-file copy-file create-directory find-files create-temporary-directory delete-file* delete-file delete-directory rename-file)
+	(only (chicken file posix) file-type file-permissions set-file-permissions! create-symbolic-link read-symbolic-link file-size)
+        (only (chicken base) flatten)
+	(only (chicken io) read-string write-string)
+	(only (chicken process) process-run process-wait)
+	(only (chicken sort) sort)
+	(typed-records))))
+
   (import (scheme)
   	  (scheme base)
   	  (scheme read)
           (scheme write)
 	  (scheme case-lambda)
-          (srfi 2)
-          (srfi 9)
-	  (srfi 13)
-	  (srfi 26)
-	  (srfi 28)
-	  (srfi 69)
-	  (chicken type)
-	  (chicken file) ;; TODO: portable!
-	  (chicken file posix)
-	  (chicken sort)
-	  (chicken string)
-	  (chicken process)
-	  (chicken process-context)
-	  (typed-records)
+	  (srfi 2) ;; and-let*
+	  (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
+	  (srfi 26) ;; cut, cute
+	  (srfi 69) ;; hash tables
 	  (filepath)
 	  (log)
 	  (execline)

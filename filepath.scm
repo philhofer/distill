@@ -6,7 +6,39 @@
         val
 	(loop (proc val (car lst)) (cdr lst)))))
 
-(: filepath-join (string #!rest string --> string))
+(define-type stringy (or string symbol integer))
+
+(: stringify (stringy --> string))
+(define (stringify x)
+  (cond
+    ((string? x) x)
+    ((symbol? x) (symbol->string x))
+    ((integer? x) (number->string x 10))
+    (else (error "can't stringify" x))))
+
+(: dirname (string --> string))
+(define (dirname str)
+  (let ((end (- (string-length str) 1)))
+    (let loop ((i end))
+      (cond
+	((<= i 0) (if (eqv? (string-ref str 0) #\/) "/" "."))
+	((char=? (string-ref str i) #\/) (substring/shared str 0 i))
+	(else (loop (- i 1)))))))
+
+(: basename (string --> string))
+(define (basename str)
+  (let ((end (- (string-length str) 1)))
+    (let loop ((i end))
+      (cond
+	((< i 0) str)
+	((char=? (string-ref str i) #\/) (substring/shared str (+ i 1)))
+	(else (loop (- i 1)))))))
+
+;; core filepath normalization routine
+;;
+;; join one or more filepath components together
+;; while eliminating '.' and '..' components where possible
+(: filepath-join (stringy #!rest stringy --> string))
 (define (filepath-join first . rest)
   (let* ((cons-part (lambda (out part)
 		      ;; push 'part' onto 'out' unless it is
@@ -22,9 +54,9 @@
 			 (cons part out)))))
 	 (cons-args (lambda (out arg)
 		      ;; push 'arg' components onto 'out'
-		      (foldl1 cons-part out (string-split arg "/"))))
+		      (foldl1 cons-part out (string-split (stringify arg) "/"))))
 	 (rev-parts (foldl1 cons-args '() (cons first rest)))
-	 (abspath?  (string-prefix? "/" first))
+	 (abspath?  (string-prefix? "/" (->string first)))
 	 (prepend   (lambda (out part)
 		      (string-append part "/" out)))
 	 (fullpath  (foldl1 prepend (car rev-parts) (cdr rev-parts))))
@@ -32,17 +64,8 @@
         (string-append "/" fullpath)
         fullpath)))
 
+;; convert a relative path to an absolute path
+;; if it is not one already (by prepending the current directory)
 (: abspath (string --> string))
 (define (abspath p)
   (if (eq? (string-ref p 0) #\/) p (filepath-join (current-directory) p)))
-
-(: foldl-dir (forall (a) ((a string -> a) a string -> a)))
-(define (foldl-dir proc seed dir)
-  (find-files
-    dir
-    #:seed seed
-    #:test (lambda (f)
-	     (memq (file-type f) '(normal-file link)))
-    #:dotfiles #t
-    #:action (lambda (f val)
-	       (proc val f))))

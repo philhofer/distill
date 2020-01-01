@@ -1,10 +1,12 @@
 (define-library (filepath)
   (export
-    foldl-dir
     filepath-join
+    dirname
+    basename
     abspath)
   (import
     scheme
+    (scheme base)
     (srfi 13)
     (chicken file)
     (chicken string)

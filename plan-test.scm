@@ -45,13 +45,13 @@
 	       #:tools  '()
 	       #:build (make-recipe
 			  #:script (execline*
-				     (redirfd -w 1 /sysroot/out)
+				     (redirfd -w 1 /out/out)
 				     (echo hi there!))))))
 	(conf (table->proc
 		(table '((artifact-dir . "./test-artifacts")
 			 (plan-dir     . "./test-plans"))))))
-    (let ((plan (build-package! p conf conf)))
+    (let ((out (build-package! p conf conf)))
       (test
-	`(#("/out" ,(hash-string "hi there!\n") #o644))
-	(plan-outputs conf plan)))))
+	`(#("/out" ,(hash-string "hi there!\n") #o644 "hi there!\n" 0 0 #f))
+	out))))
 

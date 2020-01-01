@@ -14,11 +14,11 @@
 (define (impute-format src)
   (unless (string-prefix? "https://" src)
     (error "source spec doesn't begin with https://:" src))
-  (let loop ((suff '((".tar.xz" . tar.xz)
-		     (".tar.gz" . tar.gz)
-		     (".tgz"    . tar.gz)
-		     (".tar.bz" . tar.bz)
-		     (".tar"    . tar))))
+  (let loop ((suff '((".tar.xz" tar xz)
+		     (".tar.gz" tar gz)
+		     (".tgz"    tar gz)
+		     (".tar.bz" tar bz)
+		     (".tar"    tar))))
     (cond
       ((null? suff) 'unknown)
       ((string-suffix? (caar suff) src) (cdar suff))
@@ -34,9 +34,31 @@
 	   ((mode #o644) : integer)
 	   ((contents #f) : (or false string u8vector)) ;; for inline interned-files
 	   ((usr 0) : (or symbol integer))
-	   ((grp 0) : (or symbol integer)))
+	   ((grp 0) : (or symbol integer))
+	   ((symlink? #f) : boolean)) ;; is symlink
+
+(define (%ifile->vector i)
+  (vector
+    (interned-file-abspath i)
+    (interned-file-hash i)
+    (interned-file-mode i)
+    (interned-file-contents i)
+    (interned-file-usr i)
+    (interned-file-grp i)
+    (interned-file-symlink? i)))
+
+(define (%vector->ifile v)
+  (make-interned-file
+    #:abspath  (vector-ref v 0)
+    #:hash     (vector-ref v 1)
+    #:mode     (vector-ref v 2)
+    #:contents (vector-ref v 3)
+    #:usr      (vector-ref v 4)
+    #:grp      (vector-ref v 5)
+    #:symlink? (vector-ref v 6)))
 
 ;; constructor for inlined interned file data
+(: interned (string integer string -> (struct interned-file)))
 (define (interned abspath mode data)
   (make-interned-file
     #:abspath abspath
@@ -48,13 +70,13 @@
     #:contents data))
 
 ;; default environment for recipes
-(define default-env
+(define *default-env*
   '((PATH . "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin")
     (LANG . "en_US.UTF-8")
     (LC_ALL . "en_US.UTF-8")))
 
 (defstruct recipe
-	   ((env default-env) : (list-of pair))
+	   ((env '()) : (list-of pair))
 	   (script : list))
 
 (define-type conf-lambda (symbol -> *))
@@ -64,7 +86,7 @@
 ;; that is converted into a plan by combining it with the configuration
 (defstruct package
 	   (label : string)                    ;; human-readable name
-	   (src : (struct leaf))               ;; where to get the package source
+	   (src : (or (struct leaf) (list-of (struct leaf)))) ;; where to get the package source
 	   (tools : (list-of package-lambda))  ;; build tools (built for host)
 	   (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
 	   (build : (struct recipe))           ;; build script (see execline*)
@@ -85,31 +107,29 @@
 (define-type plan-input-type (or (struct plan) (struct leaf) (struct interned-file)))
 (defstruct plan
 	   (name : string)
+	   ;; recipe is the code+environment to be executed
 	   (recipe : (struct recipe))
-	   (inputs : (list-of plan-input-type))
+	   ;; inputs are the set of filesystem inputs
+	   ;; represented as an alist of root directories
+	   ;; and contents to be extracted relative to those roots
+	   ;; (see 'unpack')
+	   (inputs : (list-of
+		       (pair string (or plan-input-type (list-of plan-input-type)))))
 	   ((saved-hash #f) : (or false string)))
+
+(defstruct artifact
+           (abspath : string)
+	   (method  : (or symbol (list-of symbol))) ;; verbatim, symlink, or (tar ..)
+	   (hash    : string)
+	   ((data #f) : (or false string u8vector)) ;; inline contents
+	   ((remote #f) : (or false string))) ;; remote source
 
 (define (%plan name recipe inputs)
   (make-plan
-    #:name name
-    #:recipe recipe
-    #:inputs inputs
+    #:name       name
+    #:recipe     recipe
+    #:inputs     inputs
     #:saved-hash (%plan-hash inputs recipe)))
-
-#;(define-syntax intern-include
-  (lambda (stx)
-    (syntax-case stx ()
-       ((_ fname abspath)
-	(begin
-	  (unless (string? fname)
-	    (syntax-error "expected filename in intern-include form:" fname))
-	  (unless (file-exists? fname)
-	    (syntax-error "expected file to exist:" fname))
-	  (let ((h (hash-file fname)))
-	    #`(make-interned-file
-		#:abspath abspath
-		#:hash    ,h
-		#:mode    #x0644)))))))
 
 (define-syntax require
   (syntax-rules ()
@@ -151,12 +171,16 @@
     (%plan
       (require ok-plan-name? (package-label pkg))
       (package-build pkg)
-      (input-sort
-	(cons
-	  (package-src pkg)
-	  (append (map (cut %package->plan <> host host) (package-tools pkg))
-		  (map (cut %package->plan <> host target) (package-inputs pkg))
-		  (package-overlay pkg)))))))
+      ;; NOTE: plan-hash is sensitive to the sort here
+      (list
+	(cons "/" (input-sort
+		    (flatten (package-src pkg)
+			     (package-overlay pkg)
+			     (map (cut %package->plan <> host host)
+				  (package-tools pkg)))))
+	(cons "/sysroot" (input-sort
+			   (map (cut %package->plan <> host target)
+				(package-inputs pkg))))))))
 
 ;; since we use plans in filepaths, disallow
 ;; plans that begin with '.' or contain '/' or whitespace, etc.
@@ -172,9 +196,9 @@
 (define (write-env env prt)
   (for-each
     (lambda (p)
-      (write (car p) prt)
-      (write "=" prt)
-      (write (cdr p) prt)
+      (display (car p) prt)
+      (display "=" prt)
+      (display (cdr p) prt)
       (newline prt))
     env))
 
@@ -284,6 +308,22 @@
 ;; tables are just vectors
 (define table? vector?)
 
+;; produce an alist of the non-empty cells in the table
+;;
+;; in other words, (equal? alist (table->alist (table alist)))
+(: table->alist (vector -> (list-of (pair symbol *))))
+(define (table->alist v)
+  (let ((len (vector-length v)))
+    (let loop ((i 0)
+	       (lst '()))
+      (if (>= i len)
+	  lst
+	  (let ((p (vector-ref v i)))
+	    (loop (+ i 1)
+		  (if (pair? p)
+		      (cons p lst)
+		      lst)))))))
+
 ;; not defined in R7RS, but trivial enough to implement
 (: call-with-output-string ((output-port -> *) -> string))
 (define (call-with-output-string proc)
@@ -302,25 +342,47 @@
 
 ;; plan-hash computes the canonical hash for
 ;; a set of plan inputs and a recipe
-(: %plan-hash ((list-of plan-input-type) (struct recipe) --> string))
+(: %plan-hash ((list-of
+		 (pair string (list-of plan-input-type))) (struct recipe) --> string))
 (define (%plan-hash inputs recipe)
-  (define (write-inner x prt)
+  ;; TODO: make hashing order-invariant
+  ;; for inputs (but ensure that unpacking
+  ;; overlapping inputs fails; otherwise the
+  ;; output may not be order-invariant!)
+  (define (write-inner x root prt)
     (cond
       ((leaf? x)
-       (write (leaf->alist x) prt))
+       ;; leaf name, src, etc. shouldn't change the hash
+       (write (list 'leaf root (leaf-hash x) (leaf-format x)) prt))
       ((interned-file? x)
-       (write (interned-file->alist x) prt))
+       ;; the hashed representation here needs to ignore
+       ;; whether or not the file contents are in-line;
+       ;; that's an implementation detail
+       (if (interned-file-symlink? x)
+	   (write (list 'symlink root
+			(interned-file-abspath x)
+			(interned-file-contents x)) prt)
+	   (write (list 'file root
+			(interned-file-abspath x)
+			(interned-file-hash x)
+			(interned-file-mode x)
+			(interned-file-usr  x)
+			(interned-file-grp  x)) prt)))
       ((plan? x)
-       (write (cons (plan-name x) (plan-hash x)) prt))))
+       (write (list 'plan root (plan-hash x)) prt)))
+    (newline prt))
+  (define (write-pair p prt)
+    (for-each
+      (cute write-inner <> (car p) prt)
+      (cdr p)))
   (hash-string
     (call-with-output-string
       (lambda (out)
-	(for-each
-	  (lambda (in)
-	    (write-inner in out)
-	    (newline out))
-	  inputs)
-	(write-env (recipe-env recipe) out)
+	(for-each (cut write-pair <> out) inputs)
+	;; XXX semantically-identical scripts and environments
+	;; have different hashes; this is correct but probably
+	;; annoyingly pedantic in terms of safety
+	(write-env (append *default-env* (recipe-env recipe)) out)
 	(write-exexpr (recipe-script recipe) out)))))
 
 ;; plan-hash returns the canonical hash of a plan
@@ -368,7 +430,7 @@
 		    proc
 		    (lambda (x)
 		      (if (plan? x)
-			  (plan-inputs x)
+			  (flatten (map cdr (plan-inputs x)))
 			  '()))))
 
 ;; memoize a procedure by remembering
@@ -402,14 +464,14 @@
     "--unshare-uts"
     "--unshare-cgroup"
     "--hostname" "builder"
-    "--bind" root "/"
+    "--bind" root "/"  ; rootfs containing host tools
     "--dir" "/dev"
     "--dir" "/proc"
-    "--dir" "/sysroot"
     "--dir" "/tmp"
     "--dev" "/dev"
     "--proc" "/proc"
     "--tmpfs" "/tmp"
+    "--"
     args))
 
 ;; ensure that a leaf artifact exists in the artifact dir,
@@ -419,12 +481,15 @@
   (let* ((base (leaf-hash l))
 	 (path (filepath-join (conf 'artifact-dir) base)))
     (or (and-let* ((h (hash-file path)))
-	  (string=? h (leaf-hash l)))
+	  ;; clean up an obviously corrupted file
+	  (or (string=? h (leaf-hash l))
+	      (begin (info path "corrupted?") (delete-file path) #f)))
 	(let ((tmp (string-append path ".tmp")))
 	  (info "fetching" base "from" (leaf-src l))
 	  (run "wget" (leaf-src l) "-o" tmp)
 	  (let ((res (hash-file tmp)))
 	    (unless (and res (string=? res base))
+	      (delete-file* tmp)
 	      (error "fetched artifact has the wrong hash:" res))
 	    (rename-file path tmp #t))))))
 
@@ -440,9 +505,10 @@
 		 (else     (error "unsupported leaf format" (leaf-format l)))))
 	(lfile (filepath-join (conf 'artifact-dir) (leaf-hash l))))
     (unless (and-let* ((h (hash-file lfile)))
-	      (string=? h (leaf-hash l)))
+	      (or (string=? h (leaf-hash l))
+		  (error "file exists but has bad hash:" lfile h (leaf-hash l))))
       (unless (leaf-src l)
-	(error "leaf has no source and is not interned:" l))
+	(error "leaf has no source and is not interned:" (leaf-name l) lfile))
       (let ((tmp (string-append lfile ".tmp")))
 	(info "fetching" (leaf-hash l) "from" (leaf-src l))
 	(run "wget" (leaf-src l) "-o" tmp)
@@ -459,10 +525,26 @@
 (: unpack-interned-file (conf-lambda (struct interned-file) string -> *))
 (define (unpack-interned-file conf i dst)
   (let ((dstfile (filepath-join dst (interned-file-abspath i)))
-	(perm    (interned-file-mode i))
-	(srcfile (interned-file-cachepath conf i)))
-    (copy-file srcfile dstfile #t 32768)
-    (set-file-permissions! dstfile perm)))
+	(perm    (interned-file-mode i)))
+    (trace "unpack" (interned-file-abspath i) "->" dstfile)
+    ;; TODO: handle usr and grp;
+    ;; we're not typically root when unpacking, so
+    ;; it's not clear how we can chown/chgrp under
+    ;; ordinary circumstances
+    (create-directory (dirname dstfile) #t)
+    (cond
+      ((interned-file-symlink? i)
+       (create-symbolic-link (interned-file-contents i) dstfile))
+      ((interned-file-contents i)
+       (begin
+	 (with-output-to-file dstfile (lambda () (write-string (interned-file-contents i))))
+	 (set-file-permissions! dstfile perm)))
+      (else
+	(let ((srcfile (interned-file-cachepath conf i)))
+	  (unless (file-exists? srcfile)
+	    (error "cannot unpack file (doesn't exist):" dstfile))
+	  (copy-file srcfile dstfile #t 32768)
+	  (set-file-permissions! dstfile perm))))))
 
 ;; plan-outputs-file is the file that stores the serialized
 ;; interned file information for a plan
@@ -477,14 +559,9 @@
 ;; write 'lst' as the set of plan outputs associated with 'p'
 (: save-plan-outputs! (conf-lambda (struct plan) (list-of (struct interned-file)) -> *))
 (define (save-plan-outputs! conf p lst)
-  (let* ((ifile->vec (lambda (ifile)
-		       (vector
-			 (interned-file-abspath ifile)
-			 (interned-file-hash ifile)
-			 (interned-file-mode ifile))))
-	 (vecs (foldl1
+  (let* ((vecs (foldl1
 		 (lambda (lst ifile)
-		   (cons (ifile->vec ifile) lst))
+		   (cons (%ifile->vector ifile) lst))
 		 '()
 		 lst))
 	 (vec  (list->vector vecs))
@@ -518,32 +595,13 @@
 (define (unpack-plan-outputs conf p dst)
   (for-each
     (lambda (vec)
-      (unpack-interned-file
-	conf
-	;; XXX keep this in line with 'save-plan-outputs!'
-	(make-interned-file
-	  #:abspath (vector-ref vec 0)
-	  #:hash    (vector-ref vec 1)
-	  #:mode    (vector-ref vec 2))
-	dst))
-    (plan-outputs conf p)))
+      (unpack-interned-file conf (%vector->ifile vec) dst))
+    (or (plan-outputs conf p)
+	(error "unpack-plan-outputs on unbuilt plan" (plan-name p)))))
 
 (: interned-file-cachepath (conf-lambda (struct interned-file) --> string))
 (define (interned-file-cachepath conf f)
   (filepath-join (conf 'artifact-dir) (interned-file-hash f)))
-
-(: fetch-sources! (conf-lambda (struct plan) -> undefined))
-(define (fetch-sources! conf root)
-  (plan-dfs
-    (lambda (in)
-      (cond
-	((leaf? in)
-	 (wget-leaf conf in))
-	((interned-file? in)
-	 (unless (file-exists? (interned-file-cachepath conf in))
-	   (error "interned file doesn't exist:" in)))
-	(else #t)))
-    root))
 
 ;; unpack installs a plan input into the
 ;; given destination directory
@@ -553,7 +611,7 @@
     ((leaf? i) (unpack-leaf conf i dst))
     ((plan? i) (unpack-plan-outputs conf i dst))
     ((interned-file? i) (unpack-interned-file conf i dst))
-    (else (error "unexpected value" i))))
+    (else (error "unpack: unexpected value" i))))
 
 (define *envfile-path* "/env")
 (define *buildfile-path* "/build")
@@ -577,39 +635,84 @@
     (delete-directory dir #t)
     res))
 
-;; %intern! moves a file to the artifact directory
-;; and returns an interned-file handle
+(define *max-inline-file-size* 128)
+
+(define (%file->string f)
+  (call-with-input-file
+    f
+    (lambda (p)
+      (let ((v (read-string #f p)))
+	(if (eof-object? v) "" v)))))
+
+;; %intern! interns an ordinary file
+;; and returns the interned-file handle
 (: %intern! (conf-lambda string string -> (struct interned-file)))
 (define (%intern! conf f abspath)
-  (let* ((h    (hash-file f))
-	 (perm (file-permissions f))
-	 (dst  (filepath-join (conf 'artifact-dir) h)))
-    ;; TODO: owner/group!
-    (move-file f dst #t 32768)
-    (set-file-permissions! dst #o600)
-    (make-interned-file
-      #:abspath abspath
-      #:mode    perm
-      #:hash    h)))
+  (trace "intern file" f "->" abspath)
+  (if (< (file-size f) *max-inline-file-size*)
+      (let ((str (%file->string f)))
+	(make-interned-file
+	  #:abspath abspath
+	  #:mode    (file-permissions f)
+	  #:contents str
+	  #:hash     (hash-string str)))
+      (let* ((h   (hash-file f))
+	     (dst (filepath-join (conf 'artifact-dir) h)))
+	(begin
+	  ;; TODO: this could be really slow for
+	  ;; many/large outputs; there is some serious
+	  ;; room for optimization here...
+	  (unless (file-exists? dst)
+	    (copy-file f dst #t 32768)
+	    (set-file-permissions! dst #o600))
+	  (make-interned-file
+	    #:abspath abspath
+	    #:mode    (file-permissions f)
+	    #:hash    h)))))
+
+;; %intern-link returns a link
+;; at abspath linking to lnk
+(: %intern-link (conf-lambda string string -> (struct interned-file)))
+(define (%intern-link conf abspath lnk)
+  (trace "intern symlink" abspath "->" lnk)
+  (make-interned-file
+    #:abspath  abspath
+    #:contents lnk
+    #:symlink? #t))
 
 ;; plan->outputs! builds a plan and yields
 ;; the list of interned file handles that are installed
-;; into the /sysroot directory in the jail
+;; into the /out directory in the jail
 (: plan->outputs! (conf-lambda (struct plan) -> (list-of (struct interned-file))))
 (define (plan->outputs! conf p)
+  (define (unpack-inputs conf p root)
+    (create-directory (filepath-join root "sysroot") #t)
+    (create-directory (filepath-join root "out") #t)
+    (let ((in (plan-inputs p)))
+      (for-each
+	(lambda (p)
+	  (let ((dir (filepath-join root (car p))))
+	    (for-each
+	      (cut unpack conf <> dir)
+	      (cdr p))))
+	in)))
   (with-tmpdir
     (lambda (root)
+      ;; unpack plan inputs and turn the recipe
+      ;; into executables
       (trace "building in root" root)
-      (for-each
-	(cut unpack conf <> root)
-	(plan-inputs p))
+      (unpack-inputs conf p root)
       (write-recipe-to-dir (plan-recipe p) root)
+
+      ;; fork+exec into the recipe inside the sandbox
       (sandbox-run
 	root
 	"/bin/emptyenv"
 	"/bin/envfile" *envfile-path*
 	*buildfile-path*)
-      (let* ((outdir (filepath-join root "sysroot"))
+
+      ;; collect outputs
+      (let* ((outdir (filepath-join root "out"))
 	     (basep  (lambda (f)
 		       (if (string-prefix? outdir f)
 			   (filepath-join "/" (substring/shared f (string-length outdir)))
@@ -617,13 +720,18 @@
 	(find-files
 	  outdir
 	  #:action (lambda (f lst)
-		     (cons (%intern! conf f (basep f)) lst)))))))
+		     (case (file-type f #t)
+		       ((regular-file)
+			(cons (%intern! conf f (basep f)) lst))
+		       ((symbolic-link)
+			(let ((lnk (read-symbolic-link f)))
+			  (cons (%intern-link conf (basep f) lnk) lst)))
+		       (else lst))))))))
 
-;; enter a build with the given configuration
-;; and root plan
-(: build-tree! (conf-lambda (struct plan) -> *))
-(define (build-tree! conf p)
+(: build-plan! (conf-lambda (struct plan) -> *))
+(define (build-plan! conf p)
   (define (do-plan! conf p)
+    (info "building" (plan-name p))
     (save-plan-outputs! conf p (plan->outputs! conf p)))
   (plan-dfs
     (lambda (p)
@@ -635,8 +743,35 @@
 	(do-plan! conf p)))
     p))
 
-(: build-package! (package-lambda conf-lambda conf-lambda -> (struct plan)))
+(: build-package! (package-lambda conf-lambda conf-lambda -> (or false (list-of vector))))
 (define (build-package! proc host target)
   (let ((plan (%package->plan proc host target)))
-    (build-tree! target plan)
-    plan))
+    (build-plan! target plan)
+    (plan-outputs target plan)))
+
+;; TODO: garbage collection; needs some rethinking...
+#;(define (garbage-collect! proc host target)
+  (let ((plan (%package->plan proc host target))
+	(ht   (make-hash-table)))
+    (plan-dfs
+      (lambda (p)
+	(cond
+	  ((interned-file? p)
+	   (hash-table-set! ht (interned-file-hash p) #t))
+	  ((leaf? p)
+	   (hash-table-set! ht (leaf-hash p) #t))
+	  ((plan? p)
+	   (let ((out (or (plan-outputs target p) (plan-outputs host p))))
+	     (when out
+	       (for-each
+		 (lambda (vec)
+		   (hash-table-set! ht (vector-ref vec 1) #t)) out))))))
+      plan)
+    (find-files
+      (target 'artifact-dir)
+      #:test (lambda (f)
+	       (hash-table-ref/default ht (basename f) #f))
+      #:action (lambda (f lst)
+		 (display "would delete ")
+		 (display f)
+		 (newline)))))

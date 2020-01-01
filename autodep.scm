@@ -13,7 +13,7 @@
       (else        (error "unexpected library name" n)))))
 
 (define (lib-import form)
-  (string-append (lib-name form) ".import.scm"))
+  (string-append (lib-name form) ".import.so"))
 
 ;; perform a left-associative fold
 ;; over forms beginning with the given symbol
@@ -60,7 +60,7 @@
       (let ((form (call-with-input-file f (cut read <>))))
 	(unless (eq? (car form) 'define-library)
 	  (error "expected define-library form in" f))
-	(hash-table-set! mod-to-import (cadr form) (string-append (lib-name form) ".import.scm"))
+	(hash-table-set! mod-to-import (cadr form) (string-append (lib-name form) ".import.so"))
 	(cons f form)))
     (glob "*.sld")))
 
