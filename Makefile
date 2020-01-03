@@ -8,7 +8,7 @@ Makefile.dep: $(wildcard *.sld) autodep.scm
 
 include Makefile.dep
 
-UNITS:=hash plan execline filepath log
+UNITS:=hash table plan execline filepath log
 
 %.import.scm %.types %.o:
 	$(R7RSC) -setup-mode -D compiling-extension -D compiling-static-extension -unit $* -static -J -ot $*.types -c $<

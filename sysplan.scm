@@ -14,6 +14,7 @@
 ;; contains the syntactic definitions that we would otherwise
 ;; need to load when expanding other code
 (begin
+  (include "table.import.scm")
   (include "execline.import.scm")
   (include "hash.import.scm")
   (include "filepath.import.scm")

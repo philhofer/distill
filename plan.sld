@@ -1,9 +1,7 @@
 (define-library (plan)
   (export
-    table
-    table->proc
-    insert!
-    lookup
+    artifact-dir
+    plan-dir
     make-leaf
     leaf?
     leaf-name
@@ -63,6 +61,7 @@
 	  (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
 	  (srfi 26) ;; cut, cute
 	  (srfi 69) ;; hash tables
+	  (table)
 	  (filepath)
 	  (log)
 	  (execline)

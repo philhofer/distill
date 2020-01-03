@@ -1,5 +1,7 @@
 (import
   (chicken file)
+  (chicken pretty-print)
+  (table)
   (execline)
   (log)
   (hash)
@@ -7,6 +9,8 @@
 
 (include "test-helpers.scm")
 
+(artifact-dir "./test-artifacts")
+(plan-dir "./test-plans")
 (trace-log #t)
 
 ;; test table/lookup
@@ -47,11 +51,7 @@
 			  #:script (execline*
 				     (redirfd -w 1 /out/out)
 				     (echo hi there!))))))
-	(conf (table->proc
-		(table '((artifact-dir . "./test-artifacts")
-			 (plan-dir     . "./test-plans"))))))
+	(conf (table->proc (table))))
     (let ((out (build-package! p conf conf)))
-      (test
-	`(#("/out" ,(hash-string "hi there!\n") #o644 "hi there!\n" 0 0 #f))
-	out))))
+      (pp out))))
 
