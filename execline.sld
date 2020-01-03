@@ -11,7 +11,10 @@
     (scheme write)
     (scheme base)
     (srfi 13)
-    (srfi 26)
-    (chicken type)
-    fmt)
+    (srfi 26))
+  (cond-expand
+    (chicken
+      (import
+        (chicken type)
+	fmt)))
   (include "execline.scm"))

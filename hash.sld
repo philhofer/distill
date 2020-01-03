@@ -6,9 +6,11 @@
     hash-file)
   (import
     (scheme base)
-    (srfi 4)
-    (chicken base)
-    (chicken blob)
-    (chicken foreign)
-    (chicken type))
+    (srfi 4))
+  (cond-expand
+    (chicken
+      (import
+	(only (chicken blob) blob->string string->blob)
+	(chicken foreign)
+	(chicken type))))
   (include "hash.scm"))

@@ -5,7 +5,10 @@
     info
     fatal)
   (import
-    scheme
-    (chicken base) ;; exit, current-error-port
-    fmt)
+    (scheme base))
+  (cond-expand
+    (chicken
+      (import
+        (only (chicken base) exit current-error-port)
+	fmt)))
   (include "log.scm"))
