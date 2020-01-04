@@ -15,6 +15,12 @@
 	       #:label (symbol->string (quote label))
 	       body* ...))))))))
 
+(define-syntax package-lambda
+  (syntax-rules ()
+    ((_ conf body* ...)
+     (memoize-eq
+       (lambda (conf) body* ...)))))
+
 (define (package-transform pkg . procs)
   (memoize-eq
     (lambda (conf)
@@ -66,12 +72,44 @@
 		  (let ((p (memq alist v)))
 		    (if p (cdr p) (conf v))))))))
 
-(define *musl-version* '1.1.24)
-(define *musl-src-url* (fmt #f (cat "https://www.musl-libc.org/releases/musl-" *musl-version* ".tar.gz")))
-(define *musl-src-hash* "hC6Gf8nyJQAZVYJ-tNG0iU0dRjES721p0x1cqBp2Ge8=")
+;; pkgs->bootstrap takes a list of package-lambdas
+;; and overrides their src and tools so that they
+;; don't depend on any tools packages, and instead
+;; use the tools provided by a bootstrap tarball
+;; that is unpacked at / before building
+(define (pkgs->bootstrap . pkgs)
+  (let ((ht (make-hash-table)))
+    (define (inner pkg)
+      (or (hash-table-ref/default ht pkg #f)
+	  (let ((newproc (memoize-eq
+			   (lambda (conf)
+			     (let ((old (pkg conf)))
+			       (update-package
+				 old
+				 #:label (conc (package-label old) "-bootstrap")
+				 #:src   (flatten (bootstrap-tools (conf 'arch)) (package-src old))
+				 #:tools '()
+				 #:inputs (map inner (package-inputs old))))))))
+	    (hash-table-set! ht pkg newproc)
+	    newproc)))
+    (map inner pkgs)))
 
-(define *musl-src-leaf*
-  (remote-archive *musl-src-url* *musl-src-hash*))
+
+;; placeholder produces a package-lambda that errors when called
+(define (placeholder name)
+  (lambda (conf)
+    (error (conc "package" name "not implemented yet"))))
+
+(define (gcc-for-target conf)
+  (placeholder "gcc"))
+
+(define (binutils-for-target conf)
+  (placeholder "binutils"))
+
+(define busybox (placeholder "busybox"))
+
+(define (cc-for-target conf)
+  (list (gcc-for-target conf) (binutils-for-target conf) busybox))
 
 (define bootstrap-tools
   (let ((x86-64 (local-archive
@@ -86,10 +124,14 @@
   '(--disable-shared --disable-doc --disable-nls --prefix=/usr --sysconfdir=/etc --with-sysroot=/sysroot))
 
 ;; produce a libssp_nonshared independent of gcc to break a dependency cycle
-(defpkg libssp-nonshared-stage1 ((arch arch))
-	#:src (list (bootstrap-tools arch))
-	#:tools '()
-	#:inputs '()
+(define libssp-nonshared
+  (package-lambda
+    conf
+    (make-package
+	#:label   (conc "libssp-nonshared-" (conf 'arch))
+	#:src     '()
+	#:tools   (cc-for-target conf)
+	#:inputs  '()
 	#:overlay (interned "/src/ssp-nonshared.c" #o644 #<<EOF
 extern void __stack_chk_fail(void);
 void __attribute__((visibility ("hidden"))) __stack_chk_fail_local(void) { __stack_chk_fail(); }
@@ -99,98 +141,113 @@ EOF
 	#:build (make-recipe
 		  #:script (execline*
 			     (cd ./src)
+			     ;; XXX don't use 'gcc' here
 			     (if ((gcc -c -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
 			     (if ((ar r libssp_nonshared.a __stack_chk_fail_local.o)))
 			     (if ((mkdir -p /out/usr/lib)))
-			     (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))
+			     (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))))
 
-;; musl built with only bootstrap libraries
-;;
-(defpkg musl-stage1 ((arch arch))
-	#:src  (list (bootstrap-tools arch) *musl-src-leaf*)
-	#:tools '() 
+(define musl
+  (let* ((version '1.1.24)
+	 (leaf    (remote-archive
+		    (conc "https://www.musl-libc.org/releases/musl-" version ".tar.gz")
+		    "hC6Gf8nyJQAZVYJ-tNG0iU0dRjES721p0x1cqBp2Ge8=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label (conc "musl-" version "-" (conf 'arch))
+	#:src   leaf
+	#:tools (cc-for-target conf)
 	#:inputs '()
 	#:build (make-recipe
 		  #:script (execline*
-			     (cd ,(string-append "musl-" (symbol->string *musl-version*)))
-			     (if ((./configure ,@*default-configure-flags* ,(string-append "\"CFLAGS=-fstack-protector-strong -Os\"") --target ,arch)))
+			     (cd ,(conc "musl-" version))
+			     (if ((./configure ,@*default-configure-flags* ,(string-append "\"CFLAGS=-fstack-protector-strong -Os\"") --target ,(conf 'arch))))
 			     (if ((make)))
-			     (make DESTDIR=/out install))))
+			     (make DESTDIR=/out install)))))))
 
 (define *CFLAGS* "--sysroot=/sysroot -Os -fstack-protector-strong -fPIC")
 
-(define *bootstrap-c-env*
-  `((CFLAGS . ,*CFLAGS*)
-    (CC . gcc)))
-
 (define (gnu-build dir target)
   (make-recipe
-    #:script (execline* 
+    #:script (execline*
 	       (cd ,dir)
-	       (if ((./configure ,@*default-configure-flags* "\"LDFLAGS=--sysroot=/sysroot -static\"" ,(string-append "\"CFLAGS=" *CFLAGS* "\"") "\"CPPFLAGS=--sysroot=/sysroot\"" --enable-static --enable-pie --host ,target)))
+	       (if ((./configure ,@*default-configure-flags* "\"LDFLAGS=--sysroot=/sysroot -static\"" ,(string-append "\"CFLAGS=" *CFLAGS* "\"") "\"CPPFLAGS=--sysroot=/sysroot\"" --enable-static --enable-pie --host ,(target 'arch))))
 	       (if ((make)))
 	       (make DESTDIR=/out install))))
 
-(define *gawk-version* '5.0.1)
-(define *gawk-src-leaf*
-  (remote-archive
-    (fmt #f (cat "https://ftp.gnu.org/gnu/gawk/gawk-" *gawk-version* ".tar.xz"))
-    "R3Oyp6YDumBd6v06rLYd5U5vEOpnq0Ie1MjwINSmX-4="))
+(define gawk
+  (let* ((version '5.0.1)
+	 (leaf    (remote-archive
+		    (conc "https://ftp.gnu.org/gnu/gawk/gawk-" version ".tar.xz")
+		    "R3Oyp6YDumBd6v06rLYd5U5vEOpnq0Ie1MjwINSmX-4=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "gawk-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared)
+	#:build  (gnu-build (conc "gawk-" version) (conf 'arch))))))
 
-;; gawk built with musl-stage1 (necessary for building gcc and some of its dependencies)
-(defpkg gawk-stage1 ((arch arch))
-	#:src (list (bootstrap-tools arch) *gawk-src-leaf*)
-	#:tools '()
-	#:inputs (list musl-stage1 libssp-nonshared-stage1)
-	#:build  (gnu-build (conc "gawk-" *gawk-version*) arch))
+(define libgmp
+  (let* ((version '6.1.2)
+	 (leaf    (remote-archive
+		    (conc "https://gmplib.org/download/gmp/gmp-" version ".tar.xz")
+		    "bodUs2nnuExA5OmrihkTLOR9P-4cmpWyeyGYiFUPM8s=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "gmp-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared)
+	#:build  (gnu-build (conc "gmp-" version) conf)))))
 
-(define *libgmp-version* '6.1.2)
-(define *libgmp-leaf*
-  (remote-archive
-    (fmt #f (cat "https://gmplib.org/download/gmp/gmp-" *libgmp-version* ".tar.xz"))
-    "bodUs2nnuExA5OmrihkTLOR9P-4cmpWyeyGYiFUPM8s="))
+(define libmpfr
+  (let* ((version '4.0.2)
+	 (leaf    (remote-archive
+		    (conc "https://www.mpfr.org/mpfr-current/mpfr-" version ".tar.bz2")
+		    "wKuAJV_JEeh560Jgqo8Iub6opUuqOKFfQATGEJ2F3ek=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "mpfr-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared libgmp)
+	#:build  (gnu-build (conc "mpfr-" version) conf)))))
 
-(defpkg libgmp-stage1 ((arch arch))
-	#:src   (list (bootstrap-tools arch) *libgmp-leaf*)
-	#:tools '()
-	#:inputs (list musl-stage1 libssp-nonshared-stage1)
-	#:build  (gnu-build (conc "gmp-" *libgmp-version*) arch))
+(define libmpc
+  (let* ((version '1.1.0)
+	 (leaf    (remote-archive
+		    (conc "https://ftp.gnu.org/gnu/mpc/mpc-" version ".tar.gz")
+		    "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "mpc-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared libgmp libmpfr)
+	#:build  (gnu-build (conc "mpc-" version) conf)))))
 
-(define *libmpfr-version* '4.0.2)
-(define *libmpfr-leaf*
-  (remote-archive
-    (fmt #f (cat "https://www.mpfr.org/mpfr-current/mpfr-" *libmpfr-version* ".tar.bz2"))
-    "wKuAJV_JEeh560Jgqo8Iub6opUuqOKFfQATGEJ2F3ek="))
+(define m4 (placeholder "m4"))
+(define perl (placeholder "perl"))
 
-(defpkg libmpfr-stage1 ((arch arch))
-	#:src (list (bootstrap-tools arch) *libmpfr-leaf*)
-	#:tools '()
-	#:inputs (list musl-stage1 libssp-nonshared-stage1 libgmp-stage1)
-	#:build  (gnu-build (conc "mpfr-" *libmpfr-version*) arch))
-
-(define *libmpc-version* '1.1.0)
-(define *libmpc-leaf*
-  (remote-archive
-    (fmt #f (cat "https://ftp.gnu.org/gnu/mpc/mpc-" *libmpc-version* ".tar.gz"))
-    "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc="))
-
-(defpkg libmpc-stage1 ((arch arch))
-	#:src    (list (bootstrap-tools arch) *libmpc-leaf*)
-	#:tools  '()
-	#:inputs (list musl-stage1 libssp-nonshared-stage1 libgmp-stage1 libmpfr-stage1)
-	#:build  (gnu-build (conc "mpc-" *libmpc-version*) arch))
-
-(define *bison-version* '3.4.2)
-(define *bison-leaf*
-  (remote-archive
-    (fmt #f (cat "https://ftp.gnu.org/gnu/bison/bison-" *bison-version* ".tar.xz"))
-    "mISdVqFsbf8eeMe8BryH2Zf0oxcABOyW26NZT61RMSU="))
-
-(defpkg bison-stage1 ((arch arch))
-	#:src    (list (bootstrap-tools arch) *bison-leaf*)
-	#:tools  '()
-	#:inputs (list musl-stage1 libssp-nonshared-stage1)
-	#:build  (gnu-build (conc "bison-" *bison-version*) arch))
+(define bison
+  (let* ((version '3.4.2)
+	 (leaf    (remote-archive
+		    (conc "https://ftp.gnu.org/gnu/bison/bison-" version ".tar.xz")
+		    "mISdVqFsbf8eeMe8BryH2Zf0oxcABOyW26NZT61RMSU=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "bison-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (append (list m4 perl) (cc-for-target conf))
+	#:inputs (list musl libssp-nonshared)
+	#:build  (gnu-build (conc "bison-" version) conf)))))
 
 (let* ((conf (table '((arch . x86_64))))
        (host (table->proc conf))
@@ -198,5 +255,6 @@ EOF
   (parameterize ((artifact-dir "./artifacts")
 		 (plan-dir     "./plans")
 		 (trace-log    #t))
-    (build-package! libmpc-stage1 host target)
-    (build-package! bison-stage1 host target)))
+    (for-each
+      (cut build-package! <> host target)
+      (pkgs->bootstrap bison libmpc))))
