@@ -32,6 +32,7 @@
 		     (".tar.gz" . tar.gz)
 		     (".tgz"    . tar.gz)
 		     (".tar.bz" . tar.bz)
+		     (".tar.bz2". tar.bz)
 		     (".tar"    . tar))))
     (cond
       ((null? suff) 'unknown)
