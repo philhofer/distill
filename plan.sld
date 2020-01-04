@@ -2,22 +2,10 @@
   (export
     artifact-dir
     plan-dir
-    make-leaf
-    leaf?
-    leaf-name
-    leaf-src
-    leaf-hash
-    leaf-format
-    update-leaf
-    make-interned-file
     interned
-    interned-file?
-    interned-file-abspath
-    interned-file-hash
-    interned-file-mode
-    interned-file-usr
-    interned-file-grp
-    update-interned-file
+    interned-symlink
+    local-archive
+    remote-archive
     make-recipe
     recipe-env
     recipe-script
@@ -43,9 +31,10 @@
   (cond-expand
     (chicken
       (import
+        matchable
         (chicken type) ;; type hints can be replaced with a no-op
-	(only (chicken file) file-exists? move-file copy-file create-directory find-files create-temporary-directory delete-file* delete-file delete-directory rename-file)
-	(only (chicken file posix) file-type file-permissions set-file-permissions! create-symbolic-link read-symbolic-link file-size)
+	(only (chicken file) file-exists? move-file copy-file create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
+	(only (chicken file posix) file-permissions set-file-permissions! create-symbolic-link file-size)
         (only (chicken base) flatten)
 	(only (chicken io) read-string write-string)
 	(only (chicken process) process-run process-wait)

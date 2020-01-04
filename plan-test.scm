@@ -33,10 +33,7 @@
 ;; test a simple plan execution
 (let ()
   (define bootstrap-input
-    (make-leaf
-      #:name "bootstrap-x86_64"
-      #:hash (hash-file "bootstrap-x86_64.tar.xz")
-      #:format 'tar.xz))
+    (local-archive 'tar.xz (hash-file "bootstrap-x86_64.tar.xz")))
 
   ;; run a trivial plan ("echo hi > /sysroot/out") in
   ;; the bootstrap leaf and ensure that the output is
