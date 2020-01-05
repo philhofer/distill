@@ -161,18 +161,25 @@ EOF
 				  (make -j $ncpu)))
 			     (make DESTDIR=/out install)))))))
 
-(define (gnu-build dir target)
+;; wrapper around the 'configure;make;make install' pattern,
+;; taking care to set configure flags make flags appropriately
+;; for the common case that we're dealing with autotools
+(define (gnu-build dir target #!key (pre-configure '()) (post-install '()) (configure #f))
   (make-recipe
     #:script (execline*
 	       (cd ,dir)
-	       (if ((./configure ,@(configure-args target))))
+	       ,@pre-configure
+	       (if ((./configure ,@(or configure (configure-args target)))))
 	       ;; it's helpful (mandatory?) that the script not change
 	       ;; based on the number of cpus on the host, so we have
 	       ;; to make that determination in the script itself
 	       (if ((backtick -n -D 4 ncpu ((nproc)))
 		    (importas -u ncpu ncpu)
 		    (make -j $ncpu)))
-	       (make DESTDIR=/out install))))
+	       ,@(if (null? post-install)
+		     '((make DESTDIR=/out install))
+		     (cons '(if ((make DESTDIR=/out install)))
+			   post-install)))))
 
 (define gawk
   (let* ((version '5.0.1)
@@ -230,7 +237,23 @@ EOF
 	#:inputs (list musl libssp-nonshared libgmp libmpfr)
 	#:build  (gnu-build (conc "mpc-" version) conf)))))
 
-(define m4 (placeholder "m4"))
+(define m4
+  (let* ((version '1.4.18)
+	 (leaf    (remote-archive
+		    (conc "https://ftp.gnu.org/gnu/m4/m4-" version ".tar.gz")
+		    "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0Y")))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "m4-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared)
+	#:build  (gnu-build (conc "m4-" version) conf
+			    ;; m4 sticks a file in /usr/lib/charset.alias
+			    #:post-install (execline*
+					     (rm -rf /out/usr/lib)))))))
+
 (define perl (placeholder "perl"))
 
 (define bison
@@ -247,6 +270,43 @@ EOF
 	#:inputs (list musl libssp-nonshared)
 	#:build  (gnu-build (conc "bison-" version) conf)))))
 
+(define flex
+  (let* ((version '2.6.4)
+	 (leaf    (remote-archive
+		    (conc "https://github.com/westes/flex/releases/download/v" version "/flex-" version ".tar.gz")
+		    "iyTO0NJ3ype1atS2SbQkeEA24JzbugW3OCxyRQVBBCw=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "flex-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cons bison (cc-for-target conf))
+	#:inputs (list musl libssp-nonshared bison)
+	#:build  (gnu-build (conc "flex-" version) conf)))))
+
+(define zlib
+  (let* ((version '1.2.11)
+	 (leaf    (remote-archive
+		    (conc "https://zlib.net/zlib-" version ".tar.gz")
+		    "K3Q8ig9qMtClPdpflHwS8OkSMrLVItBzEu5beP_szJA=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label (conc "zlib-" version "-" (conf 'arch))
+	#:src   leaf
+	#:tools (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared)
+	#:build (gnu-build
+		  (conc "zlib-" version) conf
+		  ;; not autoconf;
+		  ;; stick CFLAGS and friends into the environment
+		  #:pre-configure (map (lambda (p)
+					 `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
+				       (cons
+					 (cons 'CHOST (conf 'arch))
+					 (cc-env conf)))
+		  #:configure '(--static --prefix=/usr --libdir=/lib))))))
+
 (let* ((conf (table '((arch . x86_64)
 		      (CFLAGS . "-pipe -fstack-protector-strong -Os"))))
        (host (table->proc conf))
@@ -256,4 +316,4 @@ EOF
 		 (trace-log    #t))
     (for-each
       (cut build-package! <> host target)
-      (pkgs->bootstrap bison libmpc gawk))))
+      (pkgs->bootstrap flex libmpc gawk m4 zlib))))

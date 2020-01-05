@@ -151,13 +151,51 @@
 	 obj
 	 (error msg rest* ...)))))
 
+;; memoize a procedure by remembering
+;; its arguments (using eq? for equality)
+(: memoize-eq (forall (a b) ((a -> b) -> (a -> b))))
+(define (memoize-eq proc)
+  (let ((results '()))
+    (lambda (in)
+      (or (and-let* ((p (assq in results)))
+	    (cdr p))
+	  (let ((res (proc in)))
+	    (set! results (cons (cons in res) results))
+	    res)))))
+
+;; define-memoized uses memoize-eq and some nasty currying hacks
+;; in order to handle memoized functions with an arbitrary (but fixed)
+;; number of arguments
+;;
+;; essentially, for a function (proc arg0 arg1 ...)
+;; we nest lambdas like
+;;  (memoize-eq (lambda (arg0) (memoize-eq (lambda (arg1) ...
+;; and then apply them in sequence to the arguments
+(define-syntax define-memoized
+  (syntax-rules ()
+    ((_ (name formals* ...) body* ...)
+     (define name
+       (let ((self (define-memoized "memoize-formals" (formals* ...) body* ...)))
+	 (lambda (formals* ...)
+	   (define-memoized "real-body" self (formals* ...))))))
+    ((_ "memoize-formals" () body* ...)
+     (begin body* ...))
+    ((_ "memoize-formals" (formal formals* ...) body* ...)
+     (memoize-eq
+       (lambda (formal)
+	 (define-memoized "memoize-formals" (formals* ...) body* ...))))
+    ((_ "real-body" self ())
+     self)
+    ((_ "real-body" self (formal formals* ...))
+     (define-memoized "real-body" (self formal) (formals* ...)))))
+
 ;; note here that 'host' is the config for the
 ;; machine running the build, and 'target' is
 ;; the config for the machines that consumes
 ;; build outputs (in GNU 'configure' terminology,
 ;; those would be 'build' and 'host,' respectively)
 (: %package->plan (package-lambda conf-lambda conf-lambda -> (struct plan)))
-(define (%package->plan pkg-proc host target)
+(define-memoized (%package->plan pkg-proc host target)
   (let ((pkg (pkg-proc target)))
     (%plan
       (require ok-plan-name? (package-label pkg))
@@ -310,18 +348,6 @@
 		      (if (plan? x)
 			  (flatten (map cdr (plan-inputs x)))
 			  '()))))
-
-;; memoize a procedure by remembering
-;; its arguments (using eq? for equality)
-(: memoize-eq (forall (a b) ((a -> b) -> (a -> b))))
-(define (memoize-eq proc)
-  (let ((results '()))
-    (lambda (in)
-      (or (and-let* ((p (assq in results)))
-	    (cdr p))
-	  (let ((res (proc in)))
-	    (set! results (cons (cons in res) results))
-	    res)))))
 
 ;; fork+exec, wait for the process to exit and check
 ;; that it exited successfully
