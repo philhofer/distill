@@ -1,4 +1,11 @@
-(import (execline) fmt)
+(cond-expand
+  (csi (import r7rs)
+       (load "execline.sld"))
+  (else (begin)))
+
+(import
+  (execline)
+  fmt)
 
 (define conf "/etc/sysctl.conf")
 
