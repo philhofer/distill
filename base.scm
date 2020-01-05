@@ -1,9 +1,3 @@
-(import
-  (chicken pretty-print)
-  (log)
-  (execline)
-  (plan))
-
 (define-syntax package-lambda
   (syntax-rules ()
     ((_ conf body* ...)
@@ -56,9 +50,6 @@
       (case arch
 	((x86_64) x86-64)
 	(else     (error "no bootstrap for arch" arch))))))
-
-(define *default-configure-flags*
-  '(--disable-shared --disable-doc --disable-nls --prefix=/usr --sysconfdir=/etc --with-sysroot=/sysroot))
 
 ;; cc-env takes a configuration and produces
 ;; an alist with at least CFLAGS, LDFLAGS, and CPPFLAGS
@@ -307,13 +298,3 @@ EOF
 					 (cc-env conf)))
 		  #:configure '(--static --prefix=/usr --libdir=/lib))))))
 
-(let* ((conf (table '((arch . x86_64)
-		      (CFLAGS . "-pipe -fstack-protector-strong -Os"))))
-       (host (table->proc conf))
-       (target host))
-  (parameterize ((artifact-dir "./artifacts")
-		 (plan-dir     "./plans")
-		 (trace-log    #t))
-    (for-each
-      (cut build-package! <> host target)
-      (pkgs->bootstrap flex libmpc gawk m4 zlib))))

@@ -6,7 +6,8 @@
   (hash)
   (filepath)
   (log)
-  (plan))
+  (plan)
+  (base))
 
 ;; this is a hack to prevent additional
 ;; (import ...) statements for execline/hash/filepath/log
@@ -14,11 +15,13 @@
 ;; contains the syntactic definitions that we would otherwise
 ;; need to load when expanding other code
 (begin
+  (include "memo.import.scm")
   (include "table.import.scm")
   (include "execline.import.scm")
   (include "hash.import.scm")
   (include "filepath.import.scm")
   (include "log.import.scm")
-  (include "plan.import.scm"))
+  (include "plan.import.scm")
+  (include "base.import.scm"))
 
 (for-each load (command-line-arguments))

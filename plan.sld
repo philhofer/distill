@@ -50,6 +50,7 @@
 	  (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
 	  (srfi 26) ;; cut, cute
 	  (srfi 69) ;; hash tables
+	  (memo)
 	  (table)
 	  (filepath)
 	  (log)

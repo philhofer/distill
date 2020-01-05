@@ -151,44 +151,6 @@
 	 obj
 	 (error msg rest* ...)))))
 
-;; memoize a procedure by remembering
-;; its arguments (using eq? for equality)
-(: memoize-eq (forall (a b) ((a -> b) -> (a -> b))))
-(define (memoize-eq proc)
-  (let ((results '()))
-    (lambda (in)
-      (or (and-let* ((p (assq in results)))
-	    (cdr p))
-	  (let ((res (proc in)))
-	    (set! results (cons (cons in res) results))
-	    res)))))
-
-;; define-memoized uses memoize-eq and some nasty currying hacks
-;; in order to handle memoized functions with an arbitrary (but fixed)
-;; number of arguments
-;;
-;; essentially, for a function (proc arg0 arg1 ...)
-;; we nest lambdas like
-;;  (memoize-eq (lambda (arg0) (memoize-eq (lambda (arg1) ...
-;; and then apply them in sequence to the arguments
-(define-syntax define-memoized
-  (syntax-rules ()
-    ((_ (name formals* ...) body* ...)
-     (define name
-       (let ((self (define-memoized "memoize-formals" (formals* ...) body* ...)))
-	 (lambda (formals* ...)
-	   (define-memoized "real-body" self (formals* ...))))))
-    ((_ "memoize-formals" () body* ...)
-     (begin body* ...))
-    ((_ "memoize-formals" (formal formals* ...) body* ...)
-     (memoize-eq
-       (lambda (formal)
-	 (define-memoized "memoize-formals" (formals* ...) body* ...))))
-    ((_ "real-body" self ())
-     self)
-    ((_ "real-body" self (formal formals* ...))
-     (define-memoized "real-body" (self formal) (formals* ...)))))
-
 ;; note here that 'host' is the config for the
 ;; machine running the build, and 'target' is
 ;; the config for the machines that consumes
@@ -594,12 +556,12 @@
     (lambda (p)
       (when (plan? p)
 	(let ((out (plan-outputs p)))
-	  (or out (do-plan! p))
-	  (info (plan-name p) (plan-hash p) "=" (artifact-hash (plan-outputs p))))))
+	  (or out (do-plan! p)))))
     p))
 
 (: build-package! (package-lambda conf-lambda conf-lambda -> artifact))
 (define (build-package! proc host target)
   (let ((plan (%package->plan proc host target)))
     (build-plan! plan)
+    (info (plan-name plan) (plan-hash plan) "is" (artifact-hash (plan-outputs plan)))
     (plan-outputs plan)))
