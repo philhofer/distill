@@ -20,6 +20,7 @@
     gawk
     bison
     flex
+    ncurses
     gnu-build
     cc-env)
   (include "base.scm"))

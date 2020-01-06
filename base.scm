@@ -26,6 +26,11 @@
 	    newproc)))
     (map inner pkgs)))
 
+(define (config-prepend conf label lst)
+  (let ((val (append lst (or (conf label) '()))))
+    (lambda (sym)
+      (if (eq? sym label) val (conf sym)))))
+
 ;; placeholder produces a package-lambda that errors when called
 (define (placeholder name)
   (lambda (conf)
@@ -274,6 +279,22 @@ EOF
 	#:tools  (cons bison (cc-for-target conf))
 	#:inputs (list musl libssp-nonshared bison)
 	#:build  (gnu-build (conc "flex-" version) conf)))))
+
+(define ncurses
+  (let* ((version '6.1-20200104)
+	 (leaf    (remote-archive
+		    (conc "https://invisible-mirror.net/archives/ncurses/current/ncurses-" version ".tgz")
+		    "X9iVpAqz8GCEy2eTCYnn3BmLBwbf3nintXEFXNIw8LI="))
+	 (extra-flags '(--without-ada --without-tests --disable-termcap --disable-rpath-hack --disable-stripping --without-cxx-binding)))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "ncurses-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared)
+	#:build  (gnu-build (conc "ncurses-" version)
+			    (config-prepend conf 'configure-flags extra-flags))))))
 
 (define zlib
   (let* ((version '1.2.11)
