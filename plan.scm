@@ -370,10 +370,19 @@
 (define (save-plan-outputs! p ar)
   (let ((outfile (plan-outputs-file p)))
     (unless outfile
-      (error "can't save outputs for plan:" (plan-name p)))
-    (create-directory (dirname outfile))
-    (with-output-to-file outfile (lambda () (write ar)))
-    (plan-saved-output-set! p ar)))
+      (error "can't save outputs for plan (unresolved inputs):" (plan-name p)))
+    (if (and-let* ((_   (file-exists? outfile))
+		   (old (plan-outputs p)))
+	  ;; if we have metadata from a previous build of this plan,
+	  ;; it should be identical to what we have now;
+	  ;; otherwise we've proven that the build isn't reproducible
+	  (if (equal? old ar)
+	    (info "plan for" (plan-name p) "reproduced" (plan-hash p))
+	    (fatal "plan for" (plan-name p) "failed to reproduce:" old ar)))
+      (begin
+	(create-directory (dirname outfile))
+	(with-output-to-file outfile (lambda () (write ar)))
+	(plan-saved-output-set! p ar)))))
 
 ;; determine the outputs (leaf) of the given plan,
 ;; or #f if the plan has never been built with its inputs
@@ -543,27 +552,35 @@
 	root
 	"/bin/emptyenv"
 	"/bin/envfile" *envfile-path*
+	;; close stdin and redirect stdin+stderr to a log file
+	;; (otherwise builds just get really noisy in the terminal)
+	"redirfd" "-r" "0" "/dev/null"
+	"redirfd" "-w" "1" "/build.log"
+	"fdmove" "-c" "2" "1"
 	*buildfile-path*)
 
       (dir->artifact outdir))))
 
-(: build-plan! ((struct plan) -> *))
-(define (build-plan! p)
+(: build-plan! ((struct plan) #!rest * -> *))
+(define (build-plan! top #!key (rebuild #f))
   (define (do-plan! p)
     (info "building" (plan-name p))
     (save-plan-outputs! p (plan->outputs! p)))
   (plan-dfs
     (lambda (p)
       (when (plan? p)
-	(let ((out (plan-outputs p)))
-	  (or (and out (file-exists? (filepath-join (artifact-dir) (artifact-hash out))))
-	      (do-plan! p)))))
-    p))
+	;; force a rebuild of the top plan if 'rebuild' is set
+	(if (and rebuild (eq? p top))
+	  (do-plan! p)
+	  (let ((out (plan-outputs p)))
+	    (or (and out (file-exists? (filepath-join (artifact-dir) (artifact-hash out))))
+	      (do-plan! p))))))
+   top))
 
-(: build-package! (package-lambda conf-lambda conf-lambda -> artifact))
-(define (build-package! proc host target)
+(: build-package! (package-lambda conf-lambda conf-lambda #!rest * -> artifact))
+(define (build-package! proc host target #!key (rebuild #f))
   (let ((plan (%package->plan proc host target)))
-    (build-plan! plan)
+    (build-plan! plan #:rebuild rebuild)
     (info (plan-name plan) (plan-hash plan) "is" (artifact-hash (plan-outputs plan)))
     (plan-outputs plan)))
 
