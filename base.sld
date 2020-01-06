@@ -21,6 +21,7 @@
     bison
     flex
     ncurses
+    libisl
     gnu-build
     cc-env)
   (include "base.scm"))

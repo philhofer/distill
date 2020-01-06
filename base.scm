@@ -104,7 +104,7 @@
 				(cons (pair->quoted-string opt) lst))
 			       '()
 			       copts))
-	     (need-conf `(--disable-shared --disable-nls --enable-static --enable-pie --prefix=/usr --sysconfdir=/etc --with-sysroot=/sysroot --host ,(conf 'arch)))
+	     (need-conf `(--disable-shared --disable-nls --enable-static --enable-pie --with-pic --prefix=/usr --sysconfdir=/etc --with-sysroot=/sysroot --host ,(conf 'arch)))
 	     (usr-conf  (conf 'configure-flags)))
 	(cond
 	  ((eq? usr-conf #f) (append copts-str need-conf))
@@ -130,7 +130,7 @@ EOF
 		  #:script (execline*
 			     (cd ./src)
 			     ;; XXX don't use 'gcc' here
-			     (if ((gcc -c -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
+			     (if ((gcc -c -fPIC -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
 			     (if ((ar r libssp_nonshared.a __stack_chk_fail_local.o)))
 			     (if ((mkdir -p /out/usr/lib)))
 			     (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))))
@@ -237,7 +237,7 @@ EOF
   (let* ((version '1.4.18)
 	 (leaf    (remote-archive
 		    (conc "https://ftp.gnu.org/gnu/m4/m4-" version ".tar.gz")
-		    "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0Y")))
+		    "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0=")))
     (package-lambda
       conf
       (make-package
@@ -296,6 +296,20 @@ EOF
 	#:build  (gnu-build (conc "ncurses-" version)
 			    (config-prepend conf 'configure-flags extra-flags))))))
 
+(define texinfo
+  (let* ((version '6.7)
+	 (leaf    (remote-archive
+		    (conc "https://ftp.gnu.org/gnu/texinfo/texinfo-" version "tar.xz")
+		    "sRSBGlRp4y484pt7mtcx_xVSIi6brC5ejffXfQ9wInE=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label (conc "texinfo-" version "-" (conf 'arch))
+	#:src   leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared perl ncurses)
+	#:build  (gnu-build (conc "texinfo-" version) conf)))))
+
 (define zlib
   (let* ((version '1.2.11)
 	 (leaf    (remote-archive
@@ -319,3 +333,16 @@ EOF
 					 (cc-env conf)))
 		  #:configure '(--static --prefix=/usr --libdir=/lib))))))
 
+(define libisl
+  (let* ((version '0.18)
+	 (leaf    (remote-archive
+		    (conc "https://gcc.gnu.org/pub/gcc/infrastructure/isl-" version ".tar.bz2")
+		    "bFSNjbp4fE4N5xcaqSGTnNfLPVv7QhnEb2IByFGBZUY=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "isl-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list libgmp musl libssp-nonshared)
+	#:build  (gnu-build (conc "isl-" version) conf)))))

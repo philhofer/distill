@@ -556,7 +556,8 @@
     (lambda (p)
       (when (plan? p)
 	(let ((out (plan-outputs p)))
-	  (or out (do-plan! p)))))
+	  (or (and out (file-exists? (filepath-join (artifact-dir) (artifact-hash out))))
+	      (do-plan! p)))))
     p))
 
 (: build-package! (package-lambda conf-lambda conf-lambda -> artifact))
@@ -565,3 +566,36 @@
     (build-plan! plan)
     (info (plan-name plan) (plan-hash plan) "is" (artifact-hash (plan-outputs plan)))
     (plan-outputs plan)))
+
+;; write-digraph displays the dependency graph for a list of packages
+;; in a format that can be used by the dot(1) tool
+(: write-digraph (conf-lambda conf-lambda #!rest package-lambda -> *))
+(define (write-digraph host target . pkgs)
+  (let* ((plans (map (cut %package->plan <> host target) pkgs))
+	 (ht    (make-hash-table)))
+    (display "digraph packages {\n")
+    (for-each
+      (lambda (p)
+	(plan-dfs
+	  (lambda (p)
+	    (when (and (plan? p)
+		       (not (hash-table-ref/default ht p #f)))
+	      (hash-table-set! ht p #t)
+	      (for-each
+		(lambda (in)
+		  (write (plan-name p))
+		  (display " -> ")
+		  (cond
+		    ((plan? in)
+		     (write (plan-name in)))
+		    ((artifact? in)
+		     (case (vector-ref (artifact-format in) 0)
+		       ;; try to produce a moderately informative textual representation...
+		       ((archive)      (write (or (artifact-extra in) (artifact-hash in))))
+		       ((file symlink) (write (vector-ref (artifact-format in) 1)))
+		       (else           (write (artifact-hash in))))))
+		  (display ";\n"))
+		(apply append (map cdr (plan-inputs p))))))
+	  p))
+      plans)
+    (display "}\n")))

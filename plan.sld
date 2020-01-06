@@ -22,6 +22,7 @@
     package-overlay
     update-package
     build-package!
+    write-digraph
     memoize-eq)
 
   ;; for non-r7rs imports, please try to keep
