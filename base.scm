@@ -63,7 +63,7 @@
 (define cc-env
   (memoize-eq
     (lambda (conf)
-      (let ((need-cflags    '(--sysroot=/sysroot -fPIC -static-pie))
+      (let ((need-cflags    '(--sysroot=/sysroot -fPIE -static-pie))
 	    (need-ldflags   '(--sysroot=/sysroot -static-pie))
 	    (need-cppflags  '(--sysroot=/sysroot))
 	    (cflags          (conf 'CFLAGS))
@@ -104,6 +104,8 @@
 				(cons (pair->quoted-string opt) lst))
 			       '()
 			       copts))
+	     ;; note: even though we always pass -fPIE, we need --with-pic
+	     ;; to work around bugs in binutils regarding handling of TLS (sigh)
 	     (need-conf `(--disable-shared --disable-nls --enable-static --enable-pie --with-pic --prefix=/usr --sysconfdir=/etc --build ,*this-machine* --host ,(conf 'arch)))
 	     (usr-conf  (conf 'configure-flags)))
 	(cond
@@ -130,7 +132,7 @@ EOF
 		  #:script (execline*
 			     (cd ./src)
 			     ;; XXX don't use 'gcc' here
-			     (if ((gcc -c -fPIC -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
+			     (if ((gcc -c -fPIE -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
 			     (if ((ar r libssp_nonshared.a __stack_chk_fail_local.o)))
 			     (if ((mkdir -p /out/usr/lib)))
 			     (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))))
@@ -139,7 +141,9 @@ EOF
   (let* ((version '1.1.24)
 	 (leaf    (remote-archive
 		    (conc "https://www.musl-libc.org/releases/musl-" version ".tar.gz")
-		    "hC6Gf8nyJQAZVYJ-tNG0iU0dRjES721p0x1cqBp2Ge8=")))
+		    "hC6Gf8nyJQAZVYJ-tNG0iU0dRjES721p0x1cqBp2Ge8="))
+	 (->cflags  (lambda (conf)
+		      (pair->quoted-string (cons 'CFLAGS (cons '-fPIE (or (conf 'CFLAGS) '())))))))
     (package-lambda
       conf
       (make-package
@@ -151,7 +155,7 @@ EOF
 		  #:script (execline*
 			     (cd ,(conc "musl-" version))
 			     ;; note: NOT autotools; --target means something different
-			     (if ((./configure --disable-shared --enable-static --prefix=/usr ,(pair->quoted-string (cons 'CFLAGS (or (conf 'CFLAGS) ""))) --target ,(conf 'arch))))
+			     (if ((./configure --disable-shared --enable-static --prefix=/usr ,(->cflags conf) --target ,(conf 'arch))))
 			     (if ((backtick -n -D 4 ncpu ((nproc)))
 				  (importas -u ncpu ncpu)
 				  (make -j $ncpu)))
@@ -264,7 +268,13 @@ EOF
 	#:src    leaf
 	#:tools  (append (list m4 perl) (cc-for-target conf))
 	#:inputs (list musl libssp-nonshared)
-	#:build  (gnu-build (conc "bison-" version) conf)))))
+	#:build  (gnu-build (conc "bison-" version) conf
+			    ;; there is a buggy makefile in examples/ that will
+			    ;; occasionally explode during parallel builds;
+			    ;; just delete the directory entirely
+			    ;; https://lists.gnu.org/archive/html/bug-bison/2019-10/msg00044.html
+			    #:pre-configure (execline*
+					      (if ((rm -rf examples/c/recalc)))))))))
 
 (define flex
   (let* ((version '2.6.4)
