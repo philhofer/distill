@@ -160,7 +160,7 @@ EOF
 ;; wrapper around the 'configure;make;make install' pattern,
 ;; taking care to set configure flags make flags appropriately
 ;; for the common case that we're dealing with autotools
-(define (gnu-build dir target #!key (pre-configure '()) (post-install '()) (configure #f))
+(define (gnu-build dir target #!key (pre-configure '()) (post-install '()) (make-flags '()) (configure #f))
   (make-recipe
     #:script (execline*
 	       (cd ,dir)
@@ -171,7 +171,7 @@ EOF
 	       ;; to make that determination in the script itself
 	       (if ((backtick -n -D 4 ncpu ((nproc)))
 		    (importas -u ncpu ncpu)
-		    (make -j $ncpu)))
+		    (make -j $ncpu ,@make-flags)))
 	       ,@(if (null? post-install)
 		     '((make DESTDIR=/out install))
 		     (cons '(if ((make DESTDIR=/out install)))
@@ -287,7 +287,7 @@ EOF
 	 (leaf    (remote-archive
 		    (conc "https://invisible-mirror.net/archives/ncurses/current/ncurses-" version ".tgz")
 		    "X9iVpAqz8GCEy2eTCYnn3BmLBwbf3nintXEFXNIw8LI="))
-	 (extra-flags '(ARFLAGS=-Dcrv --without-ada --without-tests --disable-termcap --disable-rpath-hack --disable-stripping --without-cxx-binding)))
+	 (extra-flags '(--without-ada --without-tests --disable-termcap --disable-rpath-hack --disable-stripping --without-cxx-binding)))
     (package-lambda
       conf
       (make-package
@@ -299,11 +299,9 @@ EOF
 			    ;; XXX gross hack: the ncurses developers,
 			    ;; in their infinite wisdom, have decided
 			    ;; to break reproducible builds and insist
-			    ;; on ARFLAGS=-U; just delete the part of
-			    ;; the configure script that does this...
+			    ;; on ARFLAGS=-curvU...
 			    (config-prepend conf 'configure-flags extra-flags)
-			    ;; -i is interpreted as a complex number lol
-			    #:pre-configure (execline* (if ((sed "-i" -e "4747,4804d" configure)))))))))
+			    #:make-flags '("ARFLAGS=-Dcrv"))))))
 
 (define texinfo
   (let* ((version '6.7)
