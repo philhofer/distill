@@ -281,11 +281,13 @@ EOF
 	#:build  (gnu-build (conc "flex-" version) conf)))))
 
 (define ncurses
+  ;; NOTE: if you update the version here,
+  ;; update the gross configure hack below
   (let* ((version '6.1-20200104)
 	 (leaf    (remote-archive
 		    (conc "https://invisible-mirror.net/archives/ncurses/current/ncurses-" version ".tgz")
 		    "X9iVpAqz8GCEy2eTCYnn3BmLBwbf3nintXEFXNIw8LI="))
-	 (extra-flags '(--without-ada --without-tests --disable-termcap --disable-rpath-hack --disable-stripping --without-cxx-binding)))
+	 (extra-flags '(ARFLAGS=-Dcrv --without-ada --without-tests --disable-termcap --disable-rpath-hack --disable-stripping --without-cxx-binding)))
     (package-lambda
       conf
       (make-package
@@ -294,7 +296,14 @@ EOF
 	#:tools  (cc-for-target conf)
 	#:inputs (list musl libssp-nonshared)
 	#:build  (gnu-build (conc "ncurses-" version)
-			    (config-prepend conf 'configure-flags extra-flags))))))
+			    ;; XXX gross hack: the ncurses developers,
+			    ;; in their infinite wisdom, have decided
+			    ;; to break reproducible builds and insist
+			    ;; on ARFLAGS=-U; just delete the part of
+			    ;; the configure script that does this...
+			    (config-prepend conf 'configure-flags extra-flags)
+			    ;; -i is interpreted as a complex number lol
+			    #:pre-configure (execline* (if ((sed "-i" -e "4747,4804d" configure)))))))))
 
 (define texinfo
   (let* ((version '6.7)
