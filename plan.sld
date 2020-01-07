@@ -1,5 +1,6 @@
 (define-library (plan)
   (export
+    *this-machine*
     artifact-dir
     plan-dir
     interned

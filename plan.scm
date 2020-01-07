@@ -10,12 +10,22 @@
 (define (%artifact format hash extra)
   (vector format hash extra))
 
-(: artifact-hash (artifact --> string))
-
+(: artifact-format (artifact -> vector))
 (define (artifact-format v) (vector-ref v 0))
+(: artifact-hash (artifact -> string))
 (define (artifact-hash v)   (vector-ref v 1))
+(: artifact-extra (artifact -> *))
 (define (artifact-extra v)  (vector-ref v 2))
 (define (artifact? v) (and (vector? v) (= (vector-length v) 3)))
+
+(: *this-machine* symbol)
+(define *this-machine*
+  (cond-expand
+    (x86-64 'x86_64)
+    (arm64  'aarch64)
+    (arm    'armv7)
+    ((and ppc64 little-endian) 'ppc64le)
+    ((and ppc64 big-endian) 'ppc64)))
 
 ;; artifact-repr converts an artifact to its
 ;; external representation (which omits metadata
@@ -223,6 +233,7 @@
 
       ;; sort input artifacts by extraction directory,
       ;; then by content hash
+      (: art<? (artifact artifact --> boolean))
       (define (art<? a b)
 	(let ((aroot (vector-ref a 0))
 	      (broot (vector-ref b 0))
@@ -371,18 +382,17 @@
   (let ((outfile (plan-outputs-file p)))
     (unless outfile
       (error "can't save outputs for plan (unresolved inputs):" (plan-name p)))
-    (if (and-let* ((_   (file-exists? outfile))
-		   (old (plan-outputs p)))
-	  ;; if we have metadata from a previous build of this plan,
-	  ;; it should be identical to what we have now;
-	  ;; otherwise we've proven that the build isn't reproducible
-	  (if (equal? old ar)
-	    (info "plan for" (plan-name p) "reproduced" (plan-hash p))
-	    (fatal "plan for" (plan-name p) "failed to reproduce:" old ar)))
-      (begin
-	(create-directory (dirname outfile))
-	(with-output-to-file outfile (lambda () (write ar)))
-	(plan-saved-output-set! p ar)))))
+    (let ((old (plan-outputs p)))
+      (cond
+	((not old)
+	 (begin
+	   (create-directory (dirname outfile))
+	   (with-output-to-file outfile (lambda () (write ar)))
+	   (plan-saved-output-set! p ar)))
+	((equal? old ar)
+	 (info "plan for" (plan-name p) "reproduced" (plan-hash p)))
+	(else
+	  (fatal "plan for" (plan-name p) "failed to reproduce:" old ar))))))
 
 ;; determine the outputs (leaf) of the given plan,
 ;; or #f if the plan has never been built with its inputs
@@ -393,10 +403,10 @@
     (or saved
 	(and desc (file-exists? desc)
 	     (let ((vec (with-input-from-file desc read)))
-	       (and (artifact? vec)
-		    (begin
-		      (plan-saved-output-set! p vec)
-		      vec)))))))
+	       (unless (artifact? vec)
+		 (error "unexpected plan format" vec))
+	       (plan-saved-output-set! p vec)
+	       vec)))))
 
 ;; unpack! installs a plan input into the
 ;; given destination directory
@@ -561,6 +571,12 @@
 
       (dir->artifact outdir))))
 
+(: plan-built? ((struct plan) -> boolean))
+(define (plan-built? p)
+  (and-let* ((out (plan-outputs p)))
+    (file-exists?
+      (filepath-join (artifact-dir) (artifact-hash out)))))
+
 (: build-plan! ((struct plan) #!rest * -> *))
 (define (build-plan! top #!key (rebuild #f))
   (define (do-plan! p)
@@ -568,13 +584,10 @@
     (save-plan-outputs! p (plan->outputs! p)))
   (plan-dfs
     (lambda (p)
-      (when (plan? p)
-	;; force a rebuild of the top plan if 'rebuild' is set
-	(if (and rebuild (eq? p top))
-	  (do-plan! p)
-	  (let ((out (plan-outputs p)))
-	    (or (and out (file-exists? (filepath-join (artifact-dir) (artifact-hash out))))
-	      (do-plan! p))))))
+      (when (and
+	      (plan? p)
+	      (or (not (plan-built? p)) (and (eq? p top) rebuild)))
+	(do-plan! p)))
    top))
 
 (: build-package! (package-lambda conf-lambda conf-lambda #!rest * -> artifact))

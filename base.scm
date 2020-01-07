@@ -104,7 +104,7 @@
 				(cons (pair->quoted-string opt) lst))
 			       '()
 			       copts))
-	     (need-conf `(--disable-shared --disable-nls --enable-static --enable-pie --with-pic --prefix=/usr --sysconfdir=/etc --with-sysroot=/sysroot --host ,(conf 'arch)))
+	     (need-conf `(--disable-shared --disable-nls --enable-static --enable-pie --with-pic --prefix=/usr --sysconfdir=/etc --build ,*this-machine* --host ,(conf 'arch)))
 	     (usr-conf  (conf 'configure-flags)))
 	(cond
 	  ((eq? usr-conf #f) (append copts-str need-conf))
