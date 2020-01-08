@@ -16,9 +16,7 @@
     (list
       libssp-nonshared
       musl
-      busybox
-      perl
-      m4)
+      busybox)
     (cc-for-target conf)))
 
 ;; pkgs->bootstrap takes a list of package-lambdas
@@ -69,8 +67,8 @@
 
 (define bootstrap-archive
   (let ((x86-64 (local-archive
-		  'tar.xz
-		  "FUpEL6WVF4U2PorVG_Pt8AX4swLbyiYmlU46k5EVj4c=")))
+		  'tar.bz
+		  "4635voYoGPoNYIzzxsx28IZMrnXyQvrJfxLmmDBd_fw=")))
     (lambda (arch)
       (case arch
 	((x86_64) x86-64)
@@ -274,7 +272,67 @@ EOF
 			    #:post-install (execline*
 					     (rm -rf /out/usr/lib)))))))
 
-(define perl (placeholder "perl"))
+(define bzip2
+  (let* ((version '1.0.8)
+	 (leaf    (remote-archive
+		    (conc "https://sourceware.org/pub/bzip2/bzip2-" version ".tar.gz")
+		    "pZGXjBOF4VYQnwdDp2UYObANElrjShQaRbMDj5yef1A=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label (conc "bzip2-" version "-" (conf 'arch))
+	#:src   leaf
+	#:tools (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared)
+	#:build (make-recipe
+		  #:script (execline*
+			     (cd ,(conc "bzip2-" version))
+			     (if ((make ,@(map pair->quoted-string (cc-env conf)) all)))
+			     (make PREFIX=/out/usr install)))))))
+
+(define perl
+  (let* ((version '5.30.1)
+	 (leaf    (remote-archive
+		    (conc "https://www.cpan.org/src/5.0/perl-" version ".tar.gz")
+		    "EBvfwKXjX_aaet0AXxwJKJGpGy4RnUrrYjh-qLeZ8ts=")))
+    (package-lambda
+      conf
+      (unless (eq? (conf 'arch) *this-machine*)
+	(error "don't know how to cross-compile perl yet :("))
+      (make-package
+	#:label (conc "perl-" version "-" (conf 'arch))
+	#:src   leaf
+	#:tools (cc-for-target conf)
+	#:inputs (list zlib bzip2 musl libssp-nonshared)
+	#:build
+	(let ((configure-flags `("\"-Dccflags=-fPIE -static-pie\"" "\"-Dldflags=--sysroot=/sysroot -static-pie\""
+				 ,(pair->quoted-string (cons '-Doptimize (or (conf 'CFLAGS) '-Os)))
+				 -Dsysroot=/sysroot "-Dlocincpth=''" "-Dloclibpth=''"
+				 -Dprefix=/usr -Dprivlib=/usr/share/perl5/core_perl
+				 -Darchlib=/usr/lib/perl5/core_perl -Dvendorprefix=/usr
+				 -Dvendorlib=/usr/share/perl5/vendor_perl -Dvendorarch=/usr/lib/perl5/vendor_perl
+				 -Duselargefiles -Dusethreads -Duseshrplib=false -Dd_semctl_semun
+				 -Dman1dir=/usr/share/man/man1 -Dman3dir=/usr/share/man/man3
+				 -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
+				 -Dman1ext=1 -Dman3ext=3pm -Dcf_by=sysplan -Ud_csh -Uusedl -Dusenm
+				 -Dusemallocwrap)))
+	  (make-recipe
+	    #:env   '((BUILD_ZLIB . 0)
+		      (BUILD_BZIP2 . 0)
+		      (BZIP2_LIB . /sysroot/usr/lib)
+		      (BZIP2_INCLUDE . /sysroot/usr/include))
+	    #:script (execline*
+		       (cd ,(conc "perl-" version))
+		       ;; XXX cargo-culted from the Alpine build:
+		       ;; strip nsl
+		       #;(if ((sed -e "\"s/less -R/less/g\"" -e "\"s/libswanted=\\\"\\(.*\\) nsl\\(.*\\)\\\"/libswanted=\\\"\\1\\2\\\"/g\"" "-i" ./Configure)))
+		       (if ((./Configure -des ,@configure-flags)))
+		       (if ((backtick -n -D 4 ncpu ((nproc)))
+			    (importas -u ncpu ncpu)
+			    (make -j $ncpu)))
+		       (if ((make DESTDIR=/out install)))
+		       (find /out -name ".*" -delete))))))))
+
 
 (define bison
   (let* ((version '3.4.2)
@@ -311,8 +369,6 @@ EOF
 	#:build  (gnu-build (conc "flex-" version) conf)))))
 
 (define ncurses
-  ;; NOTE: if you update the version here,
-  ;; update the gross configure hack below
   (let* ((version '6.1-20200104)
 	 (leaf    (remote-archive
 		    (conc "https://invisible-mirror.net/archives/ncurses/current/ncurses-" version ".tgz")
@@ -336,7 +392,7 @@ EOF
 (define texinfo
   (let* ((version '6.7)
 	 (leaf    (remote-archive
-		    (conc "https://ftp.gnu.org/gnu/texinfo/texinfo-" version "tar.xz")
+		    (conc "https://ftp.gnu.org/gnu/texinfo/texinfo-" version ".tar.xz")
 		    "sRSBGlRp4y484pt7mtcx_xVSIi6brC5ejffXfQ9wInE=")))
     (package-lambda
       conf
@@ -396,8 +452,8 @@ EOF
 	  (make-package
 	    #:label (conc "binutils-" version "-" (host 'arch) "-" (target 'arch))
 	    #:src   leaf
-	    #:tools  (append bison flex (cc-for-target host))
-	    #:inputs (list zlib musl libssp-nonshared)
+	    #:tools  (append (list bison flex m4) (cc-for-target host))
+	    #:inputs (list libisl zlib musl libssp-nonshared)
 	    #:build  (gnu-build (conc "binutils-" version)
 				(config-prepend host 'configure-flags
 						`(--with-sysroot=/ --with-build-sysroot=/sysroot --target ,(target 'arch)
