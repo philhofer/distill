@@ -4,23 +4,45 @@
      (memoize-eq
        (lambda (conf) body* ...)))))
 
+;; this is the list of packages present
+;; in a bootstrap archive (in other words,
+;; packages in '#:tools' that are superseded)
+;;
+;; note: if you're building an external bootstrap tarball,
+;; it needs to provide *equivalent* packages to the list
+;; below (not necessarily identical ones)
+(define (bootstrap-packages conf)
+  (append
+    (list
+      libssp-nonshared
+      musl
+      busybox
+      perl
+      m4)
+    (cc-for-target conf)))
+
 ;; pkgs->bootstrap takes a list of package-lambdas
-;; and overrides their src and tools so that they
-;; don't depend on any tools packages, and instead
-;; use the tools provided by a bootstrap tarball
-;; that is unpacked at / before building
+;; and replaces dependencies from 'tools' with
+;; those in the bootstrap tarball
 (define (pkgs->bootstrap . pkgs)
   (let ((ht (make-hash-table)))
     (define (inner pkg)
       (or (hash-table-ref/default ht pkg #f)
 	  (let ((newproc (memoize-eq
 			   (lambda (conf)
-			     (let ((old (pkg conf)))
+			     (let ((old      (pkg conf))
+				   (bootpkgs (bootstrap-packages conf)))
 			       (update-package
 				 old
 				 #:label (conc (package-label old) "-bootstrap")
-				 #:src   (flatten (bootstrap-tools (conf 'arch)) (package-src old))
-				 #:tools '()
+				 #:src   (flatten (bootstrap-archive *this-machine*) (package-src old))
+				 #:tools (foldl
+					   (lambda (lst p)
+					     (if (memq p bootpkgs) lst (cons (inner p) lst)))
+					   '()
+					   (package-tools old))
+				 ;; inputs are simply replaced with versions
+				 ;; built with the bootstrap toolchain
 				 #:inputs (map inner (package-inputs old))))))))
 	    (hash-table-set! ht pkg newproc)
 	    newproc)))
@@ -33,21 +55,19 @@
 
 ;; placeholder produces a package-lambda that errors when called
 (define (placeholder name)
-  (lambda (conf)
-    (error (conc "package" name "not implemented yet"))))
+  (package-lambda conf
+    (error (conc "package " name " not implemented yet"))))
 
-(define (gcc-for-target conf)
-  (placeholder "gcc"))
-
-(define (binutils-for-target conf)
-  (placeholder "binutils"))
+(define gcc-for-target
+  (memoize-eq
+    (lambda (target) (placeholder "gcc"))))
 
 (define busybox (placeholder "busybox"))
 
 (define (cc-for-target conf)
   (list (gcc-for-target conf) (binutils-for-target conf) busybox))
 
-(define bootstrap-tools
+(define bootstrap-archive
   (let ((x86-64 (local-archive
 		  'tar.xz
 		  "FUpEL6WVF4U2PorVG_Pt8AX4swLbyiYmlU46k5EVj4c=")))
@@ -286,7 +306,7 @@ EOF
       (make-package
 	#:label  (conc "flex-" version "-" (conf 'arch))
 	#:src    leaf
-	#:tools  (cons bison (cc-for-target conf))
+	#:tools  (cc-for-target conf)
 	#:inputs (list musl libssp-nonshared bison)
 	#:build  (gnu-build (conc "flex-" version) conf)))))
 
@@ -363,3 +383,25 @@ EOF
 	#:tools  (cc-for-target conf)
 	#:inputs (list libgmp musl libssp-nonshared)
 	#:build  (gnu-build (conc "isl-" version) conf)))))
+
+(define binutils-for-target
+  (let* ((version '2.33.1)
+	 (leaf    (remote-archive
+		    (conc "https://ftp.gnu.org/gnu/binutils/binutils-" version ".tar.bz2")
+		    "wuwvGNrMYaSLio4yHUAS8qM3-ugn1kqrqEn2M6LcNT0=")))
+    (memoize-eq
+      (lambda (target)
+	(package-lambda
+	  host
+	  (make-package
+	    #:label (conc "binutils-" version "-" (host 'arch) "-" (target 'arch))
+	    #:src   leaf
+	    #:tools  (append bison flex (cc-for-target host))
+	    #:inputs (list zlib musl libssp-nonshared)
+	    #:build  (gnu-build (conc "binutils-" version)
+				(config-prepend host 'configure-flags
+						`(--with-sysroot=/ --with-build-sysroot=/sysroot --target ,(target 'arch)
+								   --disable-multilib --enable-ld=default --enable-gold=yes
+								   --enable-64-bit-bfd --enable-plugins --enable-relro
+								   --enable-deterministic-archives --disable-install-libiberty
+								   --enable-default-hash-style=gnu --with-mmap --with-system-zlib)))))))))
