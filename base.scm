@@ -447,6 +447,55 @@ EOF
 	#:inputs (list libgmp musl libssp-nonshared)
 	#:build  (gnu-build (conc "isl-" version) conf)))))
 
+;; patch* creates a series of patch artifacts
+;; from a collection of verbatim strings
+(define (patch* . patches)
+  (if (null? patches)
+    '()
+    (let loop ((n 0)
+	       (head (car patches))
+	       (rest (cdr patches)))
+      (cons
+	(interned (conc "/src/patch-" n ".patch") #o644 head)
+	(if (null? rest) '() (loop (+ n 1) (car rest) (cdr rest)))))))
+
+;; script-apply-patches produces the execline expressions
+;; for applying a series of patches from artifact files
+(define (script-apply-patches lst)
+  (map
+    (lambda (pf)
+      `(if ((patch -p1 "-i" ,(vector-ref (vector-ref pf 0) 1)))))
+    lst))
+
+;; include a file as literal text at compile time
+(define-syntax include-file-text
+  (er-macro-transformer
+    (lambda (expr rename cmp)
+      (let ((arg (cadr expr)))
+	(unless (string? arg)
+	  (syntax-error "include-file-text expects a literal string; got" expr))
+	(with-input-from-file arg read-string)))))
+
+(define make
+  (let* ((version '4.2.1)
+	 (leaf    (remote-archive
+		    (conc "https://ftp.gnu.org/gnu/make/make-" version ".tar.bz2")
+		    "BNFWkQKgF9Vt6NUbdway0KbpUiZJ6PFQDLG4L29xjlg="))
+	 (patches (patch*
+		    ;; patches are the same ones that Alpine uses
+		    ;; in order to fix musl compatibility
+		    (include-file-text "patches/make/fix-atexit-exit.patch")
+		    (include-file-text "patches/make/fix-glob-dtype.patch"))))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "make-" version "-" (conf 'arch))
+	#:src    (cons leaf patches)
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared)
+	#:build  (gnu-build (conc "make-" version) conf
+			    #:pre-configure (script-apply-patches patches))))))
+
 (define binutils-for-target
   (let* ((version '2.33.1)
 	 (leaf    (remote-archive

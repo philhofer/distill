@@ -9,7 +9,9 @@
     (chicken
       (import
         (only (chicken base) flatten foldl)
-        (only (chicken string) conc))))
+        (only (chicken string) conc))
+      (import-for-syntax
+        (only (chicken io) read-string))))
   (export
     pkgs->bootstrap
     libgmp
@@ -24,6 +26,7 @@
     libisl
     perl
     bzip2
+    make
     binutils-for-target
     gnu-build
     cc-env)
