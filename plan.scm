@@ -43,12 +43,15 @@
 		     (".tgz"    . tar.gz)
 		     (".tar.bz" . tar.bz)
 		     (".tar.bz2". tar.bz)
+		     (".tar.zst". tar.zst)
 		     (".tar"    . tar))))
     (cond
-      ((null? suff) 'unknown)
+      ((null? suff) (error "bad url suffix" src))
       ((string-suffix? (caar suff) src) (cdar suff))
       (else (loop (cdr suff))))))
 
+;; TODO: normalize remote archives for faster re-builds
+;; (large xz tarballs are reeeeally slow to unpack)
 (: remote-archive (string string --> artifact))
 (define (remote-archive src hash)
   (%artifact
@@ -255,7 +258,7 @@
       ;;
       ;; produces an output like
       ;;  (#("/" #('file "/etc/hostname" #o644) "...<hash>...")
-      ;;   #("/" #('archive (tar xz))           "...<hash>...") ...)
+      ;;   #("/" #('archive 'tar.xz)            "...<hash>...") ...)
       (define (cons*-inputs in tail)
 	(foldl1
 	  (lambda (lst p)
@@ -360,7 +363,7 @@
 (define (fetch! src hash)
   (let* ((dst (filepath-join (artifact-dir) hash))
 	 (tmp (string-append dst ".tmp")))
-    (info "fetching" hash "from" src)
+    (info " -- fetching" src)
     (run "wget" "-O" tmp src)
     (let ((h (hash-file tmp)))
       (if (string=? h hash)
@@ -422,17 +425,18 @@
       (set-file-permissions! dstfile mode)))
 
   (define (unpack-archive dst kind hash src)
-    (let ((extract (case kind
-		     ((tar.gz) "-zx")
-		     ((tar.bz) "-jx")
-		     ((tar.xz) "-Jx")
-		     ((tar)    "-x")
-		     (else (error "unknown archive kind" kind))))
+    (let ((comp (case kind
+		  ((tar.gz) "-z")
+		  ((tar.bz) "-j")
+		  ((tar.xz) "-J")
+		  ((tar.zst) "--zstd")
+		  ((tar)    "")
+		  (else (error "unknown/unsupported archive kind" kind))))
 	  (infile  (filepath-join (artifact-dir) hash)))
       (when (not (file-exists? infile))
 	(unless src (fatal "archive" hash "doesn't exist and has no remote source"))
 	(fetch! src hash))
-      (run "tar" extract "-kf" infile "-C" dst)))
+      (run "tar" comp "-xkf" infile "-C" dst)))
 
   (define (unpack-symlink dst abspath lnk)
     (create-symbolic-link lnk (filepath-join dst abspath)))
@@ -495,11 +499,11 @@
 	    (set-file-permissions! dst #o600))
 	  (%local-file abspath (file-permissions f) h)))))
 
+
 (: dir->artifact (string -> artifact))
 (define (dir->artifact dir)
-  ;; NOTE: gzip embeds timestamps by default (sigh)
-  (let* ((suffix ".tar.bz")
-	 (format 'tar.bz)
+  (let* ((suffix ".tar.zst")
+	 (format 'tar.zst)
 	 (tmp    (create-temporary-file suffix)))
     ;; producing a fully-reproducible tar archive
     ;; is, unfortunately, a minefield
@@ -507,7 +511,12 @@
       "env"
       "LC_ALL=C.UTF-8" ;; necessary for --sort=name to be stable
       "tar"
-      "-cjf" (abspath tmp)
+      ;; TODO: make sure zstd is invoked with explicit
+      ;; compression-level and threading arguments to keep
+      ;; that from being a possible source of reproducibility issues,
+      ;; _or_ calculate the checksum on the uncompressed archive
+      "--zstd"
+      "-cf" (abspath tmp)
       "--format=ustar"
       "--sort=name"
       ;; TODO: use owner-map and group-map for file ownership
@@ -521,7 +530,7 @@
 	   (dst (filepath-join (artifact-dir) h)))
       (if (and (file-exists? dst) (equal? (hash-file dst) h))
 	  (begin
-	    (info "artifact already produced:" h)
+	    (info "  -- artifact reproduced:" h)
 	    (delete-file tmp))
 	  (move-file tmp dst #t 32768))
       (local-archive format h))))
@@ -550,7 +559,11 @@
 	      (lambda (in)
 		(unpack!
 		  (if (plan? in)
-		      (or (plan-outputs in) (error "unbuilt plan" (plan-name in)))
+		      (or
+			(begin
+			  (info "  -- unpacking output of" (plan-name in))
+			  (plan-outputs in))
+			(fatal "unbuilt plan prerequisite:" (plan-name in)))
 		      in)
 		  dir))
 	      (cdr p))))
@@ -558,6 +571,7 @@
       (write-recipe-to-dir (plan-recipe p) root)
 
       ;; fork+exec into the recipe inside the sandbox
+      (info " -- running build script ...")
       (sandbox-run
 	root
 	"/bin/emptyenv"
@@ -569,6 +583,13 @@
 	"fdmove" "-c" "2" "1"
 	*buildfile-path*)
 
+      ;; save the compressed build log independently
+      ;; (it's not 'reproduced' as such)
+      (let ((pdir (filepath-join (plan-dir) (plan-hash p))))
+	(create-directory pdir #t)
+	(run "zstd"
+	     "--rm" (filepath-join root "build.log")
+	     "-o"   (filepath-join pdir "build.log.zst")))
       (dir->artifact outdir))))
 
 (: plan-built? ((struct plan) -> boolean))

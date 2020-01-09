@@ -22,6 +22,9 @@
     flex
     ncurses
     libisl
+    perl
+    bzip2
+    binutils-for-target
     gnu-build
     cc-env)
   (include "base.scm"))

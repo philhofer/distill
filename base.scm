@@ -19,6 +19,10 @@
       busybox)
     (cc-for-target conf)))
 
+(define (triple conf)
+  (string->symbol
+    (conc (conf 'arch) "-none-linux-musl")))
+
 ;; pkgs->bootstrap takes a list of package-lambdas
 ;; and replaces dependencies from 'tools' with
 ;; those in the bootstrap tarball
@@ -67,8 +71,8 @@
 
 (define bootstrap-archive
   (let ((x86-64 (local-archive
-		  'tar.bz
-		  "4635voYoGPoNYIzzxsx28IZMrnXyQvrJfxLmmDBd_fw=")))
+		  'tar.zst
+		  "s2BsxT2v1Qe0rX-1YNSPTfEGTOz8AskqA4JClsZqgpg=")))
     (lambda (arch)
       (case arch
 	((x86_64) x86-64)
@@ -151,7 +155,7 @@ EOF
 			     (cd ./src)
 			     ;; XXX don't use 'gcc' here
 			     (if ((gcc -c -fPIE -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
-			     (if ((ar r libssp_nonshared.a __stack_chk_fail_local.o)))
+			     (if ((ar Ur libssp_nonshared.a __stack_chk_fail_local.o)))
 			     (if ((mkdir -p /out/usr/lib)))
 			     (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))))
 
@@ -194,10 +198,14 @@ EOF
 	       (if ((backtick -n -D 4 ncpu ((nproc)))
 		    (importas -u ncpu ncpu)
 		    (make -j $ncpu ,@make-flags)))
-	       ,@(if (null? post-install)
-		     '((make DESTDIR=/out install))
-		     (cons '(if ((make DESTDIR=/out install)))
-			   post-install)))))
+	       (if ((make DESTDIR=/out install)))
+	       ,@post-install
+	       ;; we don't care if these two succeed
+	       ;; TODO: perhaps gnu packages should
+	       ;; symlink makeinfo to /usr/bin/true
+	       (foreground ((rm -rf /out/usr/share/man)))
+	       (foreground ((rm -rf /out/usr/share/info)))
+	       (true))))
 
 (define gawk
   (let* ((version '5.0.1)
@@ -223,7 +231,7 @@ EOF
       (make-package
 	#:label  (conc "gmp-" version "-" (conf 'arch))
 	#:src    leaf
-	#:tools  (cc-for-target conf)
+	#:tools  (cons m4 (cc-for-target conf))
 	#:inputs (list musl libssp-nonshared)
 	#:build  (gnu-build (conc "gmp-" version) conf)))))
 
@@ -305,9 +313,9 @@ EOF
 	#:tools (cc-for-target conf)
 	#:inputs (list zlib bzip2 musl libssp-nonshared)
 	#:build
-	(let ((configure-flags `("\"-Dccflags=-fPIE -static-pie\"" "\"-Dldflags=--sysroot=/sysroot -static-pie\""
+	(let ((configure-flags `("\"-Dccflags=--sysroot=/sysroot -fPIE -static-pie\"" "\"-Dldflags=--sysroot=/sysroot -static-pie\""
 				 ,(pair->quoted-string (cons '-Doptimize (or (conf 'CFLAGS) '-Os)))
-				 -Dsysroot=/sysroot "-Dlocincpth=''" "-Dloclibpth=''"
+				 -Dsysroot=/sysroot
 				 -Dprefix=/usr -Dprivlib=/usr/share/perl5/core_perl
 				 -Darchlib=/usr/lib/perl5/core_perl -Dvendorprefix=/usr
 				 -Dvendorlib=/usr/share/perl5/vendor_perl -Dvendorarch=/usr/lib/perl5/vendor_perl
@@ -323,14 +331,12 @@ EOF
 		      (BZIP2_INCLUDE . /sysroot/usr/include))
 	    #:script (execline*
 		       (cd ,(conc "perl-" version))
-		       ;; XXX cargo-culted from the Alpine build:
-		       ;; strip nsl
-		       #;(if ((sed -e "\"s/less -R/less/g\"" -e "\"s/libswanted=\\\"\\(.*\\) nsl\\(.*\\)\\\"/libswanted=\\\"\\1\\2\\\"/g\"" "-i" ./Configure)))
 		       (if ((./Configure -des ,@configure-flags)))
 		       (if ((backtick -n -D 4 ncpu ((nproc)))
 			    (importas -u ncpu ncpu)
 			    (make -j $ncpu)))
 		       (if ((make DESTDIR=/out install)))
+		       (if ((rm -rf /out/usr/share/man)))
 		       (find /out -name ".*" -delete))))))))
 
 
@@ -364,7 +370,8 @@ EOF
       (make-package
 	#:label  (conc "flex-" version "-" (conf 'arch))
 	#:src    leaf
-	#:tools  (cc-for-target conf)
+	;; TODO: m4 is also a runtime dependency of flex
+	#:tools  (cons m4 (cc-for-target conf))
 	#:inputs (list musl libssp-nonshared bison)
 	#:build  (gnu-build (conc "flex-" version) conf)))))
 
@@ -453,11 +460,11 @@ EOF
 	    #:label (conc "binutils-" version "-" (host 'arch) "-" (target 'arch))
 	    #:src   leaf
 	    #:tools  (append (list bison flex m4) (cc-for-target host))
-	    #:inputs (list libisl zlib musl libssp-nonshared)
+	    #:inputs (list libisl zlib libgmp libmpfr libmpc musl libssp-nonshared)
 	    #:build  (gnu-build (conc "binutils-" version)
 				(config-prepend host 'configure-flags
-						`(--with-sysroot=/ --with-build-sysroot=/sysroot --target ,(target 'arch)
-								   --disable-multilib --enable-ld=default --enable-gold=yes
-								   --enable-64-bit-bfd --enable-plugins --enable-relro
+						`(--with-sysroot=/ --with-build-sysroot=/sysroot --target ,(triple target)
+								   --disable-multilib --enable-ld=default --enable-gold
+								   --enable-64-bit-bfd --enable-relro
 								   --enable-deterministic-archives --disable-install-libiberty
 								   --enable-default-hash-style=gnu --with-mmap --with-system-zlib)))))))))
