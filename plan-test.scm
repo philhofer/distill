@@ -33,7 +33,7 @@
 ;; test a simple plan execution
 (let ()
   (define bootstrap-input
-    (local-archive 'tar.xz (hash-file "bootstrap-x86_64.tar.xz")))
+    (local-archive 'tar.zst (hash-file "bootstrap-x86_64.tar.zst")))
 
   ;; run a trivial plan ("echo hi > /sysroot/out") in
   ;; the bootstrap leaf and ensure that the output is
