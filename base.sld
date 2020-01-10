@@ -28,6 +28,7 @@
     bzip2
     make
     skalibs
+    execline-tools
     binutils-for-target
     gnu-build
     cc-env)

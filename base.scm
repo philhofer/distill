@@ -339,7 +339,6 @@ EOF
 		       (if ((rm -rf /out/usr/share/man)))
 		       (find /out -name ".*" -delete))))))))
 
-
 (define bison
   (let* ((version '3.4.2)
 	 (leaf    (remote-archive
@@ -360,6 +359,26 @@ EOF
 			    #:pre-configure (execline*
 					      (if ((rm -rf examples/c/recalc)))))))))
 
+(define (ska-build dir conf #!key (extra-configure '()))
+  ;; FIXME: don't hardcode CC=gcc
+  ;; (but it needs to be something for ./configure to work
+  (let ((cenv (cons (cons 'CC 'gcc) (cc-env conf))))
+    (make-recipe
+      #:script (execline*
+		 (cd ,dir)
+		 ,@(map (lambda (p)
+			  `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
+			cenv)
+		 (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
+		 (if ((./configure --target ,(conf 'arch) --prefix=/ --libdir=/usr/lib
+				   --with-include=/sysroot/include --with-lib=/sysroot/lib/
+				   --with-include=/sysroot/usr/include --with-lib=/syroot/usr/lib
+				   --disable-shared --enable-static ,@extra-configure)))
+		 (if ((backtick -n -D 4 ncpu ((nproc)))
+		      (importas -u ncpu ncpu)
+		      (make -j $ncpu AR=ar RANLIB=ranlib STRIP=strip)))
+		 (make DESTDIR=/out install)))))
+
 (define skalibs
   (let* ((version '2.9.1.0)
 	 (leaf    (remote-archive
@@ -373,18 +392,23 @@ EOF
 	#:tools (cc-for-target conf)
 	#:inputs (list musl libssp-nonshared)
 	;; note: not autoconf, but the default configure args work fine
-	#:build (gnu-build (conc "skalibs-" version)
-			   (config-prepend conf 'configure-flags '(--with-sysdep-devurandom=yes))
-			   #:pre-configure (execline*
-					     ;; don't let the configure script arbitrarily
-					     ;; decide to turn off -fstack-protector-strong
-					     ,@(map (lambda (p)
-						    `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
-						   (cc-env conf))
-					     (export CC gcc)
-					     ;; our CFLAGS should take precedence
-					     (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure))))
-			   #:make-flags '(AR=ar RANLIB=ranlib STRIP=strip))))))
+	#:build (ska-build (conc "skalibs-" version) conf
+			   #:extra-configure '(--with-sysdep-devurandom=yes))))))
+
+(define execline-tools
+  (let* ((version '2.5.3.0)
+	 (leaf    (remote-archive
+		    (conc "https://skarnet.org/software/execline/execline-" version ".tar.gz")
+		    "qoNVKJ4tBKdrzqlq10C5rqIsv3FDzeFa9umqs7EJOdM=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label  (conc "execline-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list skalibs musl libssp-nonshared)
+	#:build  (ska-build (conc "execline-" version) conf
+			    #:extra-configure '(--with-sysdeps=/sysroot/lib/skalibs/sysdeps --enable-static-libc))))))
 
 (define flex
   (let* ((version '2.6.4)
