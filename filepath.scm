@@ -40,7 +40,26 @@
 ;; while eliminating '.' and '..' components where possible
 (: filepath-join (stringy #!rest stringy --> string))
 (define (filepath-join first . rest)
-  (let* ((cons-part (lambda (out part)
+  ;; scan for '/'
+  (define (scan str start)
+    (let ((len (string-length str)))
+      (let loop ((i start))
+	(cond
+	  ((>= i len) len)
+	  ((eqv? (string-ref str i) #\/) i)
+	  (else (loop (+ i 1)))))))
+  ;; foldl, but for subsections of 'str'
+  ;; that are delimited by '/'
+  (define (foldl-parts proc init str)
+    (let ((end (string-length str)))
+      (let loop ((i 0)
+		 (v init))
+	(if (>= i end)
+	  v
+	  (let ((seg (scan str i)))
+	    (loop (+ seg 1) (proc v (substring/shared str i seg))))))))
+  (let* ((input     (cons first rest))
+	 (cons-part (lambda (out part)
 		      ;; push 'part' onto 'out' unless it is
 		      ;; a special path component (".." means pop)
 		      (cond
@@ -52,11 +71,10 @@
 			     (cdr out)))
 			(else
 			 (cons part out)))))
-	 (cons-args (lambda (out arg)
-		      ;; push 'arg' components onto 'out'
-		      (foldl1 cons-part out (string-split (stringify arg) "/"))))
-	 (rev-parts (foldl1 cons-args '() (cons first rest)))
-	 (abspath?  (string-prefix? "/" (->string first)))
+	 (cons-arg  (lambda (out arg)
+		      (foldl-parts cons-part out (stringify arg))))
+	 (rev-parts (foldl1 cons-arg '() input))
+	 (abspath?  (eqv? (string-ref (stringify first) 0) #\/))
 	 (prepend   (lambda (out part)
 		      (string-append part "/" out)))
 	 (fullpath  (foldl1 prepend (car rev-parts) (cdr rev-parts))))

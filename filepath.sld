@@ -11,9 +11,6 @@
   (cond-expand
     (chicken
       (import
-        (chicken file)
-        (chicken string)
-        (chicken file posix)
-        (chicken process-context)
+        (only (chicken process-context) current-directory)
         (chicken type))))
   (include "filepath.scm"))
