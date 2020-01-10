@@ -27,6 +27,7 @@
     perl
     bzip2
     make
+    skalibs
     binutils-for-target
     gnu-build
     cc-env)

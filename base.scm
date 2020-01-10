@@ -360,6 +360,32 @@ EOF
 			    #:pre-configure (execline*
 					      (if ((rm -rf examples/c/recalc)))))))))
 
+(define skalibs
+  (let* ((version '2.9.1.0)
+	 (leaf    (remote-archive
+		    (conc "https://skarnet.org/software/skalibs/skalibs-" version ".tar.gz")
+		    "FlrvgEOHU_UzTJDBjUrQ0HHLijHeqstC_QgCK-NE2yo=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label (conc "skalibs-" version "-" (conf 'arch))
+	#:src   leaf
+	#:tools (cc-for-target conf)
+	#:inputs (list musl libssp-nonshared)
+	;; note: not autoconf, but the default configure args work fine
+	#:build (gnu-build (conc "skalibs-" version)
+			   (config-prepend conf 'configure-flags '(--with-sysdep-devurandom=yes))
+			   #:pre-configure (execline*
+					     ;; don't let the configure script arbitrarily
+					     ;; decide to turn off -fstack-protector-strong
+					     ,@(map (lambda (p)
+						    `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
+						   (cc-env conf))
+					     (export CC gcc)
+					     ;; our CFLAGS should take precedence
+					     (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure))))
+			   #:make-flags '(AR=ar RANLIB=ranlib STRIP=strip))))))
+
 (define flex
   (let* ((version '2.6.4)
 	 (leaf    (remote-archive
