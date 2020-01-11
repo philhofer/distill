@@ -11,29 +11,33 @@
 ;; note: if you're building an external bootstrap tarball,
 ;; it needs to provide *equivalent* packages to the list
 ;; below (not necessarily identical ones)
+;;
+;; the bootstrap packages are simply
+;; a working C/C++ toolchain + make
 (define (bootstrap-packages conf)
-  (append
-    (list
+  (cons
+    musl
+    (cons
       libssp-nonshared
-      musl
-      busybox)
-    (cc-for-target conf)))
+      (cc-for-target conf))))
 
 (define (triple conf)
   (string->symbol
-    (conc (conf 'arch) "-none-linux-musl")))
+    (conc (conf 'arch) '-linux-musl)))
 
 ;; pkgs->bootstrap takes a list of package-lambdas
 ;; and replaces dependencies from 'tools' with
-;; those in the bootstrap tarball
+;; those in the bootstrap tarball and those in 'inputs'
+;; with those built by the bootstrap tarball
 (define (pkgs->bootstrap . pkgs)
   (let ((ht (make-hash-table)))
     (define (inner pkg)
       (or (hash-table-ref/default ht pkg #f)
 	  (let ((newproc (memoize-eq
 			   (lambda (conf)
-			     (let ((old      (pkg conf))
-				   (bootpkgs (bootstrap-packages conf)))
+			     (let* ((conf     (bootstrap-conf conf))
+				    (old      (pkg conf))
+				    (bootpkgs (bootstrap-packages conf)))
 			       (update-package
 				 old
 				 #:label (conc (package-label old) "-bootstrap")
@@ -57,8 +61,9 @@
 
 ;; placeholder produces a package-lambda that errors when called
 (define (placeholder name)
-  (package-lambda conf
-    (error (conc "package " name " not implemented yet"))))
+  (memoize-eq
+    (lambda (conf)
+      (error (conc "package " name " not implemented yet")))))
 
 (define gcc-for-target
   (memoize-eq
@@ -67,7 +72,8 @@
 (define busybox (placeholder "busybox"))
 
 (define (cc-for-target conf)
-  (list (gcc-for-target conf) (binutils-for-target conf) busybox))
+  (list (gcc-for-target conf)
+	make execline-tools busybox))
 
 (define bootstrap-archive
   (let ((x86-64 (local-archive
@@ -78,10 +84,18 @@
 	((x86_64) x86-64)
 	(else     (error "no bootstrap for arch" arch))))))
 
-;; cc-env takes a configuration and produces
-;; an alist with at least CFLAGS, LDFLAGS, and CPPFLAGS
-;; corresponding to a list of those configuration options
-;; with mandatory flags also set
+(define bootstrap-conf
+  (memoize-eq
+    (lambda (conf)
+      (lambda (var)
+	(case var
+	  ((toolchain-prefix) 'alpine-linux-musl)
+	  ((bootstrap) #t)
+	  (else (conf var)))))))
+
+;; cc-env takes a configuration and produces an alist
+;; with typical configure/make variables set to the
+;; appropriate values (CC{FLAGS}, LD{FLAGS}, CXX{FLAGS}, etc.)
 (define cc-env
   (memoize-eq
     (lambda (conf)
@@ -91,13 +105,24 @@
 	    (cflags          (conf 'CFLAGS))
 	    (ldflags         (conf 'LDFLAGS))
 	    (cppflags        (conf 'CPPFLAGS))
+	    (c++flags        (or (conf 'CXXFLAGS) (conf 'CFLAGS)))
+	    (plat            (or (and-let* ((pre (conf 'toolchain-prefix)))
+				   (conc (conf 'arch) "-" pre))
+				 (triple conf)))
 	    (join            (lambda (a b)
 			       (cond
 				 ((eq? a #f) b)
 				 ((list? a)  (append a b))
 				 (else (cons a b))))))
-	`((CFLAGS . ,(join cflags need-cflags))
-	  (LDFLAGS . ,(join ldflags need-ldflags))
+	`((CC  . ,(conc plat "-gcc"))
+	  (LD  . ,(conc plat "-ld"))
+	  (AS  . ,(conc plat "-as"))
+	  (AR  . ,(conc plat "-gcc-ar"))
+	  (CXX . ,(conc plat "-g++"))
+	  (CFLAGS   . ,(join cflags need-cflags))
+	  (CXXFLAGS . ,(join c++flags need-cflags))
+	  (ARFLAGS  . -Dcr) ;; force deterministic archives
+	  (LDFLAGS  . ,(join ldflags need-ldflags))
 	  (CPPFLAGS . ,(join cppflags need-cppflags)))))))
 
 (define (apply-conc x)
@@ -126,9 +151,7 @@
 				(cons (pair->quoted-string opt) lst))
 			       '()
 			       copts))
-	     ;; note: even though we always pass -fPIE, we need --with-pic
-	     ;; to work around bugs in binutils regarding handling of TLS (sigh)
-	     (need-conf `(--disable-shared --disable-nls --enable-static --enable-pie --with-pic --prefix=/usr --sysconfdir=/etc --build ,*this-machine* --host ,(conf 'arch)))
+	     (need-conf `(--disable-shared --disable-nls --enable-static --enable-pie --with-pic --prefix=/usr --sysconfdir=/etc --build ,(conc *this-machine* "-linux-musl") --host ,(triple conf)))
 	     (usr-conf  (conf 'configure-flags)))
 	(cond
 	  ((eq? usr-conf #f) (append copts-str need-conf))
@@ -151,42 +174,52 @@ void __attribute__((visibility ("hidden"))) __stack_chk_fail_local(void) { __sta
 EOF
 )
 	#:build (make-recipe
-		  #:script (execline*
-			     (cd ./src)
-			     ;; XXX don't use 'gcc' here
-			     (if ((gcc -c -fPIE -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
-			     (if ((ar Ur libssp_nonshared.a __stack_chk_fail_local.o)))
-			     (if ((mkdir -p /out/usr/lib)))
-			     (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))))
+		  #:script (let* ((cenv (cc-env conf))
+				  (CC   (cdr (assq 'CC cenv)))
+				  (AR   (cdr (assq 'AR cenv))))
+			     (execline*
+			       (cd ./src)
+			       (if ((,CC -c -fPIE -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
+			       (if ((,AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
+			       (if ((mkdir -p /out/usr/lib)))
+			       (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))))
 
 (define musl
   (let* ((version '1.1.24)
 	 (leaf    (remote-archive
 		    (conc "https://www.musl-libc.org/releases/musl-" version ".tar.gz")
-		    "hC6Gf8nyJQAZVYJ-tNG0iU0dRjES721p0x1cqBp2Ge8="))
-	 (->cflags  (lambda (conf)
-		      (pair->quoted-string (cons 'CFLAGS (cons '-fPIE (or (conf 'CFLAGS) '())))))))
+		    "hC6Gf8nyJQAZVYJ-tNG0iU0dRjES721p0x1cqBp2Ge8=")))
     (package-lambda
       conf
       (make-package
-	#:label (conc "musl-" version "-" (conf 'arch))
-	#:src   leaf
-	#:tools (cc-for-target conf)
+	#:label  (conc "musl-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
 	#:inputs '()
 	#:build (make-recipe
-		  #:script (execline*
-			     (cd ,(conc "musl-" version))
-			     ;; note: NOT autotools; --target means something different
-			     (if ((./configure --disable-shared --enable-static --prefix=/usr ,(->cflags conf) --target ,(conf 'arch))))
-			     (if ((backtick -n -D 4 ncpu ((nproc)))
-				  (importas -u ncpu ncpu)
-				  (make -j $ncpu)))
-			     (make DESTDIR=/out install)))))))
+		  ;; ./configure, but not autotools
+		  #:script (let* ((cenv   (cc-env conf))
+				  (CC     (assq 'CC cenv))
+				  (CFLAGS (assq 'CFLAGS cenv)))
+			     (execline*
+			       (cd ,(conc "musl-" version))
+			       (if ((./configure --disable-shared --enable-static
+						 --prefix=/usr ,(pair->quoted-string CC)
+						 ,(pair->quoted-string CFLAGS)
+						 --target ,(conf 'arch))))
+			       (if ((backtick -n -D 4 ncpu ((nproc)))
+				    (importas -u ncpu ncpu)
+				    (make -j $ncpu)))
+			       (make DESTDIR=/out install))))))))
 
 ;; wrapper around the 'configure;make;make install' pattern,
 ;; taking care to set configure flags make flags appropriately
 ;; for the common case that we're dealing with autotools
-(define (gnu-build dir target #!key (pre-configure '()) (post-install '()) (make-flags '()) (configure #f))
+(define (gnu-build dir target #!key
+		   (pre-configure '())
+		   (post-install '())
+		   (make-flags '())
+		   (configure #f))
   (make-recipe
     #:script (execline*
 	       (cd ,dir)
@@ -288,15 +321,15 @@ EOF
     (package-lambda
       conf
       (make-package
-	#:label (conc "bzip2-" version "-" (conf 'arch))
-	#:src   leaf
-	#:tools (cc-for-target conf)
+	#:label  (conc "bzip2-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
 	#:inputs (list musl libssp-nonshared)
-	#:build (make-recipe
-		  #:script (execline*
-			     (cd ,(conc "bzip2-" version))
-			     (if ((make ,@(map pair->quoted-string (cc-env conf)) all)))
-			     (make PREFIX=/out/usr install)))))))
+	#:build  (make-recipe
+		   #:script (execline*
+			      (cd ,(conc "bzip2-" version))
+			      (if ((make ,@(map pair->quoted-string (cc-env conf)) all)))
+			      (make PREFIX=/out/usr install)))))))
 
 (define perl
   (let* ((version '5.30.1)
@@ -308,13 +341,17 @@ EOF
       (unless (eq? (conf 'arch) *this-machine*)
 	(error "don't know how to cross-compile perl yet :("))
       (make-package
-	#:label (conc "perl-" version "-" (conf 'arch))
-	#:src   leaf
-	#:tools (cc-for-target conf)
+	#:label  (conc "perl-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
 	#:inputs (list zlib bzip2 musl libssp-nonshared)
 	#:build
-	(let ((configure-flags `("\"-Dccflags=--sysroot=/sysroot -fPIE -static-pie\"" "\"-Dldflags=--sysroot=/sysroot -static-pie\""
+	(let* ((cenv            (cc-env conf))
+	       (CC              (cdr (assq 'CC cenv)))
+	       (LD              (cdr (assq 'LD cenv)))
+	       (configure-flags `("\"-Dccflags=--sysroot=/sysroot -fPIE -static-pie\"" "\"-Dldflags=--sysroot=/sysroot -static-pie\""
 				 ,(pair->quoted-string (cons '-Doptimize (or (conf 'CFLAGS) '-Os)))
+				 ,(conc "-Dcc=" CC) ,(conc "-Dld=" LD)
 				 -Dsysroot=/sysroot
 				 -Dprefix=/usr -Dprivlib=/usr/share/perl5/core_perl
 				 -Darchlib=/usr/lib/perl5/core_perl -Dvendorprefix=/usr
@@ -360,9 +397,7 @@ EOF
 					      (if ((rm -rf examples/c/recalc)))))))))
 
 (define (ska-build dir conf #!key (extra-configure '()))
-  ;; FIXME: don't hardcode CC=gcc
-  ;; (but it needs to be something for ./configure to work
-  (let ((cenv (cons (cons 'CC 'gcc) (cc-env conf))))
+  (let ((cenv (cc-env conf)))
     (make-recipe
       #:script (execline*
 		 (cd ,dir)
@@ -370,13 +405,15 @@ EOF
 			  `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
 			cenv)
 		 (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
-		 (if ((./configure --target ,(conf 'arch) --prefix=/ --libdir=/usr/lib
+		 (if ((./configure --target ,(triple conf) --prefix=/ --libdir=/usr/lib
 				   --with-include=/sysroot/include --with-lib=/sysroot/lib/
 				   --with-include=/sysroot/usr/include --with-lib=/syroot/usr/lib
 				   --disable-shared --enable-static ,@extra-configure)))
 		 (if ((backtick -n -D 4 ncpu ((nproc)))
 		      (importas -u ncpu ncpu)
-		      (make -j $ncpu AR=ar RANLIB=ranlib STRIP=strip)))
+		      (importas AR AR)
+		      ;; the generated makefile doesn't respect AR otherwise
+		      (make -j $ncpu AR=$AR RANLIB=ranlib STRIP=strip)))
 		 (make DESTDIR=/out install)))))
 
 (define skalibs
@@ -420,9 +457,10 @@ EOF
       (make-package
 	#:label  (conc "flex-" version "-" (conf 'arch))
 	#:src    leaf
-	;; TODO: m4 is also a runtime dependency of flex
-	#:tools  (cons m4 (cc-for-target conf))
-	#:inputs (list musl libssp-nonshared bison)
+	;; NOTE: flex builds some binaries for the build system
+	;; as part of bootstrapping, so it may need 2 C toolchains
+	#:tools  (append (list m4 bison musl libssp-nonshared) (cc-for-target conf))
+	#:inputs (list musl libssp-nonshared)
 	#:build  (gnu-build (conc "flex-" version) conf)))))
 
 (define ncurses
@@ -446,20 +484,6 @@ EOF
 			    (config-prepend conf 'configure-flags extra-flags)
 			    #:make-flags '("ARFLAGS=-Dcrv"))))))
 
-(define texinfo
-  (let* ((version '6.7)
-	 (leaf    (remote-archive
-		    (conc "https://ftp.gnu.org/gnu/texinfo/texinfo-" version ".tar.xz")
-		    "sRSBGlRp4y484pt7mtcx_xVSIi6brC5ejffXfQ9wInE=")))
-    (package-lambda
-      conf
-      (make-package
-	#:label (conc "texinfo-" version "-" (conf 'arch))
-	#:src   leaf
-	#:tools  (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared perl ncurses)
-	#:build  (gnu-build (conc "texinfo-" version) conf)))))
-
 (define zlib
   (let* ((version '1.2.11)
 	 (leaf    (remote-archive
@@ -474,12 +498,11 @@ EOF
 	#:inputs (list musl libssp-nonshared)
 	#:build (gnu-build
 		  (conc "zlib-" version) conf
-		  ;; not autoconf;
-		  ;; stick CFLAGS and friends into the environment
+		  ;; not autoconf; the script reads CC and friends from the environment
 		  #:pre-configure (map (lambda (p)
 					 `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
 				       (cons
-					 (cons 'CHOST (conf 'arch))
+					 (cons 'CHOST (triple conf))
 					 (cc-env conf)))
 		  #:configure '(--static --prefix=/usr --libdir=/lib))))))
 
@@ -546,7 +569,7 @@ EOF
 	#:build  (gnu-build (conc "make-" version) conf
 			    #:pre-configure (script-apply-patches patches))))))
 
-(define binutils-for-target
+#;(define binutils-for-target
   (let* ((version '2.33.1)
 	 (leaf    (remote-archive
 		    (conc "https://ftp.gnu.org/gnu/binutils/binutils-" version ".tar.bz2")
@@ -558,7 +581,7 @@ EOF
 	  (make-package
 	    #:label (conc "binutils-" version "-" (host 'arch) "-" (target 'arch))
 	    #:src   leaf
-	    #:tools  (append (list bison flex m4) (cc-for-target host))
+	    #:tools  (append (list bison flex m4) #;(cc-for-target host))
 	    #:inputs (list libisl zlib libgmp libmpfr libmpc musl libssp-nonshared)
 	    #:build  (gnu-build (conc "binutils-" version)
 				(config-prepend host 'configure-flags

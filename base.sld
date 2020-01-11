@@ -1,6 +1,7 @@
 (define-library (base)
   (import
     (scheme base)
+    (srfi 2)
     (srfi 69)
     (memo)
     (plan)
@@ -29,7 +30,6 @@
     make
     skalibs
     execline-tools
-    binutils-for-target
     gnu-build
     cc-env)
   (include "base.scm"))

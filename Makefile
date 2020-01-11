@@ -19,7 +19,7 @@ UNITS:=hash table plan execline filepath log memo base
 	$(R7RSC) -O3 -s $<
 
 sysplan: sysplan.scm ${UNITS:%=%.o} ${UNITS:%=%.import.so}
-	csc -X r7rs -R r7rs -setup-mode -m main -O3 -static $< -o $@
+	$(R7RSC) -setup-mode -m main -static $< ${UNITS:%=%.o} -o $@
 
 TESTS:=$(wildcard *-test.scm)
 .PHONY: test all
