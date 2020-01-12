@@ -1,3 +1,6 @@
+
+(define *bad* (list 'in-progress))
+
 ;; memoize a single-argument function
 ;;
 ;; TODO: something more efficient than an alist?
@@ -5,11 +8,17 @@
 (define (memoize-eq proc)
   (let ((results '()))
     (lambda (arg)
-      (or (and-let* ((p (assq arg results)))
-	    (cdr p))
-	  (let ((val (proc arg)))
-	    (set! results (cons (cons arg val) results))
-	    val)))))
+      (or (and-let* ((p (assq arg results))
+		     (v (cdr p)))
+	    (if (eq? v *bad*)
+	      ;; we are inside a call to this same memoization lambda!
+	      (error "cannot perform recursive memoization")
+	      v))
+	  (let ((cell (cons arg *bad*)))
+	    (set! results (cons cell results))
+	    (let ((val (proc arg)))
+	      (set-cdr! cell val)
+	      val))))))
 
 ;; memoize-lambda takes an expression of the form
 ;;   (memoize-lambda (arg0 arg1 ...) body ...)
