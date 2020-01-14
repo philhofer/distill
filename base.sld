@@ -31,6 +31,7 @@
     make
     skalibs
     binutils-for-target
+    gcc-for-target
     execline-tools
     gnu-build
     gcc-for-target

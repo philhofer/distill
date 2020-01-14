@@ -265,6 +265,10 @@
 	       ;; symlink makeinfo to /usr/bin/true
 	       (foreground ((rm -rf /out/usr/share/man)))
 	       (foreground ((rm -rf /out/usr/share/info)))
+	       ;; the presence of libtool archives in library output
+	       ;; actually breaks builds, because libtool doesn't
+	       ;; undestand --sysroot, etc
+	       (foreground ((find /out -type f -name "*.la" -delete)))
 	       (true))))
 
 (define gawk
@@ -279,7 +283,13 @@
 	#:src    leaf
 	#:tools  (cc-for-target conf)
 	#:inputs (list musl)
-	#:build  (gnu-build (conc "gawk-" version) conf)))))
+	#:build  (gnu-build (conc "gawk-" version)
+			    conf
+			    #:post-install
+			    ;; we don't want the awk symlink;
+			    ;; it conflicts with busybox
+			    (execline*
+			      (foreground ((rm -f /out/usr/bin/awk)))))))))
 
 (define libgmp
   (let* ((version '6.1.2)
@@ -605,5 +615,56 @@
     (lambda (target)
       (memoize-eq
 	(lambda (host)
-	  (error "unimplemented"))))))
+	  (let ((target-arch   (target 'arch))
+		(host-arch     (host 'arch))
+		(target-triple (triple target))
+		(host-triple   (triple host))
+		(build-triple  (conc *this-machine* "-linux-musl"))
+		(target-sysrt  (sysroot target))
+		(patches       (patch*
+				 (include-file-text "patches/gcc/pie-gcc.patch"))))
+	    (make-package
+	      #:label (conc "gcc-" (target 'arch) "-"
+			    (if (eq? host-arch target-arch)
+			      "native"
+			      host-arch))
+	      #:src   (cons *gcc-src* patches)
+	      #:tools (let ((t (cons* byacc reflex gawk (cc-for-target host))))
+			(if (eq? host-arch target-arch)
+			  t
+			  (cons (musl-headers-for-target target) t)))
+	      #:inputs (list libgmp libmpfr libmpc libisl zlib musl)
+	      #:build
+	      (let ()
+		(gnu-build
+		  (conc "gcc-" *gcc-version*)
+		  ;; this is a hack to ensure that
+		  ;; the gcc driver program always behaves like a cross-compiler
+		  (config-prepend host 'CFLAGS '(-DCROSS_DIRECTORY_STRUCTURE))
+		  #:pre-configure (script-apply-patches patches)
+		  #:configure `(--prefix=/usr --exec-prefix=/usr
+				--disable-nls --disable-shared --enable-static
+				--disable-host-shared --enable-host-static
+				--disable-multilib --enable-default-ssp
+				--enable-default-pie --with-cloog=no
+				--with-ppl=no --disable-libquadmath
+				--disable-libgomp --disable-fixed-point
+				--enable-__cxa_atexit --disable-libstdcxx-pch
+				--disable-libmpx --disable-libsanitizer
+				--enable-libstdcxx-time --disable-libitm
+				--enable-threads --enable-tls
+				--disable-install-libiberty
+				--enable-relro --disable-plugins
+				--with-pic --with-mmap --disable-symvers
+				--enable-version-specific-runtime-libs
+				"--enable-languages=c,c++"
+				gcc_cv_no_pie=no
+				,(conc "--with-sysroot=" (sysroot target))
+				,(conc "--build=" build-triple)
+				,(conc "--target=" target-triple)
+				,(conc "--host=" host-triple)
+				;; we need AR=, etc here because supplying
+				;; them to only the top-level makefile doesn't
+				;; keep the sub-makes from not using 'ar'
+				,@(makeflags host)))))))))))
 

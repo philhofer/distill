@@ -1,26 +1,14 @@
-From a4aa319f7c19e564dced3daeb7222c9315af936c Mon Sep 17 00:00:00 2001
-From: Szabolcs Nagy <nsz@port70.net>
-Date: Sat, 18 Aug 2018 23:58:45 +0000
-Subject: [PATCH 12/12] static-pie
+Patches mostly from Alpine's gcc 9.2.0 port
+Authors: Szabolcs Nagy <nsz@port70.net>, Natanael Copa <ncopa@alpinelinux.org>
 
-in gcc-8 -static means static non-pie, even if -pie or -static-pie
-are specified, -static-pie can be used to build static pie.
+Make '-static -pie' mean the same thing as '-static-pie',
+make -z -relro default linker flags, and disable the stack protector
+when -ffreestanding is supplied (since it would otherwise require
+linking with the host's copy of libssp)
 
-in musl toolchains -static -pie always meant static pie, so this
-patch fixes the link specs accordingly, the new -static-pie is just
-an alias to -static -pie.
----
- gcc/common.opt            |  4 ++--
- gcc/config/gnu-user.h     | 12 +++++-------
- gcc/config/rs6000/sysv4.h | 11 +++++------
- gcc/gcc.c                 |  6 +++---
- 4 files changed, 15 insertions(+), 18 deletions(-)
-
-diff --git a/gcc/common.opt b/gcc/common.opt
-index b52ef0b38c8..0ce5857e01d 100644
 --- a/gcc/common.opt
 +++ b/gcc/common.opt
-@@ -3197,11 +3197,11 @@ Driver
+@@ -3287,11 +3287,11 @@
  
  no-pie
  Driver RejectNegative Negative(shared)
@@ -34,8 +22,29 @@ index b52ef0b38c8..0ce5857e01d 100644
  
  static-pie
  Driver RejectNegative Negative(pie)
-diff --git a/gcc/config/gnu-user.h b/gcc/config/gnu-user.h
-index 8620de3e42d..235328a2642 100644
+--- a/gcc/params.def
++++ b/gcc/params.def
+@@ -752,7 +752,7 @@
+ DEFPARAM (PARAM_SSP_BUFFER_SIZE,
+ 	  "ssp-buffer-size",
+ 	  "The lower bound for a buffer to be considered for stack smashing protection.",
+-	  8, 1, 0)
++	  4, 1, 0)
+ 
+ DEFPARAM (PARAM_MIN_SIZE_FOR_STACK_SHARING,
+ 	  "min-size-for-stack-sharing",
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -13498,6 +13498,9 @@
+ linker.  When using the GNU linker, you can also get the same effect with
+ @option{-Wl,-Map=output.map}.
+ 
++NOTE: In Alpine Linux, for LDFLAGS, the option
++@option{-Wl,-z,relro,now} is used.  To disable, use @option{-Wl,-z,norelro}.
++
+ @item -u @var{symbol}
+ @opindex u
+ Pretend the symbol @var{symbol} is undefined, to force linking of
 --- a/gcc/config/gnu-user.h
 +++ b/gcc/config/gnu-user.h
 @@ -51,13 +51,12 @@
@@ -65,7 +74,7 @@ index 8620de3e42d..235328a2642 100644
       :crtend.o%s} " \
     GNU_USER_TARGET_CRTN " " \
     CRTOFFLOADEND
-@@ -133,7 +131,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+@@ -106,7 +104,7 @@
  #define LIB_SPEC GNU_USER_TARGET_LIB_SPEC
  
  #if defined(HAVE_LD_EH_FRAME_HDR)
@@ -73,12 +82,23 @@ index 8620de3e42d..235328a2642 100644
 +#define LINK_EH_SPEC "%{!static|" PIE_SPEC ":--eh-frame-hdr} "
  #endif
  
- #undef LINK_GCC_C_SEQUENCE_SPEC
-diff --git a/gcc/gcc.c b/gcc/gcc.c
-index eb1610ba8b0..87560afb03c 100644
+ #define GNU_USER_TARGET_LINK_GCC_C_SEQUENCE_SPEC \
 --- a/gcc/gcc.c
 +++ b/gcc/gcc.c
-@@ -900,7 +900,7 @@ proper position among the other output files.  */
+@@ -875,6 +875,12 @@
+ #define LINK_GCC_C_SEQUENCE_SPEC "%G %{!nolibc:%L %G}"
+ #endif
+ 
++#ifdef ENABLE_DEFAULT_SSP
++#define NO_SSP_SPEC "%{nostdlib|nodefaultlibs|ffreestanding:-fno-stack-protector} "
++#else
++#define NO_SSP_SPEC ""
++#endif
++
+ #ifndef LINK_SSP_SPEC
+ #ifdef TARGET_LIBC_PROVIDES_SSP
+ #define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all" \
+@@ -907,7 +913,7 @@
  #define NO_FPIE_AND_FPIC_SPEC	NO_FPIE_SPEC "|" NO_FPIC_SPEC
  #define FPIE_OR_FPIC_SPEC	NO_FPIE_AND_FPIC_SPEC ":;"
  #else
@@ -87,7 +107,7 @@ index eb1610ba8b0..87560afb03c 100644
  #define FPIE1_SPEC		"fpie"
  #define NO_FPIE1_SPEC		FPIE1_SPEC ":;"
  #define FPIE2_SPEC		"fPIE"
-@@ -924,12 +924,12 @@ proper position among the other output files.  */
+@@ -931,12 +937,12 @@
  #ifndef LINK_PIE_SPEC
  #ifdef HAVE_LD_PIE
  #ifndef LD_PIE_SPEC
@@ -102,6 +122,20 @@ index eb1610ba8b0..87560afb03c 100644
  #endif
  
  #ifndef LINK_BUILDID_SPEC
--- 
-2.17.1
-
+@@ -1040,6 +1046,7 @@
+    "%{flto|flto=*:%<fcompare-debug*} \
+     %{flto} %{fno-lto} %{flto=*} %l " LINK_PIE_SPEC \
+    "%{fuse-ld=*:-fuse-ld=%*} " LINK_COMPRESS_DEBUG_SPEC \
++   "-z relro -z now " \
+    "%X %{o*} %{e*} %{N} %{n} %{r}\
+     %{s} %{t} %{u*} %{z} %{Z} %{!nostdlib:%{!r:%{!nostartfiles:%S}}} \
+     %{static|no-pie|static-pie:} %@{L*} %(mfwrap) %(link_libgcc) " \
+@@ -1156,7 +1163,7 @@
+  %{-version:--version}\
+  %{-help=*:--help=%*}\
+  %{!fsyntax-only:%{S:%W{o*}%{!o*:-o %b.s}}}\
+- %{fsyntax-only:-o %j} %{-param*}\
++ %{fsyntax-only:-o %j} %{-param*} " NO_SSP_SPEC "\
+  %{coverage:-fprofile-arcs -ftest-coverage}\
+  %{fprofile-arcs|fprofile-generate*|coverage:\
+    %{!fprofile-update=single:\
