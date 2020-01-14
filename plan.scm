@@ -618,13 +618,19 @@
 	*buildfile-path*)
 
       ;; save the compressed build log independently
-      ;; (it's not 'reproduced' as such)
-      (let ((pdir (filepath-join (plan-dir) (plan-hash p))))
+      ;; (it's not 'reproduced' as such) and delete
+      ;; the old log
+      (let* ((pdir  (filepath-join (plan-dir) (plan-hash p)))
+	     (ofile (filepath-join pdir "build.log.zst")))
+	;; the zstd tool will complain if we reproduce an ouput,
+	;; so only keep one build log at a time
+	(when (file-exists? ofile)
+	  (delete-file* ofile))
 	(create-directory pdir #t)
 	(run "zstd"
 	     "-q"
 	     "--rm" (filepath-join root "build.log")
-	     "-o"   (filepath-join pdir "build.log.zst")))
+	     "-o"   ofile))
       (dir->artifact outdir))))
 
 (: plan-built? ((struct plan) -> boolean))
