@@ -169,7 +169,8 @@
 ;; when building a cross-compiler,
 ;; we need headers for the target system
 ;;
-;; headers show up in /cross/<arch>/usr/include on the host
+;; this package is a hack that provides a 'tool'
+;; that makes libc headers appear at a particular sysroot
 (define musl-headers-for-target
   (memoize-eq
     (lambda (target)
@@ -184,7 +185,7 @@
 	      #:build (make-recipe
 			#:script (execline*
 				   (cd ,(conc "musl-" *musl-version*))
-				   (make ,(conc "DESTDIR=/out/cross/" (target 'arch)) ,(conc "ARCH=" (target 'arch)) "prefix=/usr" install-headers))))))))))
+				   (make ,(conc "DESTDIR=/out/" (sysroot target)) ,(conc "ARCH=" (target 'arch)) "prefix=/usr" install-headers))))))))))
 
 (define musl
   (let ()
@@ -556,8 +557,48 @@
     (lambda (target)
       (memoize-eq
 	(lambda (host)
-	  (let ()
-	    (error "unimplemented")))))))
+	  (let ((host-arch     (host 'arch))
+		(target-arch   (target 'arch))
+		(target-triple (triple target))
+		(host-triple   (triple host))
+		(build-triple  (conc *this-machine* "-linux-musl"))
+		(target-sysrt  (sysroot target)))
+	    (make-package
+	      #:label   (conc "binutils-" (target 'arch) "-"
+			      (if (eq? host-arch target-arch)
+				"native"
+				host-arch))
+	      #:src     *binutils-src*
+	      #:tools   (let ((t (cons* byacc reflex (cc-for-target host))))
+			  (if (eq? host-arch target-arch)
+			    t ;; libc headers are already there; it's the host sysroot
+			    (cons (musl-headers-for-target target) t)))
+	      #:inputs  (list zlib musl)
+	      #:build
+	      (let ()
+		(gnu-build
+		  (conc "binutils-" *binutils-version*)
+		  host
+		  #:configure `(--disable-nls --disable-shared --enable-static
+				--disable-multilib --enable-gold=yes --with-ppl=no
+				--disable-install-libiberty --enable-relro
+				--disable-plugins --enable-deterministic-archives
+				--with-pic --with-mmap --enable-ld=default
+				--with-system-zlib --enable-64-bit-bfd
+				--disable-install-libbfd
+				--prefix=/usr
+				;; no libdir, etc. because we discard any
+				;; libraries and headers produced
+				,(conc "--program-prefix=" target-triple "-")
+				,(conc "--build=" build-triple)
+				,(conc "--target=" target-triple)
+				,(conc "--host=" host-triple)
+				,(conc "--with-sysroot=" target-sysrt))
+		  #:post-install (execline*
+				   (if ((rm -rf /out/usr/include)))
+				   (if ((rm -rf /out/include)))
+				   (if ((rm -rf /out/usr/lib)))
+				   (if ((rm -rf /out/lib)))))))))))))
 
 (define gcc-for-target
   (memoize-eq

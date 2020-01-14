@@ -1,4 +1,11 @@
 
+(define-syntax cons*
+  (syntax-rules ()
+    ((_ head rest)
+     (cons head rest))
+    ((_ head next rest* ...)
+     (cons head (cons* next rest* ...)))))
+
 (define *bad* (list 'in-progress))
 
 ;; memoize a single-argument function

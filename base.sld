@@ -30,6 +30,7 @@
     bzip2
     make
     skalibs
+    binutils-for-target
     execline-tools
     gnu-build
     gcc-for-target

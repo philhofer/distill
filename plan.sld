@@ -21,7 +21,6 @@
     package-tools
     package-inputs
     package-build
-    package-overlay
     update-package
     build-package!
     write-digraph)

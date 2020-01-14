@@ -7,6 +7,7 @@
       (import
         (chicken type))))
   (export
+    cons*
     memoize-eq
     memoize-lambda
     define-memoized)

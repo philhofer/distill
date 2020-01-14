@@ -134,8 +134,7 @@
 	   (src : (or artifact (list-of artifact))) ;; where to get the package source
 	   (tools : (list-of package-lambda))  ;; build tools (built for host)
 	   (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
-	   (build : (struct recipe))           ;; build script (see execline*)
-	   ((overlay '()) : (list-of artifact))) ;; additional files to include (patches, etc.)
+	   (build : (struct recipe)))          ;; build script (see execline*)
 
 ;; plan is the lowest-level representation of a "package"
 ;; or other build step; it simply connects itself to other
@@ -211,9 +210,7 @@
       (package-build pkg)
       (list
 	;; build tools live here
-	(cons "/" (flatten (package-src pkg)
-			     (package-overlay pkg)
-			     (map ->tool tools)))
+	(cons "/" (flatten (package-src pkg) (map ->tool tools)))
 	;; host headers+libraries live here
 	(cons (sysroot target) (map ->input inputs))))))
 
