@@ -225,16 +225,17 @@
 ;; binutils targets were installed
 ;;
 ;; let make know what we call these tools explicitly
-(define (makeflags target)
+(define (make-env target)
   (let ((name (triple target)))
-    (map pair->string=
-	 (list
-	   (cons 'AR      (conc name "-ar"))
-	   (cons 'RANLIB  (conc name "-ranlib"))
-	   (cons 'STRIP   (conc name "-strip"))
-	   (cons 'READELF (conc name "-readelf"))
-	   (cons 'OBJCOPY (conc name "-objcopy"))
-	   (cons 'ARFLAGS '-Dcr)))))
+    (list
+      (cons 'AR      (conc name "-ar"))
+      (cons 'RANLIB  (conc name "-ranlib"))
+      (cons 'STRIP   (conc name "-strip"))
+      (cons 'READELF (conc name "-readelf"))
+      (cons 'OBJCOPY (conc name "-objcopy"))
+      (cons 'ARFLAGS '-Dcr))))
+
+(define (makeflags target) (map pair->string= (make-env target)))
 
 ;; wrapper around the 'configure;make;make install' pattern,
 ;; taking care to set configure flags make flags appropriately
@@ -644,15 +645,26 @@
 		  #:pre-configure (append
 				    (script-apply-patches patches)
 				    (execline*
-				      ;; some makefile templates don't set AR+ARFLAGS correctly
+				      ;; some makefile templates don't set AR+ARFLAGS correctly;
+				      ;; just let them take the values from the environment
 				      (if ((find "." -name Makefile.in -exec sed "-i"
-						 -e "s/AR = ar/AR = @AR@/g"
-						 -e "s/ARFLAGS = cru/ARFLAGS = @ARFLAGS@/g"
-						 "{}" ";")))))
-		  #:configure `(--prefix=/usr --exec-prefix=/usr
+						 -e "/^AR = ar/d"
+						 -e "/^ARFLAGS = cru/d"
+						 "{}" ";"))))
+				    (export* (cons*
+					       ;; hacks because gcc doesn't respect
+					       ;; pie-by-default builds
+					       '(gcc_cv_no_pie . no)
+					       '(gcc_cv_c_no_pie . no)
+					       '(gcc_cv_c_no_fpie . no)
+					       ;; avoid a dependency on 'tar' during 'make install'
+					       '(build_install_headers_dir . install-headers-cpio)
+					       (make-env host))))
+		  #:configure `(--prefix=/usr --exec-prefix=/usr --disable-lto
 				--disable-nls --disable-shared --enable-static
 				--disable-host-shared --enable-host-static
 				--disable-multilib --enable-default-ssp
+				--disable-bootstrap --disable-libssp
 				--enable-default-pie --with-cloog=no
 				--with-ppl=no --disable-libquadmath
 				--disable-libgomp --disable-fixed-point
@@ -664,13 +676,10 @@
 				--enable-relro --disable-plugins
 				--with-pic --with-mmap --disable-symvers
 				--enable-version-specific-runtime-libs
+				--with-system-zlib
 				"--enable-languages=c,c++"
-				gcc_cv_no_pie=no
 				,(conc "--with-sysroot=" (sysroot target))
 				,(conc "--build=" build-triple)
 				,(conc "--target=" target-triple)
-				,(conc "--host=" host-triple)
-				;; ensure AR and ARFLAGS are explicit, because
-				;; we don't keep them in the ordinary locations
-				,@(makeflags host)))))))))))
+				,(conc "--host=" host-triple)))))))))))
 
