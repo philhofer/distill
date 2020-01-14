@@ -10,9 +10,41 @@
 		(substring/shared v (- 8 n))))
     (else (string-append "\t" (tabs (- n 1))))))
 
+;; escaper yields the printing procedure for a string
+(: escaper (string --> procedure))
+(define (escaper obj)
+  (let ((len (string-length obj)))
+    (if (= len 0)
+      wrt
+      (let loop ((i 0))
+	(if (= i len)
+	  dsp
+	  (case (string-ref obj i)
+	    ((#\space #\newline #\tab #\linefeed #\\ #\{ #\} #\# #\")
+	     ;; any obvious escape sequences or semantic characters
+	     ;; mean we encode the string into the script just
+	     ;; as it would appear as a scheme literal
+	     wrt)
+	    ((#\delete #\backspace #\alarm #\vtab #\nul #\esc)
+	     ;; while we're here, warn about illegal characters
+	     (error "illegal character in execline string:" obj))
+	    (else (loop (+ i 1)))))))))
+
+
 ;; fmt-execline produces a formatting combinator
 ;; from the list representation of an execline script
 (define (fmt-execline lst)
+  (define (execl-dsp obj)
+    (cond
+      ;; technically there can be spaces, etc. in symbols, too...
+      ((symbol?  obj) (dsp obj))
+      ((string?  obj) ((escaper obj) obj))
+      ((integer? obj) (dsp obj))
+      ((real? obj)    (dsp obj))
+      ;; if you write '-i it's read as a complex number;
+      ;; this shows up in 'sed -i' for example
+      ((complex? obj) (error "you almost certainly didn't mean to print:" obj))
+      (else (error "can't seralize for execline:" obj))))
   (define (join-cmds lst indent)
     (fmt-join
       (lambda (v)
@@ -28,8 +60,8 @@
 	     "}"
 	     (if (null? rest) fmt-null " "))
 	(if (null? rest)
-	    (dsp arg)
-	    (cat (dsp arg) " " (join-arg (car rest) (cdr rest) indent)))))
+	    (execl-dsp arg)
+	    (cat (execl-dsp arg) " " (join-arg (car rest) (cdr rest) indent)))))
   (fmt-join/suffix
     (lambda (v)
       (join-arg (car v) (cdr v) 0))
@@ -46,7 +78,7 @@
 ;; execline script to string helper
 (: exexpr->string (list --> string))
 (define (exexpr->string expr)
-  (fmt #f 
+  (fmt #f
        (cat
 	 execline-shebang
 	 "\n"

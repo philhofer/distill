@@ -32,8 +32,12 @@ EOF
 (define
   script
   (execline*
+    ;; test string quoting when spaces are present
+    (if ((sed -e s/foo/bar/g "s/foo = bar/bar = foo/g" file)))
+    (if ((echo "\"a quoted string\"")))
     (if ((sysctl -p ,conf)))
-    (forbacktickx file ((pipeline ((elglob extra /etc/sysctl.d/*.conf)
+    ;; test (lack of) quoting for simple strings
+    (forbacktickx file ((pipeline ((elglob extra "/etc/sysctl.d/*.conf")
 				   (echo $extra)))
 			(sort)))
     (importas file f)
@@ -43,6 +47,12 @@ EOF
   want
   #<<EOF
 #!/bin/execlineb -P
+if {
+	sed -e s/foo/bar/g "s/foo = bar/bar = foo/g" file
+}
+if {
+	echo "\"a quoted string\""
+}
 if {
 	sysctl -p /etc/sysctl.conf
 }
@@ -68,7 +78,7 @@ EOF
   (error "scripts not equal"))
 
 (let ((got (reverse (execline-execs script)))
-      (want '(if sysctl forbacktickx pipeline elglob echo sort importas echo)))
+      (want '(if sed if echo if sysctl forbacktickx pipeline elglob echo sort importas echo)))
   (when (not (equal? got want))
     (display "---- exexpr-fold got: ----\n")
     (display got)

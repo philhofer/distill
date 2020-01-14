@@ -145,7 +145,7 @@
 	    (apply conc lst)))
       x))
 
-(define (pair->quoted-string p) (conc "\"" (car p) "=" (apply-conc (cdr p)) "\""))
+(define (pair->string= p) (conc (car p) "=" (apply-conc (cdr p))))
 
 ;; configure-args produces arguments to an autotools configure script
 ;; NOTE: some packages contain a script called 'configure' that isn't
@@ -207,8 +207,8 @@
 			     (execline*
 			       (cd ,(conc "musl-" *musl-version*))
 			       (if ((./configure --disable-shared --enable-static
-						 --prefix=/usr ,(pair->quoted-string CC)
-						 ,(pair->quoted-string CFLAGS)
+						 --prefix=/usr ,(pair->string= CC)
+						 ,(pair->string= CFLAGS)
 						 --target ,(conf 'arch))))
 			       (if ((backtick -n -D 4 ncpu ((nproc)))
 				    (importas -u ncpu ncpu)
@@ -217,7 +217,7 @@
 
 (define (export* alist)
   (map (lambda (p)
-	 `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
+	 `(export ,(car p) ,(apply-conc (cdr p))))
        alist))
 
 ;; we don't use tools just name 'ar' etc.
@@ -227,7 +227,7 @@
 ;; let make know what we call these tools explicitly
 (define (makeflags target)
   (let ((name (triple target)))
-    (map pair->quoted-string
+    (map pair->string=
 	 (list
 	   (cons 'AR      (conc name "-ar"))
 	   (cons 'RANLIB  (conc name "-ranlib"))
@@ -365,7 +365,7 @@
 	#:build  (make-recipe
 		   #:script (execline*
 			      (cd ,(conc "bzip2-" version))
-			      (if ((make ,@(map pair->quoted-string (cc-env conf))
+			      (if ((make ,@(map pair->string= (cc-env conf))
 					 ,@(makeflags conf)
 					 all)))
 			      (make PREFIX=/out/usr install)))))))
@@ -641,7 +641,14 @@
 		  ;; this is a hack to ensure that
 		  ;; the gcc driver program always behaves like a cross-compiler
 		  (config-prepend host 'CFLAGS '(-DCROSS_DIRECTORY_STRUCTURE))
-		  #:pre-configure (script-apply-patches patches)
+		  #:pre-configure (append
+				    (script-apply-patches patches)
+				    (execline*
+				      ;; some makefile templates don't set AR+ARFLAGS correctly
+				      (if ((find "." -name Makefile.in -exec sed "-i"
+						 -e "s/AR = ar/AR = @AR@/g"
+						 -e "s/ARFLAGS = cru/ARFLAGS = @ARFLAGS@/g"
+						 "{}" ";")))))
 		  #:configure `(--prefix=/usr --exec-prefix=/usr
 				--disable-nls --disable-shared --enable-static
 				--disable-host-shared --enable-host-static
@@ -663,8 +670,7 @@
 				,(conc "--build=" build-triple)
 				,(conc "--target=" target-triple)
 				,(conc "--host=" host-triple)
-				;; we need AR=, etc here because supplying
-				;; them to only the top-level makefile doesn't
-				;; keep the sub-makes from not using 'ar'
+				;; ensure AR and ARFLAGS are explicit, because
+				;; we don't keep them in the ordinary locations
 				,@(makeflags host)))))))))))
 
