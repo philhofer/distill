@@ -4,26 +4,54 @@
      (memoize-eq
        (lambda (conf) body* ...)))))
 
-;; this is the list of packages present
-;; in a bootstrap archive (in other words,
-;; packages in '#:tools' that are superseded)
+;; bootstrap-artifacts takes a configuration
+;; and returns an alist of package-to-artifact
+;; replacements for bootstrapping
 ;;
-;; note: if you're building an external bootstrap tarball,
-;; it needs to provide *equivalent* packages to the list
-;; below (not necessarily identical ones)
-;;
-;; the bootstrap packages are simply
-;; a working C/C++ toolchain + make
-(define (bootstrap-packages conf)
-  (cons
-    musl
-    (cons
-      libssp-nonshared
-      (cc-for-target conf))))
+;; presently, this looks in bootstrap/<arch>/<package>-<arch>.tar.zst
+;; for the packages 'make' 'busybox' 'execline' and 'gcc'
+(define bootstrap-artifacts
+  (memoize-eq
+    (lambda (conf)
+      (let* ((arch   (conf 'arch))
+	     (->archive
+	       (lambda (name)
+		 (import-archive!
+		   (conc "./bootstrap/" arch "/" name "-" arch ".tar.zst")))))
+	(list
+	  ;; note for porting:
+	  ;; it's best if these are statically linked
+	  ;; also, the gcc toolchain must use the
+	  ;; <arch>-linux-musl toolchain prefix
+	  ;; and support -static-pie
+	  (cons make                  (->archive "make"))
+	  (cons busybox               (->archive "busybox"))
+	  (cons execline-tools        (->archive "execline"))
+	  (cons (gcc-for-target conf) (->archive "gcc"))
+	  (cons (binutils-for-target conf) (->archive "binutils")))))))
 
+;; replace items in 'lst'
+;; using replacements looked up in 'alist'
+;; or the result of (proc item) if no replacement exists;
+;; return the resulting list
+(define (replace/ormap alist lst proc)
+  (foldl
+    (lambda (lst item)
+      (cons
+	(or (and-let* ((rep (assq item alist)))
+	      (cdr rep))
+	    (proc item))
+	lst))
+    '()
+    lst))
+
+;; compiler tools should use <arch>-linux-musl as the system triple
 (define (triple conf)
   (string->symbol
     (conc (conf 'arch) '-linux-musl)))
+
+(define (sysroot conf)
+  (filepath-join "/sysroot/" (triple conf)))
 
 ;; pkgs->bootstrap takes a list of package-lambdas
 ;; and replaces dependencies from 'tools' with
@@ -35,18 +63,15 @@
       (or (hash-table-ref/default ht pkg #f)
 	  (let ((newproc (memoize-eq
 			   (lambda (conf)
-			     (let* ((conf     (bootstrap-conf conf))
-				    (old      (pkg conf))
-				    (bootpkgs (bootstrap-packages conf)))
+			     (let* ((old      (pkg conf))
+				    (bootpkgs (bootstrap-artifacts conf)))
 			       (update-package
 				 old
 				 #:label (conc (package-label old) "-bootstrap")
-				 #:src   (flatten (bootstrap-archive *this-machine*) (package-src old))
-				 #:tools (foldl
-					   (lambda (lst p)
-					     (if (memq p bootpkgs) lst (cons (inner p) lst)))
-					   '()
-					   (package-tools old))
+				 ;; tools are replaced with either the corresponding
+				 ;; tarball replacement, or the tool built with those
+				 ;; replacements (transitively)
+				 #:tools (replace/ormap bootpkgs (package-tools old) inner)
 				 ;; inputs are simply replaced with versions
 				 ;; built with the bootstrap toolchain
 				 #:inputs (map inner (package-inputs old))))))))
@@ -65,33 +90,17 @@
     (lambda (conf)
       (error (conc "package " name " not implemented yet")))))
 
-(define gcc-for-target
-  (memoize-eq
-    (lambda (target) (placeholder "gcc"))))
-
 (define busybox (placeholder "busybox"))
 
 (define (cc-for-target conf)
   (list (gcc-for-target conf)
-	make execline-tools busybox))
+	(binutils-for-target conf)
+	make
+	execline-tools
+	busybox))
 
-(define bootstrap-archive
-  (let ((x86-64 (local-archive
-		  'tar.zst
-		  "s2BsxT2v1Qe0rX-1YNSPTfEGTOz8AskqA4JClsZqgpg=")))
-    (lambda (arch)
-      (case arch
-	((x86_64) x86-64)
-	(else     (error "no bootstrap for arch" arch))))))
-
-(define bootstrap-conf
-  (memoize-eq
-    (lambda (conf)
-      (lambda (var)
-	(case var
-	  ((toolchain-prefix) 'alpine-linux-musl)
-	  ((bootstrap) #t)
-	  (else (conf var)))))))
+(define (sysroot-flag conf)
+  (string-append "--sysroot=" (sysroot conf)))
 
 ;; cc-env takes a configuration and produces an alist
 ;; with typical configure/make variables set to the
@@ -99,29 +108,28 @@
 (define cc-env
   (memoize-eq
     (lambda (conf)
-      (let ((need-cflags    '(--sysroot=/sysroot -fPIE -static-pie))
-	    (need-ldflags   '(--sysroot=/sysroot -static-pie))
-	    (need-cppflags  '(--sysroot=/sysroot))
+      (let ((need-cflags    `(,(sysroot-flag conf) -fPIE -static-pie))
+	    (need-ldflags   `(,(sysroot-flag conf) -static-pie))
+	    (need-cppflags  `(,(sysroot-flag conf)))
 	    (cflags          (conf 'CFLAGS))
 	    (ldflags         (conf 'LDFLAGS))
 	    (cppflags        (conf 'CPPFLAGS))
 	    (c++flags        (or (conf 'CXXFLAGS) (conf 'CFLAGS)))
-	    (plat            (or (and-let* ((pre (conf 'toolchain-prefix)))
-				   (conc (conf 'arch) "-" pre))
-				 (triple conf)))
+	    (plat            (triple conf))
 	    (join            (lambda (a b)
 			       (cond
 				 ((eq? a #f) b)
 				 ((list? a)  (append a b))
 				 (else (cons a b))))))
 	`((CC  . ,(conc plat "-gcc"))
+	  (AR  . ,(conc plat "-ar"))
 	  (LD  . ,(conc plat "-ld"))
 	  (AS  . ,(conc plat "-as"))
-	  (AR  . ,(conc plat "-gcc-ar"))
 	  (CXX . ,(conc plat "-g++"))
+	  (CBUILD . ,(conc *this-machine* "-linux-musl"))
+	  (CHOST  . ,plat)
 	  (CFLAGS   . ,(join cflags need-cflags))
 	  (CXXFLAGS . ,(join c++flags need-cflags))
-	  (ARFLAGS  . -Dcr) ;; force deterministic archives
 	  (LDFLAGS  . ,(join ldflags need-ldflags))
 	  (CPPFLAGS . ,(join cppflags need-cppflags)))))))
 
@@ -146,54 +154,48 @@
 (define configure-args
   (memoize-eq
     (lambda (conf)
-      (let* ((copts     (cc-env conf))
-	     (copts-str (foldl (lambda (lst opt)
-				(cons (pair->quoted-string opt) lst))
-			       '()
-			       copts))
-	     (need-conf `(--disable-shared --disable-nls --enable-static --enable-pie --with-pic --prefix=/usr --sysconfdir=/etc --build ,(conc *this-machine* "-linux-musl") --host ,(triple conf)))
-	     (usr-conf  (conf 'configure-flags)))
+      (let ((need-conf `(--disable-shared --disable-nls --enable-static --enable-pie --with-pic --prefix=/usr --sysconfdir=/etc --build ,(conc *this-machine* "-linux-musl") --host ,(triple conf)))
+	    (usr-conf  (conf 'configure-flags)))
 	(cond
-	  ((eq? usr-conf #f) (append copts-str need-conf))
-	  ((list? usr-conf)  (append usr-conf copts-str need-conf))
-	  (else              (cons usr-conf (append copts-str need-conf))))))))
+	  ((eq? usr-conf #f) need-conf)
+	  ((list? usr-conf)  (append usr-conf need-conf))
+	  (else              (cons usr-conf need-conf)))))))
 
-;; produce a libssp_nonshared independent of gcc to break a dependency cycle
-(define libssp-nonshared
-  (package-lambda
-    conf
-    (make-package
-	#:label   (conc "libssp-nonshared-" (conf 'arch))
-	#:src     '()
-	#:tools   (cc-for-target conf)
-	#:inputs  '()
-	#:overlay (interned "/src/ssp-nonshared.c" #o644 #<<EOF
-extern void __stack_chk_fail(void);
-void __attribute__((visibility ("hidden"))) __stack_chk_fail_local(void) { __stack_chk_fail(); }
+(define *musl-version* '1.1.24)
+(define *musl-src*    (remote-archive
+			(conc "https://www.musl-libc.org/releases/musl-" *musl-version* ".tar.gz")
+			"hC6Gf8nyJQAZVYJ-tNG0iU0dRjES721p0x1cqBp2Ge8="))
 
-EOF
-)
-	#:build (make-recipe
-		  #:script (let* ((cenv (cc-env conf))
-				  (CC   (cdr (assq 'CC cenv)))
-				  (AR   (cdr (assq 'AR cenv))))
-			     (execline*
-			       (cd ./src)
-			       (if ((,CC -c -fPIE -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
-			       (if ((,AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
-			       (if ((mkdir -p /out/usr/lib)))
-			       (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))))
+;; when building a cross-compiler,
+;; we need headers for the target system
+;;
+;; headers show up in /cross/<arch>/usr/include on the host
+(define musl-headers-for-target
+  (memoize-eq
+    (lambda (target)
+      (memoize-eq
+	(lambda (host)
+	  (let* ()
+	    (make-package
+	      #:label (conc "musl-headers-" *musl-version* "-" (target 'arch))
+	      #:src   *musl-src*
+	      #:tools (list make execline-tools busybox)
+	      #:inputs '()
+	      #:build (make-recipe
+			#:script (execline*
+				   (cd ,(conc "musl-" *musl-version*))
+				   (make ,(conc "DESTDIR=/out/cross/" (target 'arch)) ,(conc "ARCH=" (target 'arch)) "prefix=/usr" install-headers))))))))))
 
 (define musl
-  (let* ((version '1.1.24)
-	 (leaf    (remote-archive
-		    (conc "https://www.musl-libc.org/releases/musl-" version ".tar.gz")
-		    "hC6Gf8nyJQAZVYJ-tNG0iU0dRjES721p0x1cqBp2Ge8=")))
+  (let ()
+    ;; note: musl is compiled as -ffreestanding, so
+    ;; the gcc that builds it does *not* need to know
+    ;; how to find a libc.a or crt*.o, and so forth
     (package-lambda
       conf
       (make-package
-	#:label  (conc "musl-" version "-" (conf 'arch))
-	#:src    leaf
+	#:label  (conc "musl-" *musl-version* "-" (conf 'arch))
+	#:src    *musl-src*
 	#:tools  (cc-for-target conf)
 	#:inputs '()
 	#:build (make-recipe
@@ -202,15 +204,36 @@ EOF
 				  (CC     (assq 'CC cenv))
 				  (CFLAGS (assq 'CFLAGS cenv)))
 			     (execline*
-			       (cd ,(conc "musl-" version))
+			       (cd ,(conc "musl-" *musl-version*))
 			       (if ((./configure --disable-shared --enable-static
 						 --prefix=/usr ,(pair->quoted-string CC)
 						 ,(pair->quoted-string CFLAGS)
 						 --target ,(conf 'arch))))
 			       (if ((backtick -n -D 4 ncpu ((nproc)))
 				    (importas -u ncpu ncpu)
-				    (make -j $ncpu)))
+				    (make -j $ncpu ,@(makeflags conf))))
 			       (make DESTDIR=/out install))))))))
+
+(define (export* alist)
+  (map (lambda (p)
+	 `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
+       alist))
+
+;; we don't use tools just name 'ar' etc.
+;; because they would conflict if multiple
+;; binutils targets were installed
+;;
+;; let make know what we call these tools explicitly
+(define (makeflags target)
+  (let ((name (triple target)))
+    (map pair->quoted-string
+	 (list
+	   (cons 'AR      (conc name "-ar"))
+	   (cons 'RANLIB  (conc name "-ranlib"))
+	   (cons 'STRIP   (conc name "-strip"))
+	   (cons 'READELF (conc name "-readelf"))
+	   (cons 'OBJCOPY (conc name "-objcopy"))
+	   (cons 'ARFLAGS '-Dcr)))))
 
 ;; wrapper around the 'configure;make;make install' pattern,
 ;; taking care to set configure flags make flags appropriately
@@ -224,13 +247,16 @@ EOF
     #:script (execline*
 	       (cd ,dir)
 	       ,@pre-configure
+	       ,@(export* (cc-env target))
 	       (if ((./configure ,@(or configure (configure-args target)))))
 	       ;; it's helpful (mandatory?) that the script not change
 	       ;; based on the number of cpus on the host, so we have
 	       ;; to make that determination in the script itself
 	       (if ((backtick -n -D 4 ncpu ((nproc)))
 		    (importas -u ncpu ncpu)
-		    (make -j $ncpu ,@make-flags)))
+		    (make -j $ncpu ,@(append
+				       (makeflags target)
+				       make-flags))))
 	       (if ((make DESTDIR=/out install)))
 	       ,@post-install
 	       ;; we don't care if these two succeed
@@ -251,7 +277,7 @@ EOF
 	#:label  (conc "gawk-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared)
+	#:inputs (list musl)
 	#:build  (gnu-build (conc "gawk-" version) conf)))))
 
 (define libgmp
@@ -265,7 +291,7 @@ EOF
 	#:label  (conc "gmp-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cons m4 (cc-for-target conf))
-	#:inputs (list musl libssp-nonshared)
+	#:inputs (list musl)
 	#:build  (gnu-build (conc "gmp-" version) conf)))))
 
 (define libmpfr
@@ -279,7 +305,7 @@ EOF
 	#:label  (conc "mpfr-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared libgmp)
+	#:inputs (list musl libgmp)
 	#:build  (gnu-build (conc "mpfr-" version) conf)))))
 
 (define libmpc
@@ -293,7 +319,7 @@ EOF
 	#:label  (conc "mpc-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared libgmp libmpfr)
+	#:inputs (list musl libgmp libmpfr)
 	#:build  (gnu-build (conc "mpc-" version) conf)))))
 
 (define m4
@@ -307,11 +333,11 @@ EOF
 	#:label  (conc "m4-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared)
+	#:inputs (list musl #;libssp-nonshared)
 	#:build  (gnu-build (conc "m4-" version) conf
 			    ;; m4 sticks a file in /usr/lib/charset.alias
 			    #:post-install (execline*
-					     (rm -rf /out/usr/lib)))))))
+					     (if ((rm -rf /out/usr/lib)))))))))
 
 (define bzip2
   (let* ((version '1.0.8)
@@ -324,96 +350,32 @@ EOF
 	#:label  (conc "bzip2-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared)
+	#:inputs (list musl #;libssp-nonshared)
 	#:build  (make-recipe
 		   #:script (execline*
 			      (cd ,(conc "bzip2-" version))
-			      (if ((make ,@(map pair->quoted-string (cc-env conf)) all)))
+			      (if ((make ,@(map pair->quoted-string (cc-env conf))
+					 ,@(makeflags conf)
+					 all)))
 			      (make PREFIX=/out/usr install)))))))
 
-(define perl
-  (let* ((version '5.30.1)
-	 (leaf    (remote-archive
-		    (conc "https://www.cpan.org/src/5.0/perl-" version ".tar.gz")
-		    "EBvfwKXjX_aaet0AXxwJKJGpGy4RnUrrYjh-qLeZ8ts=")))
-    (package-lambda
-      conf
-      (unless (eq? (conf 'arch) *this-machine*)
-	(error "don't know how to cross-compile perl yet :("))
-      (make-package
-	#:label  (conc "perl-" version "-" (conf 'arch))
-	#:src    leaf
-	#:tools  (cc-for-target conf)
-	#:inputs (list zlib bzip2 musl libssp-nonshared)
-	#:build
-	(let* ((cenv            (cc-env conf))
-	       (CC              (cdr (assq 'CC cenv)))
-	       (LD              (cdr (assq 'LD cenv)))
-	       (configure-flags `("\"-Dccflags=--sysroot=/sysroot -fPIE -static-pie\"" "\"-Dldflags=--sysroot=/sysroot -static-pie\""
-				 ,(pair->quoted-string (cons '-Doptimize (or (conf 'CFLAGS) '-Os)))
-				 ,(conc "-Dcc=" CC) ,(conc "-Dld=" LD)
-				 -Dsysroot=/sysroot
-				 -Dprefix=/usr -Dprivlib=/usr/share/perl5/core_perl
-				 -Darchlib=/usr/lib/perl5/core_perl -Dvendorprefix=/usr
-				 -Dvendorlib=/usr/share/perl5/vendor_perl -Dvendorarch=/usr/lib/perl5/vendor_perl
-				 -Duselargefiles -Dusethreads -Duseshrplib=false -Dd_semctl_semun
-				 -Dman1dir=/usr/share/man/man1 -Dman3dir=/usr/share/man/man3
-				 -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
-				 -Dman1ext=1 -Dman3ext=3pm -Dcf_by=sysplan -Ud_csh -Uusedl -Dusenm
-				 -Dusemallocwrap)))
-	  (make-recipe
-	    #:env   '((BUILD_ZLIB . 0)
-		      (BUILD_BZIP2 . 0)
-		      (BZIP2_LIB . /sysroot/usr/lib)
-		      (BZIP2_INCLUDE . /sysroot/usr/include))
-	    #:script (execline*
-		       (cd ,(conc "perl-" version))
-		       (if ((./Configure -des ,@configure-flags)))
-		       (if ((backtick -n -D 4 ncpu ((nproc)))
-			    (importas -u ncpu ncpu)
-			    (make -j $ncpu)))
-		       (if ((make DESTDIR=/out install)))
-		       (if ((rm -rf /out/usr/share/man)))
-		       (find /out -name ".*" -delete))))))))
-
-(define bison
-  (let* ((version '3.4.2)
-	 (leaf    (remote-archive
-		    (conc "https://ftp.gnu.org/gnu/bison/bison-" version ".tar.xz")
-		    "mISdVqFsbf8eeMe8BryH2Zf0oxcABOyW26NZT61RMSU=")))
-    (package-lambda
-      conf
-      (make-package
-	#:label  (conc "bison-" version "-" (conf 'arch))
-	#:src    leaf
-	#:tools  (append (list m4 perl) (cc-for-target conf))
-	#:inputs (list musl libssp-nonshared)
-	#:build  (gnu-build (conc "bison-" version) conf
-			    ;; there is a buggy makefile in examples/ that will
-			    ;; occasionally explode during parallel builds;
-			    ;; just delete the directory entirely
-			    ;; https://lists.gnu.org/archive/html/bug-bison/2019-10/msg00044.html
-			    #:pre-configure (execline*
-					      (if ((rm -rf examples/c/recalc)))))))))
-
 (define (ska-build dir conf #!key (extra-configure '()))
-  (let ((cenv (cc-env conf)))
+  (let ((cenv    (cc-env conf))
+	(sysrt   (sysroot conf)))
     (make-recipe
       #:script (execline*
 		 (cd ,dir)
-		 ,@(map (lambda (p)
-			  `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
-			cenv)
+		 ,@(export* cenv)
 		 (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
 		 (if ((./configure --target ,(triple conf) --prefix=/ --libdir=/usr/lib
-				   --with-include=/sysroot/include --with-lib=/sysroot/lib/
-				   --with-include=/sysroot/usr/include --with-lib=/syroot/usr/lib
+				   ,(conc "--with-include=" (filepath-join sysrt "/include"))
+				   ,(conc "--with-include=" (filepath-join sysrt "/usr/include"))
+				   ,(conc "--with-lib=" (filepath-join sysrt "/lib"))
+				   ,(conc "--with-lib=" (filepath-join sysrt "/usr/lib"))
 				   --disable-shared --enable-static ,@extra-configure)))
 		 (if ((backtick -n -D 4 ncpu ((nproc)))
 		      (importas -u ncpu ncpu)
-		      (importas AR AR)
-		      ;; the generated makefile doesn't respect AR otherwise
-		      (make -j $ncpu AR=$AR RANLIB=ranlib STRIP=strip)))
+		      (make -j $ncpu ,@(makeflags conf))))
 		 (make DESTDIR=/out install)))))
 
 (define skalibs
@@ -424,13 +386,13 @@ EOF
     (package-lambda
       conf
       (make-package
-	#:label (conc "skalibs-" version "-" (conf 'arch))
-	#:src   leaf
-	#:tools (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared)
+	#:label  (conc "skalibs-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl)
 	;; note: not autoconf, but the default configure args work fine
-	#:build (ska-build (conc "skalibs-" version) conf
-			   #:extra-configure '(--with-sysdep-devurandom=yes))))))
+	#:build  (ska-build (conc "skalibs-" version) conf
+			    #:extra-configure '(--with-sysdep-devurandom=yes))))))
 
 (define execline-tools
   (let* ((version '2.5.3.0)
@@ -443,46 +405,49 @@ EOF
 	#:label  (conc "execline-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list skalibs musl libssp-nonshared)
+	#:inputs (list skalibs musl #;libssp-nonshared)
 	#:build  (ska-build (conc "execline-" version) conf
-			    #:extra-configure '(--with-sysdeps=/sysroot/lib/skalibs/sysdeps --enable-static-libc))))))
+			    #:extra-configure `(,(conc "--with-sysdeps=" (sysroot conf) "/lib/skalibs/sysdeps") --enable-static-libc))))))
 
-(define flex
-  (let* ((version '2.6.4)
+
+;; byacc is a yacc(1) implementation that is much simpler than bison
+(define byacc
+  (let* ((version '20191125)
 	 (leaf    (remote-archive
-		    (conc "https://github.com/westes/flex/releases/download/v" version "/flex-" version ".tar.gz")
-		    "iyTO0NJ3ype1atS2SbQkeEA24JzbugW3OCxyRQVBBCw=")))
+		    ;; XXX this isn't a stable tarball path;
+		    ;; this will fail when upstream changes
+		    "https://invisible-island.net/datafiles/release/byacc.tar.gz"
+		    "2r0VA-wLi8PcDpjnyON2pyyzqY7a7tdfApRBa-HfYbg=")))
     (package-lambda
       conf
       (make-package
-	#:label  (conc "flex-" version "-" (conf 'arch))
-	#:src    leaf
-	;; NOTE: flex builds some binaries for the build system
-	;; as part of bootstrapping, so it may need 2 C toolchains
-	#:tools  (append (list m4 bison musl libssp-nonshared) (cc-for-target conf))
-	#:inputs (list musl libssp-nonshared)
-	#:build  (gnu-build (conc "flex-" version) conf)))))
-
-(define ncurses
-  (let* ((version '6.1-20200104)
-	 (leaf    (remote-archive
-		    (conc "https://invisible-mirror.net/archives/ncurses/current/ncurses-" version ".tgz")
-		    "X9iVpAqz8GCEy2eTCYnn3BmLBwbf3nintXEFXNIw8LI="))
-	 (extra-flags '(--without-ada --without-tests --disable-termcap --disable-rpath-hack --disable-stripping --without-cxx-binding)))
-    (package-lambda
-      conf
-      (make-package
-	#:label  (conc "ncurses-" version "-" (conf 'arch))
+	#:label  (conc "byacc-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared)
-	#:build  (gnu-build (conc "ncurses-" version)
-			    ;; XXX gross hack: the ncurses developers,
-			    ;; in their infinite wisdom, have decided
-			    ;; to break reproducible builds and insist
-			    ;; on ARFLAGS=-curvU...
-			    (config-prepend conf 'configure-flags extra-flags)
-			    #:make-flags '("ARFLAGS=-Dcrv"))))))
+	#:inputs (list musl)
+	#:build  (gnu-build (conc "byacc-" version) conf)))))
+
+;; reflex is a lex(1)+flex(1) implementation that is much simpler
+;; than GNU flex(1)
+(define reflex
+  (let* ((version '20191123)
+	 (leaf    (remote-archive
+		    "https://invisible-island.net/datafiles/release/reflex.tar.gz"
+		    "SsgYKYUlYwedhJWxTvBAO2hdfrAMJ8mNpFjuIveGpSo=")))
+    (package-lambda
+      conf
+      (make-package
+	#:label   (conc "reflex-" version "-" (conf 'arch))
+	#:src     leaf
+	#:tools   (cons byacc (cc-for-target conf))
+	#:inputs  (list musl)
+	#:build   (gnu-build (conc "reflex-" version) conf
+			     #:post-install ;; install the lex(1)+flex(1) symlinks
+			     (execline*
+			       (if ((ln -s reflex /out/usr/bin/lex)))
+			       (if ((ln -s reflex++ /out/usr/bin/lex++)))
+			       (if ((ln -s reflex /out/usr/bin/flex)))
+			       (if ((ln -s reflex++ /out/usr/bin/flex++)))))))))
 
 (define zlib
   (let* ((version '1.2.11)
@@ -492,19 +457,14 @@ EOF
     (package-lambda
       conf
       (make-package
-	#:label (conc "zlib-" version "-" (conf 'arch))
-	#:src   leaf
-	#:tools (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared)
-	#:build (gnu-build
-		  (conc "zlib-" version) conf
-		  ;; not autoconf; the script reads CC and friends from the environment
-		  #:pre-configure (map (lambda (p)
-					 `(export ,(car p) ,(conc "\"" (apply-conc (cdr p)) "\"")))
-				       (cons
-					 (cons 'CHOST (triple conf))
-					 (cc-env conf)))
-		  #:configure '(--static --prefix=/usr --libdir=/lib))))))
+	#:label  (conc "zlib-" version "-" (conf 'arch))
+	#:src    leaf
+	#:tools  (cc-for-target conf)
+	#:inputs (list musl)
+	#:build  (gnu-build
+		   ;; not autoconf
+		   (conc "zlib-" version) conf
+		   #:configure '(--static --prefix=/usr --libdir=/lib))))))
 
 (define libisl
   (let* ((version '0.18)
@@ -517,7 +477,7 @@ EOF
 	#:label  (conc "isl-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list libgmp musl libssp-nonshared)
+	#:inputs (list libgmp musl)
 	#:build  (gnu-build (conc "isl-" version) conf)))))
 
 ;; patch* creates a series of patch artifacts
@@ -549,6 +509,7 @@ EOF
 	  (syntax-error "include-file-text expects a literal string; got" expr))
 	(with-input-from-file arg read-string)))))
 
+;; make is GNU make
 (define make
   (let* ((version '4.2.1)
 	 (leaf    (remote-archive
@@ -565,28 +526,43 @@ EOF
 	#:label  (conc "make-" version "-" (conf 'arch))
 	#:src    (cons leaf patches)
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl libssp-nonshared)
+	#:inputs (list musl)
 	#:build  (gnu-build (conc "make-" version) conf
 			    #:pre-configure (script-apply-patches patches))))))
 
-#;(define binutils-for-target
-  (let* ((version '2.33.1)
-	 (leaf    (remote-archive
-		    (conc "https://ftp.gnu.org/gnu/binutils/binutils-" version ".tar.bz2")
-		    "wuwvGNrMYaSLio4yHUAS8qM3-ugn1kqrqEn2M6LcNT0=")))
-    (memoize-eq
-      (lambda (target)
-	(package-lambda
-	  host
-	  (make-package
-	    #:label (conc "binutils-" version "-" (host 'arch) "-" (target 'arch))
-	    #:src   leaf
-	    #:tools  (append (list bison flex m4) #;(cc-for-target host))
-	    #:inputs (list libisl zlib libgmp libmpfr libmpc musl libssp-nonshared)
-	    #:build  (gnu-build (conc "binutils-" version)
-				(config-prepend host 'configure-flags
-						`(--with-sysroot=/ --with-build-sysroot=/sysroot --target ,(triple target)
-								   --disable-multilib --enable-ld=default --enable-gold
-								   --enable-64-bit-bfd --enable-relro
-								   --enable-deterministic-archives --disable-install-libiberty
-								   --enable-default-hash-style=gnu --with-mmap --with-system-zlib)))))))))
+(define *binutils-version* '2.33.1)
+(define *gcc-version* '9.2.0)
+
+(define *binutils-src*
+  (remote-archive
+    (conc "https://ftp.gnu.org/gnu/binutils/binutils-" *binutils-version* ".tar.bz2")
+    "wuwvGNrMYaSLio4yHUAS8qM3-ugn1kqrqEn2M6LcNT0="))
+
+(define *gcc-src*
+  (remote-archive
+    (conc "https://gcc.gnu.org/pub/gcc/releases/gcc-" *gcc-version* "/gcc-" *gcc-version* ".tar.gz")
+    "nzv8PqT49a1fkkQtn60mgKbxtcTl8Mazq0swhypLLRo="))
+
+(define (gcc-target-flags conf)
+  (case (conf 'arch)
+    ((aarch64) '(--with-arch=armv8 --with-abi=lp64))
+    ((ppc64 ppc64le) '(--with-abi=elfv2 --enable-secureplt
+					--enable-decimal-float=no
+					--enable-targets=powerpcle-linux))
+    (else '())))
+
+(define binutils-for-target
+  (memoize-eq
+    (lambda (target)
+      (memoize-eq
+	(lambda (host)
+	  (let ()
+	    (error "unimplemented")))))))
+
+(define gcc-for-target
+  (memoize-eq
+    (lambda (target)
+      (memoize-eq
+	(lambda (host)
+	  (error "unimplemented"))))))
+

@@ -5,6 +5,7 @@
     plan-dir
     interned
     interned-symlink
+    import-archive!
     local-archive
     remote-archive
     make-recipe

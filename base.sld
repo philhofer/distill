@@ -3,6 +3,8 @@
     (scheme base)
     (srfi 2)
     (srfi 69)
+    (log)
+    (filepath)
     (memo)
     (plan)
     (execline))
@@ -15,21 +17,21 @@
         (only (chicken io) read-string))))
   (export
     pkgs->bootstrap
+    musl
     libgmp
     libmpfr
     libmpc
     m4
     zlib
     gawk
-    bison
-    flex
-    ncurses
+    byacc
+    reflex
     libisl
-    perl
     bzip2
     make
     skalibs
     execline-tools
     gnu-build
+    gcc-for-target
     cc-env)
   (include "base.scm"))

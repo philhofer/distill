@@ -48,7 +48,7 @@
 			  #:script (execline*
 				     (redirfd -w 1 /out/out)
 				     (echo hi there!))))))
-	(conf (table->proc (table))))
+	(conf (table->proc (table (list (cons 'arch *this-machine*))))))
     (let ((out (build-package! p conf conf)))
       (pp out))))
 

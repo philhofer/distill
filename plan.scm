@@ -18,6 +18,10 @@
 (define (artifact-extra v)  (vector-ref v 2))
 (define (artifact? v) (and (vector? v) (= (vector-length v) 3)))
 
+;; short-hash is a 6-character hash prefix
+(define (short-hash h)
+  (substring/shared h 0 6))
+
 (: *this-machine* symbol)
 (define *this-machine*
   (cond-expand
@@ -36,8 +40,6 @@
 
 ;; guess the format of a remote source bundle
 (define (impute-format src)
-  (unless (string-prefix? "https://" src)
-    (error "source spec doesn't begin with https://:" src))
   (let loop ((suff '((".tar.xz" . tar.xz)
 		     (".tar.gz" . tar.gz)
 		     (".tgz"    . tar.gz)
@@ -46,7 +48,7 @@
 		     (".tar.zst". tar.zst)
 		     (".tar"    . tar))))
     (cond
-      ((null? suff) (error "bad url suffix" src))
+      ((null? suff) (error "bad archive suffix" src))
       ((string-suffix? (caar suff) src) (cdar suff))
       (else (loop (cdr suff))))))
 
@@ -58,6 +60,22 @@
     `#(archive ,(impute-format src))
     hash
     src))
+
+;; import-archive! imports an archive from
+;; a given location in the filesystem by
+;; symlinking it into the artifacts directory
+(: import-archive! (string -> artifact))
+(define (import-archive! path)
+  (let ((h    (hash-file path))
+	(kind (impute-format path)))
+    (unless h (fatal "file doesn't exist:" path))
+    (let ((artpath (filepath-join (artifact-dir) h)))
+      (or (file-exists? artpath)
+	  (copy-file path (abspath artpath) #f 32768))
+      (%artifact
+	`#(archive ,kind)
+	h
+	#f))))
 
 (: local-archive (symbol string --> artifact))
 (define (local-archive kind hash)
@@ -164,6 +182,12 @@
 	 obj
 	 (error msg rest* ...)))))
 
+;; XXX this needs to stay in-sync with base
+(define (sysroot conf)
+  (string-append "/sysroot/"
+		 (symbol->string (conf 'arch))
+		 "-linux-musl"))
+
 ;; note here that 'host' is the config for the
 ;; machine running the build, and 'target' is
 ;; the config for the machines that consumes
@@ -171,17 +195,27 @@
 ;; those would be 'build' and 'host,' respectively)
 (: %package->plan (package-lambda conf-lambda conf-lambda -> (struct plan)))
 (define-memoized (%package->plan pkg-proc host target)
-  (let ((pkg (pkg-proc target)))
+  (let* ((pkg    (pkg-proc target))
+	 (->tool (lambda (tool)
+		   (if (artifact? tool)
+		     tool
+		     (%package->plan tool host host))))
+	 (->input (lambda (input)
+		    (if (artifact? input)
+		      input
+		      (%package->plan input host target))))
+	 (tools  (package-tools pkg))
+	 (inputs (package-inputs pkg)))
     (%plan
       (require ok-plan-name? (package-label pkg))
       (package-build pkg)
       (list
+	;; build tools live here
 	(cons "/" (flatten (package-src pkg)
 			     (package-overlay pkg)
-			     (map (cut %package->plan <> host host)
-				  (package-tools pkg))))
-	(cons "/sysroot" (map (cut %package->plan <> host target)
-			      (package-inputs pkg)))))))
+			     (map ->tool tools)))
+	;; host headers+libraries live here
+	(cons (sysroot target) (map ->input inputs))))))
 
 ;; since we use plans in filepaths, disallow
 ;; plans that begin with '.' or contain '/' or whitespace, etc.
@@ -363,8 +397,8 @@
 (define (fetch! src hash)
   (let* ((dst (filepath-join (artifact-dir) hash))
 	 (tmp (string-append dst ".tmp")))
-    (info " -- fetching" src)
-    (run "wget" "-O" tmp src)
+    (info "  -- fetching" src)
+    (run "wget" "-q" "-O" tmp src)
     (let ((h (hash-file tmp)))
       (if (string=? h hash)
 	  (rename-file tmp dst #t)
@@ -393,7 +427,7 @@
 	   (with-output-to-file outfile (lambda () (write ar)))
 	   (plan-saved-output-set! p ar)))
 	((equal? old ar)
-	 (info "plan for" (plan-name p) "reproduced" (plan-hash p)))
+	 (info "plan for" (plan-name p) "reproduced" (short-hash (plan-hash p))))
 	(else
 	  (fatal "plan for" (plan-name p) "failed to reproduce:" old ar))))))
 
@@ -436,6 +470,7 @@
       (when (not (file-exists? infile))
 	(unless src (fatal "archive" hash "doesn't exist and has no remote source"))
 	(fetch! src hash))
+      (create-directory dst #t)
       (run "tar" comp "-xkf" infile "-C" dst)))
 
   (define (unpack-symlink dst abspath lnk)
@@ -530,7 +565,7 @@
 	   (dst (filepath-join (artifact-dir) h)))
       (if (and (file-exists? dst) (equal? (hash-file dst) h))
 	  (begin
-	    (info "  -- artifact reproduced:" h)
+	    (info "  -- artifact reproduced:" (short-hash h))
 	    (delete-file tmp))
 	  (move-file tmp dst #t 32768))
       (local-archive format h))))
@@ -550,7 +585,6 @@
       ;; unpack plan inputs and turn the recipe
       ;; into executables
       (trace "building in root" root)
-      (create-directory (filepath-join root "sysroot") #t)
       (create-directory outdir #t)
       (for-each
 	(lambda (p)
@@ -571,7 +605,7 @@
       (write-recipe-to-dir (plan-recipe p) root)
 
       ;; fork+exec into the recipe inside the sandbox
-      (info " -- running build script ...")
+      (info "  -- running build script ...")
       (sandbox-run
 	root
 	"/bin/emptyenv"
@@ -588,6 +622,7 @@
       (let ((pdir (filepath-join (plan-dir) (plan-hash p))))
 	(create-directory pdir #t)
 	(run "zstd"
+	     "-q"
 	     "--rm" (filepath-join root "build.log")
 	     "-o"   (filepath-join pdir "build.log.zst")))
       (dir->artifact outdir))))
@@ -615,7 +650,9 @@
 (define (build-package! proc host target #!key (rebuild #f))
   (let ((plan (%package->plan proc host target)))
     (build-plan! plan #:rebuild rebuild)
-    (info (plan-name plan) (plan-hash plan) "is" (artifact-hash (plan-outputs plan)))
+    (info (plan-name plan)
+	  (short-hash (plan-hash plan))
+	  "is" (short-hash (artifact-hash (plan-outputs plan))))
     (plan-outputs plan)))
 
 ;; write-digraph displays the dependency graph for a list of packages
