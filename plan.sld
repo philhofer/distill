@@ -6,6 +6,7 @@
     interned
     interned-symlink
     import-archive!
+    fetch-remote-file!
     local-archive
     remote-archive
     make-recipe

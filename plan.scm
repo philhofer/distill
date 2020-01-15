@@ -61,6 +61,12 @@
     hash
     src))
 
+(: fetch-remote-file! (string string string integer -> artifact))
+(define (fetch-remote-file! src hash abspath mode)
+  (unless (file-exists? (filepath-join (artifact-dir) hash))
+    (fetch! src hash))
+  (%local-file abspath mode hash))
+
 ;; import-archive! imports an archive from
 ;; a given location in the filesystem by
 ;; symlinking it into the artifacts directory

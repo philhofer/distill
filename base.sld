@@ -33,6 +33,7 @@
     binutils-for-target
     gcc-for-target
     libressl
+    ssl-client
     execline-tools
     gnu-build
     gcc-for-target
