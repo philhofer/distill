@@ -32,6 +32,7 @@
     skalibs
     binutils-for-target
     gcc-for-target
+    libressl
     execline-tools
     gnu-build
     gcc-for-target
