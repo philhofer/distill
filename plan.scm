@@ -669,7 +669,11 @@
 (: write-digraph (conf-lambda conf-lambda #!rest package-lambda -> *))
 (define (write-digraph host target . pkgs)
   (let* ((plans (map (cut %package->plan <> host target) pkgs))
-	 (ht    (make-hash-table)))
+	 (ht    (make-hash-table))
+	 (label (lambda (p)
+		  (string-append (plan-name p) " " (short-hash (plan-hash p)))))
+	 (outhash (lambda (p)
+		    (short-hash (artifact-hash (plan-outputs p))))))
     (display "digraph packages {\n")
     (for-each
       (lambda (p)
@@ -678,19 +682,26 @@
 	    (when (and (plan? p)
 		       (not (hash-table-ref/default ht p #f)))
 	      (hash-table-set! ht p #t)
+	      (write (label p))
+	      (display " -> ")
+	      (write (outhash p))
+	      (display ";\n")
 	      (for-each
 		(lambda (in)
-		  (write (plan-name p))
-		  (display " -> ")
 		  (cond
 		    ((plan? in)
-		     (write (plan-name in)))
+		     (write (outhash in)))
 		    ((artifact? in)
 		     (case (vector-ref (artifact-format in) 0)
-		       ;; try to produce a moderately informative textual representation...
-		       ((archive)      (write (or (artifact-extra in) (artifact-hash in))))
+		       ;; try to produce a moderately informative textual representation;
+		       ;; track labels so that bootstrap packages create the appropriate
+		       ;; circular references
+		       ((archive)      (write (or (artifact-extra in)
+						  (short-hash (artifact-hash in)))))
 		       ((file symlink) (write (vector-ref (artifact-format in) 1)))
-		       (else           (write (artifact-hash in))))))
+		       (else           (write (short-hash (artifact-hash in)))))))
+		  (display " -> ")
+		  (write (label p))
 		  (display ";\n"))
 		(apply append (map cdr (plan-inputs p))))))
 	  p))

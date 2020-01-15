@@ -730,7 +730,7 @@ EOF
 		   (conc "libressl-" version)
 		   conf
 		   #:post-install (execline*
-				    (if ((ln -s openssl /usr/bin/libressl)))))))))
+				    (if ((ln -s openssl /out/usr/bin/libressl)))))))))
 
 ;; TLS client for wget (shamelessly lifted from Alpine)
 (define ssl-client
