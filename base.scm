@@ -215,6 +215,33 @@
 				    (make -j $ncpu ,@(makeflags conf))))
 			       (make DESTDIR=/out install))))))))
 
+(define libssp-nonshared
+  (package-lambda
+    conf
+    (make-package
+	#:label   (conc "libssp-nonshared-" (conf 'arch))
+	#:tools   (cc-for-target conf)
+	#:inputs  '()
+	#:src     (interned "/src/ssp-nonshared.c" #o644 #<<EOF
+extern void __stack_chk_fail(void);
+void __attribute__((visibility ("hidden"))) __stack_chk_fail_local(void) { __stack_chk_fail(); }
+
+EOF
+)
+	#:build (make-recipe
+		  #:script (let* ((cenv (cc-env conf))
+				  (CC   (cdr (assq 'CC cenv)))
+				  (AR   (cdr (assq 'AR cenv))))
+			     (execline*
+			       (cd ./src)
+			       (if ((,CC -c -fPIE -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
+			       (if ((,AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
+			       (if ((mkdir -p /out/usr/lib)))
+			       (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))))
+
+;; dependencies necessary to statically link an ordinary C executable
+(define libc (list musl libssp-nonshared))
+
 (define (export* alist)
   (map (lambda (p)
 	 `(export ,(car p) ,(apply-conc (cdr p))))
@@ -283,7 +310,7 @@
 	#:label  (conc "gawk-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl)
+	#:inputs libc
 	#:build  (gnu-build (conc "gawk-" version)
 			    conf
 			    #:post-install
@@ -303,7 +330,7 @@
 	#:label  (conc "gmp-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cons m4 (cc-for-target conf))
-	#:inputs (list musl)
+	#:inputs libc
 	#:build  (gnu-build (conc "gmp-" version) conf)))))
 
 (define libmpfr
@@ -317,7 +344,7 @@
 	#:label  (conc "mpfr-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl libgmp)
+	#:inputs (cons libgmp libc)
 	#:build  (gnu-build (conc "mpfr-" version) conf)))))
 
 (define libmpc
@@ -331,7 +358,7 @@
 	#:label  (conc "mpc-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl libgmp libmpfr)
+	#:inputs (cons* libgmp libmpfr libc)
 	#:build  (gnu-build (conc "mpc-" version) conf)))))
 
 (define m4
@@ -345,7 +372,7 @@
 	#:label  (conc "m4-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl #;libssp-nonshared)
+	#:inputs libc
 	#:build  (gnu-build (conc "m4-" version) conf
 			    ;; m4 sticks a file in /usr/lib/charset.alias
 			    #:post-install (execline*
@@ -362,7 +389,7 @@
 	#:label  (conc "bzip2-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl #;libssp-nonshared)
+	#:inputs libc
 	#:build  (make-recipe
 		   #:script (execline*
 			      (cd ,(conc "bzip2-" version))
@@ -401,7 +428,7 @@
 	#:label  (conc "skalibs-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl)
+	#:inputs libc
 	;; note: not autoconf, but the default configure args work fine
 	#:build  (ska-build (conc "skalibs-" version) conf
 			    #:extra-configure '(--with-sysdep-devurandom=yes))))))
@@ -417,7 +444,7 @@
 	#:label  (conc "execline-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list skalibs musl #;libssp-nonshared)
+	#:inputs (cons* skalibs libc)
 	#:build  (ska-build (conc "execline-" version) conf
 			    #:extra-configure `(,(conc "--with-sysdeps=" (sysroot conf) "/lib/skalibs/sysdeps") --enable-static-libc))))))
 
@@ -436,7 +463,7 @@
 	#:label  (conc "byacc-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl)
+	#:inputs libc
 	#:build  (gnu-build (conc "byacc-" version) conf)))))
 
 ;; reflex is a lex(1)+flex(1) implementation that is much simpler
@@ -452,7 +479,7 @@
 	#:label   (conc "reflex-" version "-" (conf 'arch))
 	#:src     leaf
 	#:tools   (cons byacc (cc-for-target conf))
-	#:inputs  (list musl)
+	#:inputs  libc
 	#:build   (gnu-build (conc "reflex-" version) conf
 			     #:post-install ;; install the lex(1)+flex(1) symlinks
 			     (execline*
@@ -472,7 +499,7 @@
 	#:label  (conc "zlib-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl)
+	#:inputs libc
 	#:build  (gnu-build
 		   ;; not autoconf
 		   (conc "zlib-" version) conf
@@ -489,7 +516,7 @@
 	#:label  (conc "isl-" version "-" (conf 'arch))
 	#:src    leaf
 	#:tools  (cc-for-target conf)
-	#:inputs (list libgmp musl)
+	#:inputs (cons libgmp libc)
 	#:build  (gnu-build (conc "isl-" version) conf)))))
 
 ;; patch* creates a series of patch artifacts
@@ -538,7 +565,7 @@
 	#:label  (conc "make-" version "-" (conf 'arch))
 	#:src    (cons leaf patches)
 	#:tools  (cc-for-target conf)
-	#:inputs (list musl)
+	#:inputs libc
 	#:build  (gnu-build (conc "make-" version) conf
 			    #:pre-configure (script-apply-patches patches))))))
 
@@ -584,7 +611,7 @@
 			  (if (eq? host-arch target-arch)
 			    t ;; libc headers are already there; it's the host sysroot
 			    (cons (musl-headers-for-target target) t)))
-	      #:inputs  (list zlib musl)
+	      #:inputs  (cons zlib libc)
 	      #:build
 	      (let ()
 		(gnu-build
