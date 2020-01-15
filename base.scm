@@ -650,15 +650,18 @@
 				      (if ((find "." -name Makefile.in -exec sed "-i"
 						 -e "/^AR = ar/d"
 						 -e "/^ARFLAGS = cru/d"
-						 "{}" ";"))))
+						 "{}" ";")))
+				      ;; don't pull in GNU tar just to install headers;
+				      ;; force the makefile to use busybox cpio instead
+				      (if ((sed "-i"
+						-e "s/=install-headers-tar/=install-headers-cpio/g"
+						gcc/config.build))))
 				    (export* (cons*
 					       ;; hacks because gcc doesn't respect
 					       ;; pie-by-default builds
 					       '(gcc_cv_no_pie . no)
 					       '(gcc_cv_c_no_pie . no)
 					       '(gcc_cv_c_no_fpie . no)
-					       ;; avoid a dependency on 'tar' during 'make install'
-					       '(build_install_headers_dir . install-headers-cpio)
 					       (make-env host))))
 		  #:configure `(--prefix=/usr --exec-prefix=/usr --disable-lto
 				--disable-nls --disable-shared --enable-static
