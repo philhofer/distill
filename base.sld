@@ -32,8 +32,7 @@
     skalibs
     binutils-for-target
     gcc-for-target
-    libressl
-    ssl-client
+    busybox-core
     execline-tools
     gnu-build
     gcc-for-target

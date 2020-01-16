@@ -713,44 +713,58 @@ EOF
 				,(conc "--target=" target-triple)
 				,(conc "--host=" host-triple)))))))))))
 
-;; busybox needs libcrypto and ssl-client needs libtls
-(define libressl
-  (let* ((version '3.0.2)
-	 (leaf    (remote-archive
-		    (conc "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-" version ".tar.gz")
-		    "klypcg5zlwvSTOzTQZ7M-tBZgcb3tPe72gtWn6iMTR8=")))
-    (package-lambda
-      conf
-      (make-package
-	#:label  (conc "libressl-" version "-" (conf 'arch))
-	#:src    leaf
-	#:tools  (cc-for-target conf)
-	#:inputs libc
-	#:build  (gnu-build
-		   (conc "libressl-" version)
-		   conf
-		   #:post-install (execline*
-				    (if ((ln -s openssl /out/usr/bin/libressl)))))))))
+(define native-gcc
+  (lambda (build)
+    ((gcc-for-target build) build)))
 
-;; TLS client for wget (shamelessly lifted from Alpine)
-(define ssl-client
-  (let ()
+(define native-binutils
+  (lambda (build)
+    ((binutils-for-target build) build)))
+
+(define busybox-core
+  (let* ((version '1.31.1)
+	 (leaf    (remote-archive
+		    (conc "https://busybox.net/downloads/busybox-" version ".tar.bz2")
+		    "JqkfZAknGWBuXj1sPLwftVaH05I5Hb2WusYrYuO-sJk=")))
     (package-lambda
       conf
-      (make-package
-	#:label  (conc "ssl-client-" (conf 'arch))
-	#:src    (fetch-remote-file!
-		   "https://raw.githubusercontent.com/alpinelinux/aports/bb3bc00f304cb4f0611d45555d124221d365bdce/main/busybox/ssl_client.c"
-		   "l6ULeIMMPl9KsPmufaCZH0W94xBheoS5k1u5a-56zUU="
-		   "/src/ssl_client.c"
-		   #o644)
-	#:tools  (cc-for-target conf)
-	#:inputs (cons libressl libc)
-	#:build  (make-recipe
-		   #:script (let* ((cenv   (cc-env conf))
-				   (CC     (cdr (assq 'CC cenv)))
-				   (CFLAGS (cdr (assq 'CFLAGS cenv))))
-			      (execline*
-				(cd /src)
-				(if ((,CC ,@CFLAGS ssl_client.c -ltls -lssl -lcrypto -o ssl_client)))
-				(install -D -m "755" ssl_client /out/usr/bin/ssl_client))))))))
+      (let* ((small-config (interned "/src/config.head" #o644
+				     (include-file-text "patches/busybox/config-small")))
+	     (cenv         (cc-env conf))
+	     (patches      (patch*
+			     (include-file-text "patches/busybox/busybox-bc.patch")))
+	     (make-flags   (map
+			     pair->string=
+			     `((CROSS_COMPILE . ,(conc (triple conf) "-"))
+			       (CONFIG_SYSROOT . ,(sysroot conf))
+			       (CONFIG_EXTRA_CFLAGS . ,(cdr (assq 'CFLAGS cenv)))
+			       (HOSTCC    . gcc)
+			       (HOSTCFLAGS  --sysroot=/ -static-pie)
+			       (HOSTLDFLAGS -static-pie)))))
+	(make-package
+	  #:label  (conc "busybox-core-" version "-" (conf 'arch))
+	  #:src    (cons* small-config leaf patches)
+	  #:tools  (cons bzip2
+			 (append
+			   libc (cc-for-target conf)
+			   ;; add a native toolchain if it isn't already implied
+			   (if (eq? (conf 'arch) *this-machine*)
+			     '()
+			     (list native-gcc native-binutils))))
+	  #:inputs libc
+	  #:build  (make-recipe
+		     #:script (execline*
+				(cd ,(conc "busybox-" version))
+				(export KCONFIG_NOTIMESTAMP 1)
+				,@(script-apply-patches patches)
+				(if ((mv /src/config.head .config)))
+				(if ((backtick -n -D 1 jflag ((nproc)))
+				     (importas -u jflag jflag)
+				     (make V=1 -j $jflag ,@make-flags busybox)))
+				;; we hand-roll the installation here because the
+				;; F*@!KING MAKEFILE can't seem to do this right
+				(if ((install -D -m "755" busybox /out/bin/busybox)))
+				(if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))
+				(forbacktickx -o 0 link ((/out/bin/busybox --list-full)))
+				(importas "-i" -u link link)
+				(ln -s /bin/busybox "/out/${link}"))))))))
