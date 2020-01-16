@@ -4,8 +4,13 @@
   (else (begin)))
 
 (import
+  (chicken port)
   (execline)
   fmt)
+
+(define (exexpr->string expr)
+  (call-with-output-string
+    (cut write-exexpr expr <>)))
 
 (define conf "/etc/sysctl.conf")
 

@@ -1,6 +1,5 @@
 (define-library (execline)
   (export
-    exexpr->string
     write-exexpr
     execline-shebang
     execline-execs

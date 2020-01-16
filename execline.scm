@@ -87,6 +87,7 @@
 ;; execline script 'write' helper
 (: write-exexpr (list output-port -> undefined))
 (define (write-exexpr expr prt)
+  (check-terminal expr)
   (fmt prt
        (cat
 	 execline-shebang
@@ -142,4 +143,78 @@
 (define (execline-execs expr)
   (fold-exexpr (lambda (lst e)
 		 (cons (car e) lst)) '() expr))
+
+;; check-terminal checks the structure of an execline program
+;; and determines whether or not each block consists of zero
+;; or more non-terminal statements and finishes with one terminal
+;; statement
+;;
+;; it will either return #t or error
+(define (check-terminal lst)
+  (define (any p? lst)
+    (and (not (null? lst))
+	 (or (p? (car lst))
+	     (any p? (cdr lst)))))
+  (define (all p? lst)
+    (or (null? lst)
+	(and (p? (car lst))
+	     (all p? (cdr lst)))))
+
+  (define (tailn n lst)
+    (let ((len (length lst)))
+      (let loop ((i   len)
+		 (lst lst))
+	(if (or (= i n) (null? lst))
+	  lst
+	  (loop (- i 1) (cdr lst))))))
+
+  (define (nonterminal-cmd? lst)
+    (define (tailcheck n exe)
+      (let ((tail (tailn n (cdr lst))))
+	(unless (= (length tail) n)
+	  (error "wrong number of trailing arguments in command:" lst))
+	(unless (all list? tail)
+	  (error "expected trailing blocks in command:" lst))
+	(unless (or (not exe)
+		    (all check-terminal tail))
+	  (error "block isn't terminal:" lst))))
+    (case (car lst)
+      ((if background foreground backtick
+	forbacktickx trap tryexec pipeline)
+       (begin
+	 (tailcheck 1 #t) #t))
+      ((ifelse ifte)
+       (begin
+	 (tailcheck 2 #t) #t))
+      ((ifthenelse)
+       (begin
+	 (tailcheck 3 #t) #t))
+      ((multidefine forx wait)
+       (begin
+	 (tailcheck 1 #f) #t))
+      ((cd define dollarat elgetopt elgetpositionals
+	   elglob emptyenv envfile exec export fdblock
+	   fdclose fdmove fdreserve fdswap forstdin
+	   getcwd getpid heredoc homeof importas
+	   piperw redirfd runblock shift umask
+	   unexport withstdinas chroot unshare
+	   loopwhilex xargs sudo su)
+       ;; none of these should have block arguments
+       (begin
+	 (when (any list? (cdr lst))
+	   (error "bad non-terminal command syntax" lst))
+	 #t))
+      (else #f)))
+
+  (let loop ((head (car lst))
+	     (rest (cdr lst)))
+    (if (null? rest)
+      (begin
+	(when (nonterminal-cmd? head)
+	  (error "expected terminal command:" head))
+	#t)
+      (begin
+	(unless (nonterminal-cmd? head)
+	  (error "expected nonterminal command:" head))
+	(loop (car rest) (cdr rest))))))
 
