@@ -25,7 +25,7 @@
 	  ;; <arch>-linux-musl toolchain prefix
 	  ;; and support -static-pie
 	  (cons make                  (->archive "make"))
-	  (cons busybox               (->archive "busybox"))
+	  (cons busybox-core          (->archive "busybox"))
 	  (cons execline-tools        (->archive "execline"))
 	  (cons (gcc-for-target conf) (->archive "gcc"))
 	  (cons (binutils-for-target conf) (->archive "binutils")))))))
@@ -90,14 +90,12 @@
     (lambda (conf)
       (error (conc "package " name " not implemented yet")))))
 
-(define busybox (placeholder "busybox"))
-
 (define (cc-for-target conf)
   (list (gcc-for-target conf)
 	(binutils-for-target conf)
 	make
 	execline-tools
-	busybox))
+	busybox-core))
 
 (define (sysroot-flag conf)
   (string-append "--sysroot=" (sysroot conf)))
@@ -180,7 +178,7 @@
 	    (make-package
 	      #:label (conc "musl-headers-" *musl-version* "-" (target 'arch))
 	      #:src   *musl-src*
-	      #:tools (list make execline-tools busybox)
+	      #:tools (list make execline-tools busybox-core)
 	      #:inputs '()
 	      #:build (make-recipe
 			#:script (execline*
@@ -728,6 +726,9 @@ EOF
 		    "JqkfZAknGWBuXj1sPLwftVaH05I5Hb2WusYrYuO-sJk=")))
     (package-lambda
       conf
+      ;; NOTE: the busybox config we've selected here is carefully
+      ;; chosen so as not to require any linux headers; otherwise
+      ;; we'd have to bring in a kernel source tree and perl (shudders)
       (let* ((small-config (interned "/src/config.head" #o644
 				     (include-file-text "patches/busybox/config-small")))
 	     (cenv         (cc-env conf))
