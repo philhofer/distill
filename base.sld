@@ -1,8 +1,11 @@
 (define-library (base)
   (import
     (scheme base)
+    (scheme write)
+    (scheme file)
     (srfi 2)
     (srfi 69)
+    (table)
     (log)
     (filepath)
     (memo)
@@ -16,7 +19,7 @@
       (import-for-syntax
         (only (chicken io) read-string))))
   (export
-    pkgs->bootstrap
+    bootstrap-base!
     musl
     libgmp
     libmpfr

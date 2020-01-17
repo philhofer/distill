@@ -140,6 +140,7 @@
 	   (src : (or artifact (list-of artifact))) ;; where to get the package source
 	   (tools : (list-of package-lambda))  ;; build tools (built for host)
 	   (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
+	   (prebuilt : (or artifact false))    ;; bootstrap replacement binary
 	   (build : (struct recipe)))          ;; build script (see execline*)
 
 ;; plan is the lowest-level representation of a "package"
@@ -200,25 +201,26 @@
 ;; those would be 'build' and 'host,' respectively)
 (: %package->plan (package-lambda conf-lambda conf-lambda -> (struct plan)))
 (define-memoized (%package->plan pkg-proc host target)
-  (let* ((pkg    (pkg-proc target))
-	 (->tool (lambda (tool)
-		   (if (artifact? tool)
-		     tool
-		     (%package->plan tool host host))))
-	 (->input (lambda (input)
-		    (if (artifact? input)
-		      input
-		      (%package->plan input host target))))
-	 (tools  (package-tools pkg))
-	 (inputs (package-inputs pkg)))
-    (%plan
-      (require ok-plan-name? (package-label pkg))
-      (package-build pkg)
-      (list
-	;; build tools live here
-	(cons "/" (flatten (package-src pkg) (map ->tool tools)))
-	;; host headers+libraries live here
-	(cons (sysroot target) (map ->input inputs))))))
+  (let ((pkg (pkg-proc target)))
+    (or (package-prebuilt pkg)
+	(let* ((->tool (lambda (tool)
+			 (if (artifact? tool)
+			   tool
+			   (%package->plan tool host host))))
+	       (->input (lambda (input)
+			  (if (artifact? input)
+			    input
+			    (%package->plan input host target))))
+	       (tools  (package-tools pkg))
+	       (inputs (package-inputs pkg)))
+	  (%plan
+	    (require ok-plan-name? (package-label pkg))
+	    (package-build pkg)
+	    (list
+	      ;; build tools live here
+	      (cons "/" (flatten (package-src pkg) (map ->tool tools)))
+	      ;; host headers+libraries live here
+	      (cons (sysroot target) (map ->input inputs))))))))
 
 ;; since we use plans in filepaths, disallow
 ;; plans that begin with '.' or contain '/' or whitespace, etc.
@@ -448,6 +450,9 @@
 	       (plan-saved-output-set! p vec)
 	       vec)))))
 
+(define cdn-url (make-parameter
+		  "https://b2cdn.sunfi.sh/file/pub-cdn/"))
+
 ;; unpack! installs a plan input into the
 ;; given destination directory
 (: unpack! (artifact string -> *))
@@ -471,8 +476,11 @@
 		  (else (error "unknown/unsupported archive kind" kind))))
 	  (infile  (filepath-join (artifact-dir) hash)))
       (when (not (file-exists? infile))
-	(unless src (fatal "archive" hash "doesn't exist and has no remote source"))
-	(fetch! src hash))
+	(fetch! (or src
+		    (begin
+		      (info "  -- trying to fetch" (short-hash hash) "from fallback cdn...")
+		      (string-append (cdn-url) hash)))
+		hash))
       (create-directory dst #t)
       (run "tar" comp "-xkf" infile "-C" dst)))
 

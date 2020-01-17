@@ -4,46 +4,69 @@
      (memoize-eq
        (lambda (conf) body* ...)))))
 
-;; bootstrap-artifacts takes a configuration
-;; and returns an alist of package-to-artifact
-;; replacements for bootstrapping
-;;
-;; presently, this looks in bootstrap/<arch>/<package>-<arch>.tar.zst
-;; for the packages 'make' 'busybox' 'execline' and 'gcc'
-(define bootstrap-artifacts
-  (memoize-eq
-    (lambda (conf)
-      (let* ((arch   (conf 'arch))
-	     (->archive
-	       (lambda (name)
-		 (import-archive!
-		   (conc "./bootstrap/" arch "/" name "-" arch ".tar.zst")))))
-	(list
-	  ;; note for porting:
-	  ;; it's best if these are statically linked
-	  ;; also, the gcc toolchain must use the
-	  ;; <arch>-linux-musl toolchain prefix
-	  ;; and support -static-pie
-	  (cons make                  (->archive "make"))
-	  (cons busybox-core          (->archive "busybox"))
-	  (cons execline-tools        (->archive "execline"))
-	  (cons (gcc-for-target conf) (->archive "gcc"))
-	  (cons (binutils-for-target conf) (->archive "binutils")))))))
+;; *build-config* is the configuration used
+;; to build tools for the build machine
+(define *build-config*
+  (table->proc
+    (table
+      `((arch . ,*this-machine*)
+	(CFLAGS -pipe -fstack-protector-strong -Os)))))
 
-;; replace items in 'lst'
-;; using replacements looked up in 'alist'
-;; or the result of (proc item) if no replacement exists;
-;; return the resulting list
-(define (replace/ormap alist lst proc)
-  (foldl
-    (lambda (lst item)
-      (cons
-	(or (and-let* ((rep (assq item alist)))
-	      (cdr rep))
-	    (proc item))
-	lst))
-    '()
-    lst))
+(define *prebuilts*
+  `((x86_64 . ,(include "prebuilt-x86_64.scm"))))
+
+(define (maybe-prebuilt conf ref)
+  (and-let* ((_ (eq? conf *build-config*))
+	     (c (assq *this-machine* *prebuilts*))
+	     (c (assq ref (cdr c))))
+    (cdr c)))
+
+(define (bootstrap-base!)
+  (let* ((build *build-config*)
+	 (target build)
+	 ;; this is a bit of a hack: here we get a reference
+	 ;; to a global that we set-cdr! on below to override
+	 ;; the prebuilts with new prebuilts that we have
+	 ;; bootstrapped
+	 (built  (assq *this-machine* *prebuilts*))
+	 (->boot (lambda (pkg)
+		   (lambda (conf)
+		     (let ((old (pkg conf)))
+		       (unless (package-prebuilt old)
+			 (error "expected package to have a prebuilt binary:" (package-label old)))
+		       (update-package old #:prebuilt #f)))))
+	 (pkgs   `((make . ,(->boot make))
+		   (busybox . ,(->boot busybox-core))
+		   (execline . ,(->boot execline-tools))
+		   (binutils . ,(->boot (binutils-for-target target)))
+		   (gcc . ,(->boot (gcc-for-target target)))))
+	 (remake! (lambda ()
+		    ;; use pkgs to build a new prebuilt alist
+		    (map
+		      (lambda (p)
+			(cons (car p)
+			      (build-package! (cdr p) build target)))
+		    pkgs)))
+	 (stable? (lambda (alist)
+		    ;; check if the given alist and built alist are equivalent
+		    (let loop ((lst alist))
+		      (or (null? lst)
+			  (let* ((p    (car lst))
+				 (name (car p))
+				 (art  (cdr p))
+				 (rest (cdr lst)))
+			    (and (string=? (artifact-hash art)
+					   (artifact-hash (cdr (assq name (cdr built)))))
+				 (loop rest))))))))
+    (let ((stage-1 (remake!)))
+      (if (stable? stage-1)
+	(display "prebuilts already equivalent.\n")
+	(begin
+	  (display "outputting new prebuilts.\n")
+	  (with-output-to-file
+	    (conc "prebuilt-" *this-machine* ".scm")
+	    (lambda ()
+	      (write (list 'quote stage-1)))))))))
 
 ;; compiler tools should use <arch>-linux-musl as the system triple
 (define (triple conf)
@@ -53,42 +76,10 @@
 (define (sysroot conf)
   (filepath-join "/sysroot/" (triple conf)))
 
-;; pkgs->bootstrap takes a list of package-lambdas
-;; and replaces dependencies from 'tools' with
-;; those in the bootstrap tarball and those in 'inputs'
-;; with those built by the bootstrap tarball
-(define (pkgs->bootstrap . pkgs)
-  (let ((ht (make-hash-table)))
-    (define (inner pkg)
-      (or (hash-table-ref/default ht pkg #f)
-	  (let ((newproc (memoize-eq
-			   (lambda (conf)
-			     (let* ((old      (pkg conf))
-				    (bootpkgs (bootstrap-artifacts conf)))
-			       (update-package
-				 old
-				 #:label (conc (package-label old) "-bootstrap")
-				 ;; tools are replaced with either the corresponding
-				 ;; tarball replacement, or the tool built with those
-				 ;; replacements (transitively)
-				 #:tools (replace/ormap bootpkgs (package-tools old) inner)
-				 ;; inputs are simply replaced with versions
-				 ;; built with the bootstrap toolchain
-				 #:inputs (map inner (package-inputs old))))))))
-	    (hash-table-set! ht pkg newproc)
-	    newproc)))
-    (map inner pkgs)))
-
 (define (config-prepend conf label lst)
   (let ((val (append lst (or (conf label) '()))))
     (lambda (sym)
       (if (eq? sym label) val (conf sym)))))
-
-;; placeholder produces a package-lambda that errors when called
-(define (placeholder name)
-  (memoize-eq
-    (lambda (conf)
-      (error (conc "package " name " not implemented yet")))))
 
 (define (cc-for-target conf)
   (list (gcc-for-target conf)
@@ -427,7 +418,6 @@ EOF
 	#:src    leaf
 	#:tools  (cc-for-target conf)
 	#:inputs libc
-	;; note: not autoconf, but the default configure args work fine
 	#:build  (ska-build (conc "skalibs-" version) conf
 			    #:extra-configure '(--with-sysdep-devurandom=yes))))))
 
@@ -439,12 +429,13 @@ EOF
     (package-lambda
       conf
       (make-package
-	#:label  (conc "execline-" version "-" (conf 'arch))
-	#:src    leaf
-	#:tools  (cc-for-target conf)
-	#:inputs (cons* skalibs libc)
-	#:build  (ska-build (conc "execline-" version) conf
-			    #:extra-configure `(,(conc "--with-sysdeps=" (sysroot conf) "/lib/skalibs/sysdeps") --enable-static-libc))))))
+	#:prebuilt (maybe-prebuilt conf 'execline)
+	#:label    (conc "execline-" version "-" (conf 'arch))
+	#:src      leaf
+	#:tools    (cc-for-target conf)
+	#:inputs   (cons* skalibs libc)
+	#:build    (ska-build (conc "execline-" version) conf
+			      #:extra-configure `(,(conc "--with-sysdeps=" (sysroot conf) "/lib/skalibs/sysdeps") --enable-static-libc))))))
 
 
 ;; byacc is a yacc(1) implementation that is much simpler than bison
@@ -560,12 +551,13 @@ EOF
     (package-lambda
       conf
       (make-package
-	#:label  (conc "make-" version "-" (conf 'arch))
-	#:src    (cons leaf patches)
-	#:tools  (cc-for-target conf)
-	#:inputs libc
-	#:build  (gnu-build (conc "make-" version) conf
-			    #:pre-configure (script-apply-patches patches))))))
+	#:prebuilt (maybe-prebuilt conf 'make)
+	#:label    (conc "make-" version "-" (conf 'arch))
+	#:src      (cons leaf patches)
+	#:tools    (cc-for-target conf)
+	#:inputs   libc
+	#:build    (gnu-build (conc "make-" version) conf
+			      #:pre-configure (script-apply-patches patches))))))
 
 (define *binutils-version* '2.33.1)
 (define *gcc-version* '9.2.0)
@@ -600,6 +592,7 @@ EOF
 		(build-triple  (conc *this-machine* "-linux-musl"))
 		(target-sysrt  (sysroot target)))
 	    (make-package
+	      #:prebuilt (and (eq? host target) (maybe-prebuilt host 'binutils))
 	      #:label   (conc "binutils-" (target 'arch) "-"
 			      (if (eq? host-arch target-arch)
 				"native"
@@ -650,6 +643,7 @@ EOF
 		(patches       (patch*
 				 (include-file-text "patches/gcc/pie-gcc.patch"))))
 	    (make-package
+	      #:prebuilt (and (eq? host target) (maybe-prebuilt host 'gcc))
 	      #:label (conc "gcc-" (target 'arch) "-"
 			    (if (eq? host-arch target-arch)
 			      "native"
@@ -743,6 +737,7 @@ EOF
 			       (HOSTCFLAGS  --sysroot=/ -static-pie)
 			       (HOSTLDFLAGS -static-pie)))))
 	(make-package
+	  #:prebuilt (maybe-prebuilt conf 'busybox)
 	  #:label  (conc "busybox-core-" version "-" (conf 'arch))
 	  #:src    (cons* small-config leaf patches)
 	  #:tools  (cons bzip2

@@ -9,6 +9,11 @@
     fetch-remote-file!
     local-archive
     remote-archive
+
+    artifact-hash
+    artifact-format
+    artifact-extra
+
     make-recipe
     recipe-env
     recipe-script
@@ -22,6 +27,7 @@
     package-tools
     package-inputs
     package-build
+    package-prebuilt
     update-package
     build-package!
     write-digraph)

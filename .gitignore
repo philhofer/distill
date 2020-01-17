@@ -5,3 +5,8 @@
 *.link
 sysplan
 Makefile.dep
+artifacts/
+plans/
+test-plans/
+test-artifacts/
+
