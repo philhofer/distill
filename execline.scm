@@ -30,6 +30,36 @@
 	     (error "illegal character in execline string:" obj))
 	    (else (loop (+ i 1)))))))))
 
+;; given a bytevector, produce a quoted string
+;; that escapes non-printable ascii chars into
+;; escape sequences that execlineb will interpret
+;; properly
+(define (quote-bv bv)
+  (let ((len    (u8vector-length bv))
+	(->int  (lambda (c)
+		  (if (integer? c) c (char->integer c))))
+	(->hex1 (lambda (i)
+		  (string-ref "0123456789abcdef"
+			      (bitwise-and i 15))))
+	(->hex0 (lambda (i)
+		  (string-ref "0123456789abcdef"
+			      (bitwise-and
+				(arithmetic-shift i -4) 15)))))
+    (list->string
+      (cons #\"
+	    (let loop ((i 0))
+	      (if (= i len)
+		(list #\")
+		(let ((v (->int (u8vector-ref bv i))))
+		  (define-syntax cons*
+		    (syntax-rules ()
+		      ((_ x y) (cons x y))
+		      ((_ x y rest* ...) (cons x (cons* y rest* ...)))))
+		  (if (<= 32 v 126)
+		    (cons (integer->char v) (loop (+ i 1)))
+		    (cons*
+		      #\\ #\0 #\x (->hex0 v) (->hex1 v)
+		      (loop (+ i 1)))))))))))
 
 ;; fmt-execline produces a formatting combinator
 ;; from the list representation of an execline script
@@ -37,10 +67,11 @@
   (define (execl-dsp obj)
     (cond
       ;; technically there can be spaces, etc. in symbols, too...
-      ((symbol?  obj) (dsp obj))
-      ((string?  obj) ((escaper obj) obj))
-      ((integer? obj) (dsp obj))
-      ((real? obj)    (dsp obj))
+      ((symbol?  obj)    (dsp obj))
+      ((string?  obj)    ((escaper obj) obj))
+      ((u8vector? obj)   (dsp (quote-bv obj)))
+      ((integer? obj)    (dsp obj))
+      ((real? obj)       (dsp obj))
       ;; if you write '-i it's read as a complex number;
       ;; this shows up in 'sed -i' for example
       ((complex? obj) (error "you almost certainly didn't mean to print:" obj))

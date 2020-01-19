@@ -39,7 +39,7 @@ EOF
   (execline*
     ;; test string quoting when spaces are present
     (if ((sed -e s/foo/bar/g "s/foo = bar/bar = foo/g" file)))
-    (if ((echo "\"a quoted string\"")))
+    (if ((echo #u8(127 69 76 70))))
     (if ((sysctl -p ,conf)))
     ;; test (lack of) quoting for simple strings
     (forbacktickx file ((pipeline ((elglob extra "/etc/sysctl.d/*.conf")
@@ -56,7 +56,7 @@ if {
 	sed -e s/foo/bar/g "s/foo = bar/bar = foo/g" file
 }
 if {
-	echo "\"a quoted string\""
+	echo "\0x7fELF"
 }
 if {
 	sysctl -p /etc/sysctl.conf

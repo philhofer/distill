@@ -253,6 +253,20 @@ EOF
 
 (define (makeflags target) (map pair->string= (make-env target)))
 
+;; generator for an execline sequence that strips binaries
+(define (strip-binaries-script target)
+  (execline*
+    (forbacktickx file ((find /out -type f -perm -o+x)))
+    (importas "-i" -u file file)
+    (backtick prefix ((head -c4 $file)))
+    (importas "-i" -u prefix prefix)
+    ;; the execline printing code knows
+    ;; how to escape a raw byte sequence
+    ;; (elf binaries begin with (0x7f)ELF)
+    (if ((test $prefix "=" #u8(127 69 76 70))))
+    (if ((echo "strip" $file)))
+    (,(conc (triple target) "-strip") $file)))
+
 ;; wrapper around the 'configure;make;make install' pattern,
 ;; taking care to set configure flags make flags appropriately
 ;; for the common case that we're dealing with autotools
@@ -286,7 +300,7 @@ EOF
 	       ;; actually breaks builds, because libtool doesn't
 	       ;; undestand --sysroot, etc
 	       (foreground ((find /out -type f -name "*.la" -delete)))
-	       (true))))
+	       ,@(strip-binaries-script target))))
 
 (define gawk
   (let* ((version '5.0.1)
@@ -404,7 +418,8 @@ EOF
 		 (if ((backtick -n -D 4 ncpu ((nproc)))
 		      (importas -u ncpu ncpu)
 		      (make -j $ncpu ,@(makeflags conf))))
-		 (make DESTDIR=/out install)))))
+		 (if ((make DESTDIR=/out install)))
+		 ,@(strip-binaries-script conf)))))
 
 (define skalibs
   (let* ((version '2.9.1.0)
