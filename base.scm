@@ -771,7 +771,13 @@ EOF
 				,(conc "--with-sysroot=" (sysroot target))
 				,(conc "--build=" build-triple)
 				,(conc "--target=" target-triple)
-				,(conc "--host=" host-triple)))))))))))
+				,(conc "--host=" host-triple))
+		  ;; installing compilers for different targets will
+		  ;; conflict unless we limit the python gdb stuff
+		  ;; to just "native" (host=target) gcc builds
+		  #:post-install (if (eq? host-arch target-arch)
+				   '()
+				   `((if ((rm -rf ,(conc "/out/usr/share/gcc-" *gcc-version* "/python")))))))))))))))
 
 (define native-gcc
   (lambda (build)
@@ -802,8 +808,8 @@ EOF
 			       (CONFIG_SYSROOT . ,(sysroot conf))
 			       (CONFIG_EXTRA_CFLAGS . ,(cdr (assq 'CFLAGS cenv)))
 			       (HOSTCC    . gcc)
-			       (HOSTCFLAGS  --sysroot=/ -static-pie)
-			       (HOSTLDFLAGS -static-pie)))))
+			       (HOSTCFLAGS  --sysroot=/ -fPIE -static-pie)
+			       (HOSTLDFLAGS --sysroot=/ -static-pie)))))
 	(make-package
 	  #:prebuilt (maybe-prebuilt conf 'busybox)
 	  #:label  (conc "busybox-core-" version "-" (conf 'arch))
@@ -825,10 +831,10 @@ EOF
 				(if ((backtick -n -D 1 jflag ((nproc)))
 				     (importas -u jflag jflag)
 				     (make V=1 -j $jflag ,@make-flags busybox)))
-				;; we hand-roll the installation here because the
-				;; F*@!KING MAKEFILE can't seem to do this right
+				(if ((make V=1 busybox.links)))
 				(if ((install -D -m "755" busybox /out/bin/busybox)))
 				(if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))
-				(forbacktickx -o 0 link ((/out/bin/busybox --list-full)))
+				(redirfd -r 0 busybox.links)
+				(forstdin -o 0 link)
 				(importas "-i" -u link link)
 				(ln -s /bin/busybox "/out/${link}"))))))))
