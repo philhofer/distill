@@ -20,6 +20,7 @@
         (only (chicken io) read-string))))
   (export
     bootstrap-base!
+    config-builder
     musl
     libgmp
     libmpfr

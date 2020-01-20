@@ -54,10 +54,10 @@
 
 ;; TODO: normalize remote archives for faster re-builds
 ;; (large xz tarballs are reeeeally slow to unpack)
-(: remote-archive (string string --> artifact))
-(define (remote-archive src hash)
+(: remote-archive (string string #!rest * --> artifact))
+(define (remote-archive src hash #!key (kind #f))
   (%artifact
-    `#(archive ,(impute-format src))
+    `#(archive ,(or kind (impute-format src)))
     hash
     src))
 

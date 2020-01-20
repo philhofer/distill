@@ -15,6 +15,11 @@
 (define *prebuilts*
   `((x86_64 . ,(include "prebuilt-x86_64.scm"))))
 
+(define (config-builder alist)
+  (let ((conf (table->proc (table alist))))
+    (lambda (pkg)
+      (build-package! pkg *build-config* conf))))
+
 (define (maybe-prebuilt conf ref)
   (and-let* ((_ (eq? conf *build-config*))
 	     (c (assq *this-machine* *prebuilts*))
@@ -274,13 +279,21 @@ EOF
 		   (pre-configure '())
 		   (post-install '())
 		   (make-flags '())
-		   (configure #f))
+		   (out-of-tree #f) ;; build out of tree
+		   (configure #f))  ;; alternate configure flags
   (make-recipe
     #:script (execline*
 	       (cd ,dir)
 	       ,@pre-configure
 	       ,@(export* (cc-env target))
-	       (if ((./configure ,@(or configure (configure-args target)))))
+	       ;; if we're doing an out-of-tree build,
+	       ;; move the rest of the build to /builddir
+	       ,@(if out-of-tree
+		   `((if ((mkdir -p "/builddir")))
+		     (cd "/builddir")
+		     (if ((,(conc "/" dir "/configure")
+			   ,@(or configure (configure-args target))))))
+		   `((if ((./configure ,@(or configure (configure-args target)))))))
 	       ;; it's helpful (mandatory?) that the script not change
 	       ;; based on the number of cpus on the host, so we have
 	       ;; to make that determination in the script itself
@@ -644,6 +657,42 @@ EOF
 				   (if ((rm -rf /out/usr/lib)))
 				   (if ((rm -rf /out/lib)))))))))))))
 
+;; this is a hack that allows us to build a cross-gcc
+;; without circular dependencies: install a fake set of
+;; object files that define the same symbols that musl does
+(define fake-musl-for-target
+  (memoize-eq
+    (lambda (target)
+      (memoize-eq
+	(lambda (host)
+	  (let* ((hash "GpFZDYJsPUIYcsfZe-22Qk90kJ9albSjYSf_qTfzuuA=")
+		 (leaf (remote-archive
+			 (conc "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
+			 hash #:kind 'tar.zst))
+		 (version '0.1))
+	    (make-package
+	      #:label (conc "fakemusl-" version "-" (host 'arch) "-" (target 'arch))
+	      #:src   leaf
+	      #:tools (list (binutils-for-target target)
+			    make
+			    execline-tools
+			    busybox-core)
+	      #:inputs '()
+	      #:build (let* ((tool      (triple target))
+			     (target-as (conc tool "-as"))
+			     (target-ar (conc tool "-ar"))
+			     (outdir    (filepath-join "/out" (sysroot target))))
+			(make-recipe
+			  #:script (execline*
+				     (cd ,(conc "fakemusl-" version))
+				     (if ((backtick -D 4 -n jflag ((nproc)))
+					  (importas -u jflag jflag)
+					  (make -j $jflag
+						,(conc "AS=" target-as)
+						,(conc "AR=" target-ar)
+						all)))
+				     (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))))
+
 (define gcc-for-target
   (memoize-eq
     (lambda (target)
@@ -667,7 +716,10 @@ EOF
 	      #:tools (let ((t (cons* byacc reflex gawk (cc-for-target host))))
 			(if (eq? host-arch target-arch)
 			  t
-			  (cons (musl-headers-for-target target) t)))
+			  (cons*
+			    (binutils-for-target target)
+			    (fake-musl-for-target target)
+			    (musl-headers-for-target target) t)))
 	      #:inputs (list libgmp libmpfr libmpc libisl zlib musl)
 	      #:build
 	      (let ()
@@ -676,6 +728,7 @@ EOF
 		  ;; this is a hack to ensure that
 		  ;; the gcc driver program always behaves like a cross-compiler
 		  (config-prepend host 'CFLAGS '(-DCROSS_DIRECTORY_STRUCTURE))
+		  #:out-of-tree (not (eq? host target))
 		  #:pre-configure (append
 				    (script-apply-patches patches)
 				    (execline*
