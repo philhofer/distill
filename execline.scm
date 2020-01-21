@@ -229,7 +229,7 @@
 	   getcwd getpid heredoc homeof importas
 	   piperw redirfd runblock shift umask
 	   unexport withstdinas chroot unshare
-	   loopwhilex xargs sudo su)
+	   loopwhilex xargs sudo su nice)
        ;; none of these should have block arguments
        (begin
 	 (when (any list? (cdr lst))

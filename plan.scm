@@ -174,8 +174,7 @@
   (make-plan
     #:name       name
     #:recipe     recipe
-    #:inputs     inputs
-    #:saved-hash (%plan-hash inputs recipe)))
+    #:inputs     inputs))
 
 (define-syntax require
   (syntax-rules ()
@@ -258,73 +257,91 @@
 	state
 	(loop (proc state (car lst)) (cdr lst)))))
 
-;; plan-hash computes the canonical hash for
-;; a set of plan inputs and a recipe
-(: %plan-hash ((list-of
-		 (pair string (list-of plan-input-type))) (struct recipe) --> (or string false)))
-(define (%plan-hash inputs recipe)
-  (call/cc
-    (lambda (ret)
+(define (plan-resolved? p)
+  (let loop ((lst (plan-inputs p)))
+    (or (null? lst)
+	(let ((head (car lst))
+	      (rest (cdr lst)))
+	  (and (let inner ((lst (cdr head)))
+		 (or (null? lst)
+		     (and (or (artifact? (car lst))
+			      (plan-outputs (car lst)))
+			  (inner (cdr lst)))))
+	       (loop rest))))))
 
-      ;; convert a plan input to an artifact, or abort #f
-      (define (->artifact in)
-	(if (plan? in)
-	    (or (plan-outputs in)
-		(ret #f))
-	    in))
+(: %write-plan-inputs
+   ((list-of
+      (pair string (list-of plan-input-type)))
+    (struct recipe)
+    output-port -> undefined))
+(define (%write-plan-inputs inputs recipe out)
+  (define (->artifact in)
+    (if (plan? in)
+      (or (plan-outputs in)
+	  (error "plan not resolved"))
+      in))
+  ;; sort input artifacts by extraction directory
+  ;; then by content hash
+  (: art<? (artifact artifact --> boolean))
+  (define (art<? a b)
+    (let ((aroot (vector-ref a 0))
+	  (broot (vector-ref b 0))
+	  (ahash (vector-ref a 2))
+	  (bhash (vector-ref b 2)))
+      (or (string<? aroot broot)
+	  (and (string=? aroot broot)
+	       (string<? ahash bhash)))))
 
-      ;; sort input artifacts by extraction directory,
-      ;; then by content hash
-      (: art<? (artifact artifact --> boolean))
-      (define (art<? a b)
-	(let ((aroot (vector-ref a 0))
-	      (broot (vector-ref b 0))
-	      (ahash (vector-ref a 2))
-	      (bhash (vector-ref b 2)))
-	  (or (string<? aroot broot)
-	      (and (string=? aroot broot)
-		   (string<? ahash bhash)))))
+  ;; cons the canonical representation of 'inputs' at 'root' onto tail
+  (define (cons*-reprs root inputs tail)
+    (foldl1
+      (lambda (lst v)
+	(cons (artifact-repr root (->artifact v)) lst))
+      tail
+      inputs))
 
-      ;; cons the canonical representation of 'inputs' at 'root' onto tail
-      (define (cons*-reprs root inputs tail)
-	(foldl1
-	  (lambda (lst v)
-	    (cons (artifact-repr root (->artifact v)) lst))
-	  tail
-	  inputs))
+  ;; cons inputs onto tail
+  ;;
+  ;; produces an output like
+  ;;  (#("/" #('file "/etc/hostname" #o644) "...<hash>...")
+  ;;   #("/" #('archive 'tar.xz)            "...<hash>...") ...)
+  (define (cons*-inputs in tail)
+    (foldl1
+      (lambda (lst p)
+	(cons*-reprs (car p) (cdr p) lst))
+      tail
+      in))
 
-      ;; cons inputs onto tail
-      ;;
-      ;; produces an output like
-      ;;  (#("/" #('file "/etc/hostname" #o644) "...<hash>...")
-      ;;   #("/" #('archive 'tar.xz)            "...<hash>...") ...)
-      (define (cons*-inputs in tail)
-	(foldl1
-	  (lambda (lst p)
-	    (cons*-reprs (car p) (cdr p) lst))
-	  tail
-	  in))
-
-      (let ((inputs (sort (cons*-inputs inputs '()) art<?)))
-	(hash-string
-	  (call-with-output-string
-	    (lambda (out)
-	      (for-each
-		(lambda (in) (write in out) (newline out))
-		inputs)
-	      (write-env (real-env recipe) out)
-	      (write-exexpr (recipe-script recipe) out))))))))
+  ;; write plans in a format that can be deserialized;
+  ;; that way we can build old plans even if we don't
+  ;; have the code that generated them (as long as
+  ;; we have the original artifacts)
+  (let ((inputs (sort (cons*-inputs inputs '()) art<?)))
+    (write
+      (list (cons 'inputs inputs)
+	    (cons 'env (real-env recipe))
+	    (cons 'script (call-with-output-string
+			    (cute write-exexpr (recipe-script recipe) <>))))
+      out)))
 
 ;; plan-hash returns the canonical hash of a plan,
 ;; or #f if any of its inputs have unknown outputs
 (: plan-hash ((struct plan) -> (or false string)))
 (define (plan-hash p)
   (or (plan-saved-hash p)
-      (let ((h (%plan-hash
-		 (plan-inputs p)
-		 (plan-recipe p))))
-	(plan-saved-hash-set! p h)
-	h)))
+      (and (plan-resolved? p)
+	   (let* ((str (call-with-output-string
+			 (cute
+			   %write-plan-inputs (plan-inputs p) (plan-recipe p) <>)))
+		  (h   (hash-string str))
+		  (ofd (filepath-join (plan-dir) h "inputs.scm"))
+		  (lfd (filepath-join (plan-dir) h "label")))
+	     (unless (file-exists? ofd)
+	       (create-directory (dirname ofd) #t)
+	       (call-with-output-file ofd (cut write-string str <>))
+	       (call-with-output-file lfd (cute display (plan-name p) <>)))
+	     (plan-saved-hash-set! p h)
+	     h))))
 
 ;; generic DFS DAG-walking procedure
 ;;

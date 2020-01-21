@@ -461,7 +461,7 @@ EOF
 	#:label    (conc "execline-" version "-" (conf 'arch))
 	#:src      leaf
 	#:tools    (cc-for-target conf)
-	#:inputs   (cons* skalibs libc)
+	#:inputs   (cons skalibs libc)
 	#:build    (ska-build (conc "execline-" version) conf
 			      #:extra-configure `(,(conc "--with-sysdeps=" (sysroot conf) "/lib/skalibs/sysdeps") --enable-static-libc))))))
 
