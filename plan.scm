@@ -586,7 +586,7 @@
       ;; when packages need files that aren't owned by uid=0
       "--owner=0"
       "--group=0"
-      "--mtime=0"
+      "--mtime=@0"
       "--numeric-owner"
       "-C" dir ".")
     (let* ((h   (hash-file tmp))

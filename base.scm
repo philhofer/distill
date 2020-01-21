@@ -107,7 +107,6 @@
 	    (need-cppflags  `(,(sysroot-flag conf)))
 	    (cflags          (conf 'CFLAGS))
 	    (ldflags         (conf 'LDFLAGS))
-	    (cppflags        (conf 'CPPFLAGS))
 	    (c++flags        (or (conf 'CXXFLAGS) (conf 'CFLAGS)))
 	    (plat            (triple conf))
 	    (join            (lambda (a b)
@@ -124,26 +123,27 @@
 	  (CHOST  . ,plat)
 	  (CFLAGS   . ,(join cflags need-cflags))
 	  (CXXFLAGS . ,(join c++flags need-cflags))
-	  (LDFLAGS  . ,(join ldflags need-ldflags))
-	  (CPPFLAGS . ,(join cppflags need-cppflags)))))))
+	  (LDFLAGS  . ,(join ldflags need-ldflags)))))))
 
 ;; cc-env/build produces the environment for CC_FOR_BULID and friends
 (define (cc-env/build)
-  (let ((need-cflags   '(--sysroot=/ -fPIE -static-pie))
+  (let ((need-cflags   '(-fPIE -static-pie))
 	(need-ldflags  '(--sysroot=/ -static-pie))
-	(need-cppflags '(--sysroot=/ -fPIE -static-pie))
 	(plat          (conc *this-machine* "-linux-musl")))
-    `((CC_FOR_BUILD  . gcc)
-      (CXX_FOR_BUILD . g++)
+    ;; if we don't set CC_FOR_BUILD to include '--sysroot=/',
+    ;; then autoconf CPP (preprocessor) checks fail, because
+    ;; they won't include the sysroot flags
+    `((CC_FOR_BUILD  gcc --sysroot=/)
+      (CXX_FOR_BUILD g++ --sysroot=/)
       (LD_FOR_BUILD  . ,(conc plat "-ld"))
       (AR_FOR_BUILD  . ,(conc plat "-ar"))
       (AS_FOR_BUILD  . ,(conc plat "-as"))
       (RANLIB_FOR_BUILD . ,(conc plat "-ranlib"))
       (STRIP_FOR_BUILD  . ,(conc plat "-strip"))
       (NM_FOR_BUILD     . ,(conc plat "-nm"))
-      (CFLAGS_FOR_BUILD . ,need-cflags)
-      (LDFLAGS_FOR_BUILD . ,need-ldflags)
-      (CPPFLAGS_FOR_BUILD . ,need-cppflags))))
+      (CFLAGS_FOR_BUILD   . ,need-cflags)
+      (CXXFLAGS_FOR_BUILD . ,need-cflags)
+      (LDFLAGS_FOR_BUILD  . ,need-ldflags))))
 
 (define (apply-conc x)
   (if (list? x)
@@ -740,8 +740,7 @@ EOF
 		(build-triple  (conc *this-machine* "-linux-musl"))
 		(target-sysrt  (sysroot target))
 		(patches       (patch*
-				 (include-file-text "patches/gcc/pie-gcc.patch")
-				 (include-file-text "patches/gcc/no-build-cppflags.patch"))))
+				 (include-file-text "patches/gcc/pie-gcc.patch"))))
 	    (make-package
 	      #:prebuilt (and (eq? host target) (maybe-prebuilt host 'gcc))
 	      #:label (conc "gcc-" (target 'arch) "-"
