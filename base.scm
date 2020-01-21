@@ -127,6 +127,24 @@
 	  (LDFLAGS  . ,(join ldflags need-ldflags))
 	  (CPPFLAGS . ,(join cppflags need-cppflags)))))))
 
+;; cc-env/build produces the environment for CC_FOR_BULID and friends
+(define (cc-env/build)
+  (let ((need-cflags   '(--sysroot=/ -fPIE -static-pie))
+	(need-ldflags  '(--sysroot=/ -static-pie))
+	(need-cppflags '(--sysroot=/ -fPIE -static-pie))
+	(plat          (conc *this-machine* "-linux-musl")))
+    `((CC_FOR_BUILD  . gcc)
+      (CXX_FOR_BUILD . g++)
+      (LD_FOR_BUILD  . ,(conc plat "-ld"))
+      (AR_FOR_BUILD  . ,(conc plat "-ar"))
+      (AS_FOR_BUILD  . ,(conc plat "-as"))
+      (RANLIB_FOR_BUILD . ,(conc plat "-ranlib"))
+      (STRIP_FOR_BUILD  . ,(conc plat "-strip"))
+      (NM_FOR_BUILD     . ,(conc plat "-nm"))
+      (CFLAGS_FOR_BUILD . ,need-cflags)
+      (LDFLAGS_FOR_BUILD . ,need-ldflags)
+      (CPPFLAGS_FOR_BUILD . ,need-cppflags))))
+
 (define (apply-conc x)
   (if (list? x)
       (if (null? x)
@@ -258,6 +276,11 @@ EOF
 
 (define (makeflags target) (map pair->string= (make-env target)))
 
+(define (+cross conf normal extra)
+  (if (eq? (conf 'arch) *this-machine*)
+    normal
+    (append extra normal)))
+
 ;; generator for an execline sequence that strips binaries
 (define (strip-binaries-script target)
   (execline*
@@ -335,6 +358,12 @@ EOF
 			    (execline*
 			      (foreground ((rm -f /out/usr/bin/awk)))))))))
 
+(define (native-toolchain)
+  (list libssp-nonshared
+	musl
+	native-gcc
+	native-binutils))
+
 (define libgmp
   (let* ((version '6.1.2)
 	 (leaf    (remote-archive
@@ -345,9 +374,16 @@ EOF
       (make-package
 	#:label  (conc "gmp-" version "-" (conf 'arch))
 	#:src    leaf
-	#:tools  (cons m4 (cc-for-target conf))
+	#:tools  (+cross
+		   conf (cons m4 (cc-for-target conf))
+		   (native-toolchain))
 	#:inputs libc
-	#:build  (gnu-build (conc "gmp-" version) conf)))))
+	#:build  (gnu-build (conc "gmp-" version) conf
+			    #:pre-configure
+			    (+cross conf
+			      '()
+			      (export*
+				'((CC_FOR_BUILD gcc -fPIE -static-pie --sysroot=/)))))))))
 
 (define libmpfr
   (let* ((version '4.0.2)
@@ -565,7 +601,6 @@ EOF
 	  (syntax-error "include-file-text expects a literal string; got" expr))
 	(with-input-from-file arg read-string)))))
 
-;; make is GNU make
 (define make
   (let* ((version '4.2.1)
 	 (leaf    (remote-archive
@@ -705,7 +740,8 @@ EOF
 		(build-triple  (conc *this-machine* "-linux-musl"))
 		(target-sysrt  (sysroot target))
 		(patches       (patch*
-				 (include-file-text "patches/gcc/pie-gcc.patch"))))
+				 (include-file-text "patches/gcc/pie-gcc.patch")
+				 (include-file-text "patches/gcc/no-build-cppflags.patch"))))
 	    (make-package
 	      #:prebuilt (and (eq? host target) (maybe-prebuilt host 'gcc))
 	      #:label (conc "gcc-" (target 'arch) "-"
@@ -713,9 +749,13 @@ EOF
 			      "native"
 			      host-arch))
 	      #:src   (cons *gcc-src* patches)
+	      ;; this is kinda hairy because we need up to three (!)
+	      ;; different toolchains available (build, host, target)
 	      #:tools (let ((t (cons* byacc reflex gawk (cc-for-target host))))
 			(if (eq? host-arch target-arch)
-			  t
+			  (if (eq? *this-machine* host-arch)
+			    t
+			    (append (native-toolchain) t))
 			  (cons*
 			    (binutils-for-target target)
 			    (fake-musl-for-target target)
@@ -728,7 +768,8 @@ EOF
 		  ;; this is a hack to ensure that
 		  ;; the gcc driver program always behaves like a cross-compiler
 		  (config-prepend host 'CFLAGS '(-DCROSS_DIRECTORY_STRUCTURE))
-		  #:out-of-tree (not (eq? host target))
+		  #:out-of-tree (or (not (eq? host-arch target-arch))
+				    (not (eq? *this-machine* host-arch)))
 		  #:pre-configure (append
 				    (script-apply-patches patches)
 				    (execline*
@@ -749,7 +790,11 @@ EOF
 					       '(gcc_cv_no_pie . no)
 					       '(gcc_cv_c_no_pie . no)
 					       '(gcc_cv_c_no_fpie . no)
-					       (make-env host))))
+					       (append
+						 (if (eq? *this-machine* host-arch)
+						   '()
+						   (cc-env/build))
+						 (make-env host)))))
 		  #:configure `(--prefix=/usr --exec-prefix=/usr --disable-lto
 				--disable-nls --disable-shared --enable-static
 				--disable-host-shared --enable-host-static

@@ -36,6 +36,8 @@
     skalibs
     binutils-for-target
     gcc-for-target
+    native-binutils
+    native-gcc
     busybox-core
     execline-tools
     gnu-build
