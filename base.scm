@@ -663,7 +663,9 @@ EOF
 	      #:src     *binutils-src*
 	      #:tools   (let ((t (cons* byacc reflex (cc-for-target host))))
 			  (if (eq? host-arch target-arch)
-			    t ;; libc headers are already there; it's the host sysroot
+			    (if (eq? *this-machine* host-arch)
+			      t ;; libc headers are already there; it's the host sysroot
+			      (append (native-toolchain) t))
 			    (cons (musl-headers-for-target target) t)))
 	      #:inputs  (cons zlib libc)
 	      #:build
@@ -671,6 +673,9 @@ EOF
 		(gnu-build
 		  (conc "binutils-" *binutils-version*)
 		  host
+		  #:pre-configure (if (eq? *this-machine* host-arch)
+				    '()
+				    (export* (cc-env/build)))
 		  #:configure `(--disable-nls --disable-shared --enable-static
 				--disable-multilib --enable-gold=yes --with-ppl=no
 				--disable-install-libiberty --enable-relro
