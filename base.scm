@@ -7,7 +7,8 @@
         (CFLAGS -pipe -fstack-protector-strong -Os)))))
 
 (define *prebuilts*
-  `((x86_64 . ,(include "prebuilt-x86_64.scm"))))
+  `((x86_64 . ,(include "prebuilt-x86_64.scm"))
+    (aarch64 . ,(include "prebuilt-aarch64.scm"))))
 
 (define (config-builder alist)
   (let ((conf (table->proc (table alist))))

@@ -10,6 +10,7 @@
     local-archive
     remote-archive
 
+    short-hash
     artifact-hash
     artifact-format
     artifact-extra

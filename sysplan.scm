@@ -41,4 +41,10 @@
 	(lambda ()
 	  (string-append "#" (number->string nv) "! = ")))
       (repl %eval))
-    (for-each load args)))
+
+    ;; when invoked as 'sysplan <foo.scm> args ...'
+    ;; load the first argument with the remaining args
+    ;; as the command-line-arguments
+    (parameterize ((program-name           (car args))
+                   (command-line-arguments (cdr args)))
+      (load (car args)))))
