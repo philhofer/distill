@@ -1,6 +1,7 @@
 (import
   (chicken process-context)
   (chicken string)
+  (log)
   (base))
 
 ;; this script builds prebuilt bootstrap binaries
