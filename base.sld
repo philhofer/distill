@@ -14,6 +14,7 @@
   (cond-expand
     (chicken
       (import
+        (only (chicken syntax) er-macro-transformer)
         (only (chicken base) flatten foldl)
         (only (chicken string) conc))
       (import-for-syntax

@@ -13,21 +13,6 @@
   (plan)
   (base))
 
-;; this is a hack to prevent additional
-;; (import ...) statements for execline/hash/filepath/log
-;; from having to load any code, since the import library
-;; contains the syntactic definitions that we would otherwise
-;; need to load when expanding other code
-(begin
-  (include "memo.import.scm")
-  (include "table.import.scm")
-  (include "execline.import.scm")
-  (include "hash.import.scm")
-  (include "filepath.import.scm")
-  (include "log.import.scm")
-  (include "plan.import.scm")
-  (include "base.import.scm"))
-
 (let ((args (command-line-arguments)))
   (if (null? args)
     (let* ((nv    0)

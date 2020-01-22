@@ -3,7 +3,7 @@ R7RSI:=csi -R r7rs -s
 CSC_FLAGS:=-O3
 R7RSC:=csc -X r7rs -R r7rs $(CSC_FLAGS)
 CSC_LIBFLAGS:=-regenerate-import-libraries -setup-mode -D compiling-extension \
-	-D compiling-static-extension -static -J
+	-D compiling-static-extension -compile-syntax -static -J
 
 Makefile.dep: $(wildcard *.sld) autodep.scm
 	$(R7RSI) autodep.scm > $@
@@ -15,10 +15,7 @@ UNITS:=hash table plan execline filepath log memo base
 %.import.scm %.types %.o:
 	$(R7RSC) $(CSC_LIBFLAGS) -unit $* -ot $*.types -c $<
 
-%.import.so: %.import.scm
-	$(R7RSC) -O3 -s $<
-
-sysplan: sysplan.scm ${UNITS:%=%.o} ${UNITS:%=%.import.so}
+sysplan: sysplan.scm ${UNITS:%=%.o} ${UNITS:%=%.import.scm}
 	$(R7RSC) -setup-mode -m main -static $< ${UNITS:%=%.o} -o $@
 
 TESTS:=$(wildcard *-test.scm)
@@ -27,10 +24,7 @@ TESTS:=$(wildcard *-test.scm)
 test: sysplan $(TESTS)
 	./sysplan $(TESTS)
 
-all: sysplan ${UNITS:%=%.o} ${UNITS:%=%.import.so}
-
-bootstrap.tar.xz:
-	./mkbootstrap.sh
+all: sysplan ${UNITS:%=%.o}
 
 clean:
 	$(RM) sysplan *.types *.import.scm *.so *.o *.link

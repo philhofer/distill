@@ -1,6 +1,6 @@
 (import
-  srfi-13
-  srfi-69
+  (srfi 13)
+  (srfi 69)
   (chicken file))
 
 (define mod-to-import (make-hash-table))
@@ -13,7 +13,7 @@
       (else        (error "unexpected library name" n)))))
 
 (define (lib-import form)
-  (string-append (lib-name form) ".import.so"))
+  (string-append (lib-name form) ".import.scm"))
 
 ;; perform a left-associative fold
 ;; over forms beginning with the given symbol
@@ -21,18 +21,31 @@
   (let loop ((lst (cddr form))
 	     (state seed))
     (if (null? lst)
-	state	
+	state
 	(let ((head (car lst))
 	      (rest (cdr lst)))
 	  (if (and (pair? head) (eq? (car head) sym))
 	      (loop rest (proc state head))
 	      (loop rest state))))))
 
+;; strip away import modifiers
+(define (unpack-import expr)
+  (if (and (pair? expr)
+           (memq (car expr)
+                 '(only except rename prefix)))
+    (unpack-import (cadr expr))
+    expr))
+
+;; TODO: need to walk cond-expand forms as well
 (define (lib-imports form)
   (form-fold
     'import
     (lambda (lst im)
-      (append lst (cdr im)))
+      (foldl
+        (lambda (lst iexpr)
+          (cons (unpack-import iexpr) lst))
+        lst
+        (cdr im)))
     '()
     form))
 
@@ -60,7 +73,7 @@
       (let ((form (call-with-input-file f (cut read <>))))
 	(unless (eq? (car form) 'define-library)
 	  (error "expected define-library form in" f))
-	(hash-table-set! mod-to-import (cadr form) (string-append (lib-name form) ".import.so"))
+	(hash-table-set! mod-to-import (cadr form) (lib-import form))
 	(cons f form)))
     (glob "*.sld")))
 
