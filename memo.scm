@@ -6,6 +6,7 @@
     ((_ head next rest* ...)
      (cons head (cons* next rest* ...)))))
 
+;; a sigil used for determining if we're stuck in a loop
 (define *bad* (list 'in-progress))
 
 ;; memoize a single-argument function
@@ -13,19 +14,18 @@
 ;; TODO: something more efficient than an alist?
 (: memoize-eq (forall (a b) ((a -> b) -> (a -> b))))
 (define (memoize-eq proc)
-  (let ((results '()))
+  (let ((results (make-hash-table #:test eq?)))
     (lambda (arg)
-      (or (and-let* ((p (assq arg results))
-		     (v (cdr p)))
-	    (if (eq? v *bad*)
-	      ;; we are inside a call to this same memoization lambda!
-	      (error "cannot perform recursive memoization")
-	      v))
-	  (let ((cell (cons arg *bad*)))
-	    (set! results (cons cell results))
-	    (let ((val (proc arg)))
-	      (set-cdr! cell val)
-	      val))))))
+      (let ((res (hash-table-ref
+                   results arg
+                   (lambda ()
+                     (hash-table-set! results arg *bad*)
+                     (let ((out (proc arg)))
+                       (hash-table-set! results arg out)
+                       out)))))
+        (if (eq? res *bad*)
+          (error "cannot perform recursive memoization")
+          res)))))
 
 ;; memoize-lambda takes an expression of the form
 ;;   (memoize-lambda (arg0 arg1 ...) body ...)
@@ -42,13 +42,13 @@
     ((_ (formals* ...) body* ...)
      (let ((self (memoize-lambda "memoize-args" (formals* ...) body* ...)))
        (lambda (formals* ...)
-	 (memoize-lambda "real-body" self (formals* ...)))))
+         (memoize-lambda "real-body" self (formals* ...)))))
     ((_ "memoize-args" () body* ...)
      (begin body* ...))
     ((_ "memoize-args" (formal formals* ...) body* ...)
      (memoize-eq
        (lambda (formal)
-	 (memoize-lambda "memoize-args" (formals* ...) body* ...))))
+         (memoize-lambda "memoize-args" (formals* ...) body* ...))))
     ((_ "real-body" self ())
      self)
     ((_ "real-body" self (formal formals* ...))

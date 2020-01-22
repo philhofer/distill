@@ -1,7 +1,8 @@
 (define-library (memo)
   (import
     (scheme base)
-    (srfi 2))
+    (srfi 2)
+    (srfi 69))
   (cond-expand
     (chicken
       (import

@@ -41,12 +41,12 @@
 ;; guess the format of a remote source bundle
 (define (impute-format src)
   (let loop ((suff '((".tar.xz" . tar.xz)
-		     (".tar.gz" . tar.gz)
-		     (".tgz"    . tar.gz)
-		     (".tar.bz" . tar.bz)
-		     (".tar.bz2". tar.bz)
-		     (".tar.zst". tar.zst)
-		     (".tar"    . tar))))
+                     (".tar.gz" . tar.gz)
+                     (".tgz"    . tar.gz)
+                     (".tar.bz" . tar.bz)
+                     (".tar.bz2". tar.bz)
+                     (".tar.zst". tar.zst)
+                     (".tar"    . tar))))
     (cond
       ((null? suff) (error "bad archive suffix" src))
       ((string-suffix? (caar suff) src) (cdar suff))
@@ -73,20 +73,20 @@
 (: import-archive! (string -> artifact))
 (define (import-archive! path)
   (let ((h    (hash-file path))
-	(kind (impute-format path)))
+        (kind (impute-format path)))
     (unless h (fatal "file doesn't exist:" path))
     (let ((artpath (filepath-join (artifact-dir) h)))
       (or (file-exists? artpath)
-	  (copy-file path (abspath artpath) #f 32768))
+          (copy-file path (abspath artpath) #f 32768))
       (%artifact
-	`#(archive ,kind)
-	h
-	#f))))
+        `#(archive ,kind)
+        h
+        #f))))
 
 (: local-archive (symbol string --> artifact))
 (define (local-archive kind hash)
   (%artifact
-   `#(archive ,kind)
+    `#(archive ,kind)
     hash
     #f))
 
@@ -123,8 +123,8 @@
     (SOURCE_DATE_EPOCH . "0")))
 
 (defstruct recipe
-	   ((env '()) : (list-of pair))
-	   (script : list))
+  ((env '()) : (list-of pair))
+  (script : list))
 
 (: real-env ((struct recipe) --> (list-of pair)))
 (define (real-env r)
@@ -136,12 +136,12 @@
 ;; package: a "portable" intermediate representation of a package
 ;; that is converted into a plan by combining it with the configuration
 (defstruct package
-	   (label : string)                    ;; human-readable name
-	   (src : (or artifact (list-of artifact))) ;; where to get the package source
-	   (tools : (list-of package-lambda))  ;; build tools (built for host)
-	   (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
-	   (prebuilt : (or artifact false))    ;; bootstrap replacement binary
-	   (build : (struct recipe)))          ;; build script (see execline*)
+  (label : string)                    ;; human-readable name
+  (src : (or artifact (list-of artifact))) ;; where to get the package source
+  (tools : (list-of package-lambda))  ;; build tools (built for host)
+  (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
+  (prebuilt : (or artifact false))    ;; bootstrap replacement binary
+  (build : (struct recipe)))          ;; build script (see execline*)
 
 ;; plan is the lowest-level representation of a "package"
 ;; or other build step; it simply connects itself to other
@@ -158,17 +158,17 @@
 ;; of dependency graph traversal necessary to produce plan input and output hashes
 (define-type plan-input-type (or (struct plan) vector))
 (defstruct plan
-	   (name : string)
-	   ;; recipe is the code+environment to be executed
-	   (recipe : (struct recipe))
-	   ;; inputs are the set of filesystem inputs
-	   ;; represented as an alist of root directories
-	   ;; and contents to be extracted relative to those roots
-	   ;; (see 'unpack')
-	   (inputs : (list-of
-		       (pair string (list-of plan-input-type))))
-	   ((saved-hash #f) : (or false string))
-	   ((saved-output #f) : (or false vector)))
+  (name : string)
+  ;; recipe is the code+environment to be executed
+  (recipe : (struct recipe))
+  ;; inputs are the set of filesystem inputs
+  ;; represented as an alist of root directories
+  ;; and contents to be extracted relative to those roots
+  ;; (see 'unpack')
+  (inputs : (list-of
+              (pair string (list-of plan-input-type))))
+  ((saved-hash #f) : (or false string))
+  ((saved-output #f) : (or false vector)))
 
 (define (%plan name recipe inputs)
   (make-plan
@@ -180,18 +180,18 @@
   (syntax-rules ()
     ((_ pred? obj)
      (if (pred? obj)
-	 obj
-	 (error "object doesn't satisfy predicate" (quote pred?) obj)))
+       obj
+       (error "object doesn't satisfy predicate" (quote pred?) obj)))
     ((_ pred? obj msg rest* ...)
      (if (pred? obj)
-	 obj
-	 (error msg rest* ...)))))
+       obj
+       (error msg rest* ...)))))
 
 ;; XXX this needs to stay in-sync with base
 (define (sysroot conf)
   (string-append "/sysroot/"
-		 (symbol->string (conf 'arch))
-		 "-linux-musl"))
+                 (symbol->string (conf 'arch))
+                 "-linux-musl"))
 
 ;; note here that 'host' is the config for the
 ;; machine running the build, and 'target' is
@@ -199,27 +199,29 @@
 ;; build outputs (in GNU 'configure' terminology,
 ;; those would be 'build' and 'host,' respectively)
 (: %package->plan (package-lambda conf-lambda conf-lambda -> (struct plan)))
-(define-memoized (%package->plan pkg-proc host target)
-  (let ((pkg (pkg-proc target)))
-    (or (package-prebuilt pkg)
-	(let* ((->tool (lambda (tool)
-			 (if (artifact? tool)
-			   tool
-			   (%package->plan tool host host))))
-	       (->input (lambda (input)
-			  (if (artifact? input)
-			    input
-			    (%package->plan input host target))))
-	       (tools  (package-tools pkg))
-	       (inputs (package-inputs pkg)))
-	  (%plan
-	    (require ok-plan-name? (package-label pkg))
-	    (package-build pkg)
-	    (list
-	      ;; build tools live here
-	      (cons "/" (flatten (package-src pkg) (map ->tool tools)))
-	      ;; host headers+libraries live here
-	      (cons (sysroot target) (map ->input inputs))))))))
+(define %package->plan
+  (memoize-lambda
+    (pkg-proc host target)
+    (let ((pkg (pkg-proc target)))
+      (or (package-prebuilt pkg)
+          (let* ((->tool (lambda (tool)
+                           (if (artifact? tool)
+                             tool
+                             (%package->plan tool host host))))
+                 (->input (lambda (input)
+                            (if (artifact? input)
+                              input
+                              (%package->plan input host target))))
+                 (tools  (package-tools pkg))
+                 (inputs (package-inputs pkg)))
+            (%plan
+              (require ok-plan-name? (package-label pkg))
+              (package-build pkg)
+              (list
+                ;; build tools live here
+                (cons "/" (flatten (package-src pkg) (map ->tool tools)))
+                ;; host headers+libraries live here
+                (cons (sysroot target) (map ->input inputs)))))))))
 
 ;; since we use plans in filepaths, disallow
 ;; plans that begin with '.' or contain '/' or whitespace, etc.
@@ -227,9 +229,9 @@
 (define (ok-plan-name? str)
   (and (not (eqv? (string-ref str 0) #\.))
        (not (string-any
-	      (lambda (c)
-		(memv c '(#\/ #\space #\newline)))
-	      str))))
+              (lambda (c)
+                (memv c '(#\/ #\space #\newline)))
+              str))))
 
 (: write-env ((list-of pair) port -> void))
 (define (write-env env prt)
@@ -252,22 +254,22 @@
 
 (define (foldl1 proc seed lst)
   (let loop ((state seed)
-	     (lst   lst))
+             (lst   lst))
     (if (null? lst)
-	state
-	(loop (proc state (car lst)) (cdr lst)))))
+      state
+      (loop (proc state (car lst)) (cdr lst)))))
 
 (define (plan-resolved? p)
   (let loop ((lst (plan-inputs p)))
     (or (null? lst)
-	(let ((head (car lst))
-	      (rest (cdr lst)))
-	  (and (let inner ((lst (cdr head)))
-		 (or (null? lst)
-		     (and (or (artifact? (car lst))
-			      (plan-outputs (car lst)))
-			  (inner (cdr lst)))))
-	       (loop rest))))))
+        (let ((head (car lst))
+              (rest (cdr lst)))
+          (and (let inner ((lst (cdr head)))
+                 (or (null? lst)
+                     (and (or (artifact? (car lst))
+                              (plan-outputs (car lst)))
+                          (inner (cdr lst)))))
+               (loop rest))))))
 
 (: %write-plan-inputs
    ((list-of
@@ -278,25 +280,25 @@
   (define (->artifact in)
     (if (plan? in)
       (or (plan-outputs in)
-	  (error "plan not resolved"))
+          (error "plan not resolved"))
       in))
   ;; sort input artifacts by extraction directory
   ;; then by content hash
   (: art<? (artifact artifact --> boolean))
   (define (art<? a b)
     (let ((aroot (vector-ref a 0))
-	  (broot (vector-ref b 0))
-	  (ahash (vector-ref a 2))
-	  (bhash (vector-ref b 2)))
+          (broot (vector-ref b 0))
+          (ahash (vector-ref a 2))
+          (bhash (vector-ref b 2)))
       (or (string<? aroot broot)
-	  (and (string=? aroot broot)
-	       (string<? ahash bhash)))))
+          (and (string=? aroot broot)
+               (string<? ahash bhash)))))
 
   ;; cons the canonical representation of 'inputs' at 'root' onto tail
   (define (cons*-reprs root inputs tail)
     (foldl1
       (lambda (lst v)
-	(cons (artifact-repr root (->artifact v)) lst))
+        (cons (artifact-repr root (->artifact v)) lst))
       tail
       inputs))
 
@@ -308,7 +310,7 @@
   (define (cons*-inputs in tail)
     (foldl1
       (lambda (lst p)
-	(cons*-reprs (car p) (cdr p) lst))
+        (cons*-reprs (car p) (cdr p) lst))
       tail
       in))
 
@@ -319,9 +321,9 @@
   (let ((inputs (sort (cons*-inputs inputs '()) art<?)))
     (write
       (list (cons 'inputs inputs)
-	    (cons 'env (real-env recipe))
-	    (cons 'script (call-with-output-string
-			    (cute write-exexpr (recipe-script recipe) <>))))
+            (cons 'env (real-env recipe))
+            (cons 'script (call-with-output-string
+                            (cute write-exexpr (recipe-script recipe) <>))))
       out)))
 
 ;; plan-hash returns the canonical hash of a plan,
@@ -330,18 +332,18 @@
 (define (plan-hash p)
   (or (plan-saved-hash p)
       (and (plan-resolved? p)
-	   (let* ((str (call-with-output-string
-			 (cute
-			   %write-plan-inputs (plan-inputs p) (plan-recipe p) <>)))
-		  (h   (hash-string str))
-		  (ofd (filepath-join (plan-dir) h "inputs.scm"))
-		  (lfd (filepath-join (plan-dir) h "label")))
-	     (unless (file-exists? ofd)
-	       (create-directory (dirname ofd) #t)
-	       (call-with-output-file ofd (cut write-string str <>))
-	       (call-with-output-file lfd (cute display (plan-name p) <>)))
-	     (plan-saved-hash-set! p h)
-	     h))))
+           (let* ((str (call-with-output-string
+                         (cute
+                           %write-plan-inputs (plan-inputs p) (plan-recipe p) <>)))
+                  (h   (hash-string str))
+                  (ofd (filepath-join (plan-dir) h "inputs.scm"))
+                  (lfd (filepath-join (plan-dir) h "label")))
+             (unless (file-exists? ofd)
+               (create-directory (dirname ofd) #t)
+               (call-with-output-file ofd (cut write-string str <>))
+               (call-with-output-file lfd (cute display (plan-name p) <>)))
+             (plan-saved-hash-set! p h)
+             h))))
 
 ;; generic DFS DAG-walking procedure
 ;;
@@ -356,15 +358,15 @@
   (define (walked? x)
     (let ((c (hash-table-ref/default tbl x 0)))
       (when (= c 1)
-	(error "cycle: " x))
+        (error "cycle: " x))
       (not (= c 0))))
   (define (walk x)
     (unless (walked? x)
       (begin
-	(hash-table-set! tbl x 1)
-	(for-each walk (get-edges x))
-	(hash-table-set! tbl x 2)
-	(proc x))))
+        (hash-table-set! tbl x 1)
+        (for-each walk (get-edges x))
+        (hash-table-set! tbl x 2)
+        (proc x))))
   (walk root))
 
 ;; plan-dfs calls (proc plan) on
@@ -375,11 +377,11 @@
 (: plan-dfs ((plan-input-type -> *) (struct plan) -> undefined))
 (define (plan-dfs proc root)
   (for-each-dag-dfs root
-		    proc
-		    (lambda (x)
-		      (if (plan? x)
-			  (flatten (map cdr (plan-inputs x)))
-			  '()))))
+                    proc
+                    (lambda (x)
+                      (if (plan? x)
+                        (flatten (map cdr (plan-inputs x)))
+                        '()))))
 
 ;; fork+exec, wait for the process to exit and check
 ;; that it exited successfully
@@ -418,15 +420,15 @@
 (: fetch! (string string -> *))
 (define (fetch! src hash)
   (let* ((dst (filepath-join (artifact-dir) hash))
-	 (tmp (string-append dst ".tmp")))
+         (tmp (string-append dst ".tmp")))
     (info "  -- fetching" src)
     (run "wget" "-q" "-O" tmp src)
     (let ((h (hash-file tmp)))
       (if (string=? h hash)
-	  (rename-file tmp dst #t)
-	  (begin
-	    (delete-file tmp)
-	    (fatal "fetched artifact has the wrong hash:" h "not" hash))))))
+        (rename-file tmp dst #t)
+        (begin
+          (delete-file tmp)
+          (fatal "fetched artifact has the wrong hash:" h "not" hash))))))
 
 ;; plan-outputs-file is the file that stores the serialized
 ;; interned file information for a plan
@@ -443,32 +445,32 @@
       (error "can't save outputs for plan (unresolved inputs):" (plan-name p)))
     (let ((old (plan-outputs p)))
       (cond
-	((not old)
-	 (begin
-	   (create-directory (dirname outfile))
-	   (with-output-to-file outfile (lambda () (write ar)))
-	   (plan-saved-output-set! p ar)))
-	((equal? old ar)
-	 (info "plan for" (plan-name p) "reproduced" (short-hash (plan-hash p))))
-	(else
-	  (fatal "plan for" (plan-name p) "failed to reproduce:" old ar))))))
+        ((not old)
+         (begin
+           (create-directory (dirname outfile))
+           (with-output-to-file outfile (lambda () (write ar)))
+           (plan-saved-output-set! p ar)))
+        ((equal? old ar)
+         (info "plan for" (plan-name p) "reproduced" (short-hash (plan-hash p))))
+        (else
+          (fatal "plan for" (plan-name p) "failed to reproduce:" old ar))))))
 
 ;; determine the outputs (leaf) of the given plan,
 ;; or #f if the plan has never been built with its inputs
 (: plan-outputs ((struct plan) -> (or artifact false)))
 (define (plan-outputs p)
   (let ((saved (plan-saved-output p))
-	(desc  (plan-outputs-file p)))
+        (desc  (plan-outputs-file p)))
     (or saved
-	(and desc (file-exists? desc)
-	     (let ((vec (with-input-from-file desc read)))
-	       (unless (artifact? vec)
-		 (error "unexpected plan format" vec))
-	       (plan-saved-output-set! p vec)
-	       vec)))))
+        (and desc (file-exists? desc)
+             (let ((vec (with-input-from-file desc read)))
+               (unless (artifact? vec)
+                 (error "unexpected plan format" vec))
+               (plan-saved-output-set! p vec)
+               vec)))))
 
 (define cdn-url (make-parameter
-		  "https://b2cdn.sunfi.sh/file/pub-cdn/"))
+                  "https://b2cdn.sunfi.sh/file/pub-cdn/"))
 
 ;; unpack! installs a plan input into the
 ;; given destination directory
@@ -479,25 +481,25 @@
     (let ((dstfile (filepath-join dst abspath)))
       (create-directory (dirname dstfile) #t)
       (if content
-	  (with-output-to-file dstfile (lambda () (write-string content)))
-	  (copy-file (filepath-join (artifact-dir) hash) dstfile))
+        (with-output-to-file dstfile (lambda () (write-string content)))
+        (copy-file (filepath-join (artifact-dir) hash) dstfile))
       (set-file-permissions! dstfile mode)))
 
   (define (unpack-archive dst kind hash src)
     (let ((comp (case kind
-		  ((tar.gz) "-z")
-		  ((tar.bz) "-j")
-		  ((tar.xz) "-J")
-		  ((tar.zst) "--zstd")
-		  ((tar)    "")
-		  (else (error "unknown/unsupported archive kind" kind))))
-	  (infile  (filepath-join (artifact-dir) hash)))
+                  ((tar.gz) "-z")
+                  ((tar.bz) "-j")
+                  ((tar.xz) "-J")
+                  ((tar.zst) "--zstd")
+                  ((tar)    "")
+                  (else (error "unknown/unsupported archive kind" kind))))
+          (infile  (filepath-join (artifact-dir) hash)))
       (when (not (file-exists? infile))
-	(fetch! (or src
-		    (begin
-		      (info "  -- trying to fetch" (short-hash hash) "from fallback cdn...")
-		      (string-append (cdn-url) hash)))
-		hash))
+        (fetch! (or src
+                    (begin
+                      (info "  -- trying to fetch" (short-hash hash) "from fallback cdn...")
+                      (string-append (cdn-url) hash)))
+                hash))
       (create-directory dst #t)
       (run "tar" comp "-xkf" infile "-C" dst)))
 
@@ -505,8 +507,8 @@
     (create-symbolic-link lnk (filepath-join dst abspath)))
 
   (let ((format (artifact-format i))
-	(hash   (artifact-hash i))
-	(extra  (artifact-extra i)))
+        (hash   (artifact-hash i))
+        (extra  (artifact-extra i)))
     (match format
       (#('file abspath mode)   (unpack-file dst abspath mode hash extra))
       (#('archive kind)        (unpack-archive dst kind hash extra))
@@ -519,7 +521,7 @@
 (: write-recipe-to-dir ((struct recipe) string -> *))
 (define (write-recipe-to-dir r dst)
   (let ((script (recipe-script r))
-	(env    (real-env r)))
+        (env    (real-env r)))
     (call-with-output-file
       (filepath-join dst *envfile-path*)
       (cut write-env env <>))
@@ -531,7 +533,7 @@
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
 (define (with-tmpdir proc)
   (let* ((dir (create-temporary-directory))
-	 (res (proc dir)))
+         (res (proc dir)))
     (delete-directory dir #t)
     res))
 
@@ -542,32 +544,32 @@
     f
     (lambda (p)
       (let ((v (read-string #f p)))
-	(if (eof-object? v) "" v)))))
+        (if (eof-object? v) "" v)))))
 
 ;; %intern! interns an ordinary file
 ;; and returns the interned-file handle
 (: %intern! (string string -> artifact))
 (define (%intern! f abspath)
   (if (< (file-size f) *max-inline-file-size*)
-      (let ((str (%file->string f)))
-	(interned abspath (file-permissions f) str))
-      (let* ((h   (hash-file f))
-	     (dst (filepath-join (artifact-dir) h)))
-	(begin
-	  ;; TODO: this could be really slow for
-	  ;; many/large outputs; there is some serious
-	  ;; room for optimization here...
-	  (unless (file-exists? dst)
-	    (copy-file f dst #t 32768)
-	    (set-file-permissions! dst #o600))
-	  (%local-file abspath (file-permissions f) h)))))
+    (let ((str (%file->string f)))
+      (interned abspath (file-permissions f) str))
+    (let* ((h   (hash-file f))
+           (dst (filepath-join (artifact-dir) h)))
+      (begin
+        ;; TODO: this could be really slow for
+        ;; many/large outputs; there is some serious
+        ;; room for optimization here...
+        (unless (file-exists? dst)
+          (copy-file f dst #t 32768)
+          (set-file-permissions! dst #o600))
+        (%local-file abspath (file-permissions f) h)))))
 
 
 (: dir->artifact (string -> artifact))
 (define (dir->artifact dir)
   (let* ((suffix ".tar.zst")
-	 (format 'tar.zst)
-	 (tmp    (create-temporary-file suffix)))
+         (format 'tar.zst)
+         (tmp    (create-temporary-file suffix)))
     ;; producing a fully-reproducible tar archive
     ;; is, unfortunately, a minefield
     (run
@@ -590,12 +592,12 @@
       "--numeric-owner"
       "-C" dir ".")
     (let* ((h   (hash-file tmp))
-	   (dst (filepath-join (artifact-dir) h)))
+           (dst (filepath-join (artifact-dir) h)))
       (if (and (file-exists? dst) (equal? (hash-file dst) h))
-	  (begin
-	    (info "  -- artifact reproduced:" (short-hash h))
-	    (delete-file tmp))
-	  (move-file tmp dst #t 32768))
+        (begin
+          (info "  -- artifact reproduced:" (short-hash h))
+          (delete-file tmp))
+        (move-file tmp dst #t 32768))
       (local-archive format h))))
 
 ;; plan->outputs! builds a plan and yields
@@ -615,50 +617,50 @@
       (trace "building in root" root)
       (create-directory outdir #t)
       (for-each
-	(lambda (p)
-	  (let ((dir (filepath-join root (car p))))
-	    (for-each
-	      (lambda (in)
-		(unpack!
-		  (if (plan? in)
-		      (or
-			(begin
-			  (info "  -- unpacking output of" (plan-name in))
-			  (plan-outputs in))
-			(fatal "unbuilt plan prerequisite:" (plan-name in)))
-		      in)
-		  dir))
-	      (cdr p))))
-	(plan-inputs p))
+        (lambda (p)
+          (let ((dir (filepath-join root (car p))))
+            (for-each
+              (lambda (in)
+                (unpack!
+                  (if (plan? in)
+                    (or
+                      (begin
+                        (info "  -- unpacking output of" (plan-name in))
+                        (plan-outputs in))
+                      (fatal "unbuilt plan prerequisite:" (plan-name in)))
+                    in)
+                  dir))
+              (cdr p))))
+        (plan-inputs p))
       (write-recipe-to-dir (plan-recipe p) root)
 
       ;; fork+exec into the recipe inside the sandbox
       (info "  -- running build script ...")
       (sandbox-run
-	root
-	"/bin/emptyenv"
-	"/bin/envfile" *envfile-path*
-	;; close stdin and redirect stdin+stderr to a log file
-	;; (otherwise builds just get really noisy in the terminal)
-	"redirfd" "-r" "0" "/dev/null"
-	"redirfd" "-w" "1" "/build.log"
-	"fdmove" "-c" "2" "1"
-	*buildfile-path*)
+        root
+        "/bin/emptyenv"
+        "/bin/envfile" *envfile-path*
+        ;; close stdin and redirect stdin+stderr to a log file
+        ;; (otherwise builds just get really noisy in the terminal)
+        "redirfd" "-r" "0" "/dev/null"
+        "redirfd" "-w" "1" "/build.log"
+        "fdmove" "-c" "2" "1"
+        *buildfile-path*)
 
       ;; save the compressed build log independently
       ;; (it's not 'reproduced' as such) and delete
       ;; the old log
       (let* ((pdir  (filepath-join (plan-dir) (plan-hash p)))
-	     (ofile (filepath-join pdir "build.log.zst")))
-	;; the zstd tool will complain if we reproduce an ouput,
-	;; so only keep one build log at a time
-	(when (file-exists? ofile)
-	  (delete-file* ofile))
-	(create-directory pdir #t)
-	(run "zstd"
-	     "-q"
-	     "--rm" (filepath-join root "build.log")
-	     "-o"   ofile))
+             (ofile (filepath-join pdir "build.log.zst")))
+        ;; the zstd tool will complain if we reproduce an ouput,
+        ;; so only keep one build log at a time
+        (when (file-exists? ofile)
+          (delete-file* ofile))
+        (create-directory pdir #t)
+        (run "zstd"
+             "-q"
+             "--rm" (filepath-join root "build.log")
+             "-o"   ofile))
       (dir->artifact outdir))))
 
 (: plan-built? ((struct plan) -> boolean))
@@ -675,18 +677,18 @@
   (plan-dfs
     (lambda (p)
       (when (and
-	      (plan? p)
-	      (or (not (plan-built? p)) (and (eq? p top) rebuild)))
-	(do-plan! p)))
-   top))
+              (plan? p)
+              (or (not (plan-built? p)) (and (eq? p top) rebuild)))
+        (do-plan! p)))
+    top))
 
 (: build-package! (package-lambda conf-lambda conf-lambda #!rest * -> artifact))
 (define (build-package! proc host target #!key (rebuild #f))
   (let ((plan (%package->plan proc host target)))
     (build-plan! plan #:rebuild rebuild)
     (info (plan-name plan)
-	  (short-hash (plan-hash plan))
-	  "is" (short-hash (artifact-hash (plan-outputs plan))))
+          (short-hash (plan-hash plan))
+          "is" (short-hash (artifact-hash (plan-outputs plan))))
     (plan-outputs plan)))
 
 ;; write-digraph displays the dependency graph for a list of packages
@@ -694,41 +696,41 @@
 (: write-digraph (conf-lambda conf-lambda #!rest package-lambda -> *))
 (define (write-digraph host target . pkgs)
   (let* ((plans (map (cut %package->plan <> host target) pkgs))
-	 (ht    (make-hash-table))
-	 (label (lambda (p)
-		  (string-append (plan-name p) " " (short-hash (plan-hash p)))))
-	 (outhash (lambda (p)
-		    (short-hash (artifact-hash (plan-outputs p))))))
+         (ht    (make-hash-table))
+         (label (lambda (p)
+                  (string-append (plan-name p) " " (short-hash (plan-hash p)))))
+         (outhash (lambda (p)
+                    (short-hash (artifact-hash (plan-outputs p))))))
     (display "digraph packages {\n")
     (for-each
       (lambda (p)
-	(plan-dfs
-	  (lambda (p)
-	    (when (and (plan? p)
-		       (not (hash-table-ref/default ht p #f)))
-	      (hash-table-set! ht p #t)
-	      (write (label p))
-	      (display " -> ")
-	      (write (outhash p))
-	      (display ";\n")
-	      (for-each
-		(lambda (in)
-		  (cond
-		    ((plan? in)
-		     (write (outhash in)))
-		    ((artifact? in)
-		     (case (vector-ref (artifact-format in) 0)
-		       ;; try to produce a moderately informative textual representation;
-		       ;; track labels so that bootstrap packages create the appropriate
-		       ;; circular references
-		       ((archive)      (write (or (artifact-extra in)
-						  (short-hash (artifact-hash in)))))
-		       ((file symlink) (write (vector-ref (artifact-format in) 1)))
-		       (else           (write (short-hash (artifact-hash in)))))))
-		  (display " -> ")
-		  (write (label p))
-		  (display ";\n"))
-		(apply append (map cdr (plan-inputs p))))))
-	  p))
+        (plan-dfs
+          (lambda (p)
+            (when (and (plan? p)
+                       (not (hash-table-ref/default ht p #f)))
+              (hash-table-set! ht p #t)
+              (write (label p))
+              (display " -> ")
+              (write (outhash p))
+              (display ";\n")
+              (for-each
+                (lambda (in)
+                  (cond
+                    ((plan? in)
+                     (write (outhash in)))
+                    ((artifact? in)
+                     (case (vector-ref (artifact-format in) 0)
+                       ;; try to produce a moderately informative textual representation;
+                       ;; track labels so that bootstrap packages create the appropriate
+                       ;; circular references
+                       ((archive)      (write (or (artifact-extra in)
+                                                  (short-hash (artifact-hash in)))))
+                       ((file symlink) (write (vector-ref (artifact-format in) 1)))
+                       (else           (write (short-hash (artifact-hash in)))))))
+                  (display " -> ")
+                  (write (label p))
+                  (display ";\n"))
+                (apply append (map cdr (plan-inputs p))))))
+          p))
       plans)
     (display "}\n")))

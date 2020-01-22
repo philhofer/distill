@@ -7,7 +7,7 @@
     ;; number of tabs become constant string refs
     ((eqv? n 0) "")
     ((<= n 8) (let ((v "\t\t\t\t\t\t\t\t"))
-		(substring/shared v (- 8 n))))
+                (substring/shared v (- 8 n))))
     (else (string-append "\t" (tabs (- n 1))))))
 
 ;; escaper yields the printing procedure for a string
@@ -17,18 +17,18 @@
     (if (= len 0)
       wrt
       (let loop ((i 0))
-	(if (= i len)
-	  dsp
-	  (case (string-ref obj i)
-	    ((#\space #\newline #\tab #\linefeed #\\ #\# #\")
-	     ;; any obvious escape sequences or semantic characters
-	     ;; mean we encode the string into the script just
-	     ;; as it would appear as a scheme literal
-	     wrt)
-	    ((#\delete #\backspace #\alarm #\vtab #\nul #\esc)
-	     ;; while we're here, warn about illegal characters
-	     (error "illegal character in execline string:" obj))
-	    (else (loop (+ i 1)))))))))
+        (if (= i len)
+          dsp
+          (case (string-ref obj i)
+            ((#\space #\newline #\tab #\linefeed #\\ #\# #\")
+             ;; any obvious escape sequences or semantic characters
+             ;; mean we encode the string into the script just
+             ;; as it would appear as a scheme literal
+             wrt)
+            ((#\delete #\backspace #\alarm #\vtab #\nul #\esc)
+             ;; while we're here, warn about illegal characters
+             (error "illegal character in execline string:" obj))
+            (else (loop (+ i 1)))))))))
 
 ;; given a bytevector, produce a quoted string
 ;; that escapes non-printable ascii chars into
@@ -36,30 +36,30 @@
 ;; properly
 (define (quote-bv bv)
   (let ((len    (u8vector-length bv))
-	(->int  (lambda (c)
-		  (if (integer? c) c (char->integer c))))
-	(->hex1 (lambda (i)
-		  (string-ref "0123456789abcdef"
-			      (bitwise-and i 15))))
-	(->hex0 (lambda (i)
-		  (string-ref "0123456789abcdef"
-			      (bitwise-and
-				(arithmetic-shift i -4) 15)))))
+        (->int  (lambda (c)
+                  (if (integer? c) c (char->integer c))))
+        (->hex1 (lambda (i)
+                  (string-ref "0123456789abcdef"
+                              (bitwise-and i 15))))
+        (->hex0 (lambda (i)
+                  (string-ref "0123456789abcdef"
+                              (bitwise-and
+                                (arithmetic-shift i -4) 15)))))
     (list->string
       (cons #\"
-	    (let loop ((i 0))
-	      (if (= i len)
-		(list #\")
-		(let ((v (->int (u8vector-ref bv i))))
-		  (define-syntax cons*
-		    (syntax-rules ()
-		      ((_ x y) (cons x y))
-		      ((_ x y rest* ...) (cons x (cons* y rest* ...)))))
-		  (if (<= 32 v 126)
-		    (cons (integer->char v) (loop (+ i 1)))
-		    (cons*
-		      #\\ #\0 #\x (->hex0 v) (->hex1 v)
-		      (loop (+ i 1)))))))))))
+            (let loop ((i 0))
+              (if (= i len)
+                (list #\")
+                (let ((v (->int (u8vector-ref bv i))))
+                  (define-syntax cons*
+                    (syntax-rules ()
+                      ((_ x y) (cons x y))
+                      ((_ x y rest* ...) (cons x (cons* y rest* ...)))))
+                  (if (<= 32 v 126)
+                    (cons (integer->char v) (loop (+ i 1)))
+                    (cons*
+                      #\\ #\0 #\x (->hex0 v) (->hex1 v)
+                      (loop (+ i 1)))))))))))
 
 ;; fmt-execline produces a formatting combinator
 ;; from the list representation of an execline script
@@ -79,20 +79,20 @@
   (define (join-cmds lst indent)
     (fmt-join
       (lambda (v)
-	(cat (tabs indent) (join-arg (car v) (cdr v) indent)))
+        (cat (tabs indent) (join-arg (car v) (cdr v) indent)))
       lst
       "\n"))
   (define (join-arg arg rest indent)
     (if (list? arg)
-        (cat "{\n"
-	     (join-cmds arg (+ indent 1))
-	     "\n"
-	     (tabs indent)
-	     "}"
-	     (if (null? rest) fmt-null " "))
-	(if (null? rest)
-	    (execl-dsp arg)
-	    (cat (execl-dsp arg) " " (join-arg (car rest) (cdr rest) indent)))))
+      (cat "{\n"
+           (join-cmds arg (+ indent 1))
+           "\n"
+           (tabs indent)
+           "}"
+           (if (null? rest) fmt-null " "))
+      (if (null? rest)
+        (execl-dsp arg)
+        (cat (execl-dsp arg) " " (join-arg (car rest) (cdr rest) indent)))))
   (fmt-join/suffix
     (lambda (v)
       (join-arg (car v) (cdr v) 0))
@@ -101,19 +101,19 @@
 
 (define (foldl1 proc init lst)
   (let loop ((val init)
-	     (lst lst))
+             (lst lst))
     (if (null? lst)
-	val
-	(loop (proc val (car lst)) (cdr lst)))))
+      val
+      (loop (proc val (car lst)) (cdr lst)))))
 
 ;; execline script to string helper
 (: exexpr->string (list --> string))
 (define (exexpr->string expr)
   (fmt #f
        (cat
-	 execline-shebang
-	 "\n"
-	 (fmt-execline expr))))
+         execline-shebang
+         "\n"
+         (fmt-execline expr))))
 
 ;; execline script 'write' helper
 (: write-exexpr (list output-port -> undefined))
@@ -121,9 +121,9 @@
   (check-terminal expr)
   (fmt prt
        (cat
-	 execline-shebang
-	 "\n"
-	 (fmt-execline expr))))
+         execline-shebang
+         "\n"
+         (fmt-execline expr))))
 
 ;; execline* is a macro that quasiquotes
 ;; execline scripts as s-expressions
@@ -153,27 +153,27 @@
 ;; an execline expression
 (define (fold-exexpr fn init expr)
   (if (null? expr)
-      init
-      (let ((line (car expr))
-	    (rest (cdr expr)))
-	(fold-exexpr
-	  fn
-	  ;; recursively walk arguments
-	  ;; that are lists
-	  (foldl1
-	    (lambda (acc arg)
-	      (if (list? arg)
-		  (fold-exexpr fn acc arg)
-		  acc))
-	    (fn init line)
-	    (cdr line))
-	  rest))))
+    init
+    (let ((line (car expr))
+          (rest (cdr expr)))
+      (fold-exexpr
+        fn
+        ;; recursively walk arguments
+        ;; that are lists
+        (foldl1
+          (lambda (acc arg)
+            (if (list? arg)
+              (fold-exexpr fn acc arg)
+              acc))
+          (fn init line)
+          (cdr line))
+        rest))))
 
 ;; execline-execs produces the list of binaries
 ;; executed from an execline script
 (define (execline-execs expr)
   (fold-exexpr (lambda (lst e)
-		 (cons (car e) lst)) '() expr))
+                 (cons (car e) lst)) '() expr))
 
 ;; check-terminal checks the structure of an execline program
 ;; and determines whether or not each block consists of zero
@@ -184,68 +184,68 @@
 (define (check-terminal lst)
   (define (any p? lst)
     (and (not (null? lst))
-	 (or (p? (car lst))
-	     (any p? (cdr lst)))))
+         (or (p? (car lst))
+             (any p? (cdr lst)))))
   (define (all p? lst)
     (or (null? lst)
-	(and (p? (car lst))
-	     (all p? (cdr lst)))))
+        (and (p? (car lst))
+             (all p? (cdr lst)))))
 
   (define (tailn n lst)
     (let ((len (length lst)))
       (let loop ((i   len)
-		 (lst lst))
-	(if (or (= i n) (null? lst))
-	  lst
-	  (loop (- i 1) (cdr lst))))))
+                 (lst lst))
+        (if (or (= i n) (null? lst))
+          lst
+          (loop (- i 1) (cdr lst))))))
 
   (define (nonterminal-cmd? lst)
     (define (tailcheck n exe)
       (let ((tail (tailn n (cdr lst))))
-	(unless (= (length tail) n)
-	  (error "wrong number of trailing arguments in command:" lst))
-	(unless (all list? tail)
-	  (error "expected trailing blocks in command:" lst))
-	(unless (or (not exe)
-		    (all check-terminal tail))
-	  (error "block isn't terminal:" lst))))
+        (unless (= (length tail) n)
+          (error "wrong number of trailing arguments in command:" lst))
+        (unless (all list? tail)
+          (error "expected trailing blocks in command:" lst))
+        (unless (or (not exe)
+                    (all check-terminal tail))
+          (error "block isn't terminal:" lst))))
     (case (car lst)
       ((if background foreground backtick
-	forbacktickx trap tryexec pipeline)
+         forbacktickx trap tryexec pipeline)
        (begin
-	 (tailcheck 1 #t) #t))
+         (tailcheck 1 #t) #t))
       ((ifelse ifte)
        (begin
-	 (tailcheck 2 #t) #t))
+         (tailcheck 2 #t) #t))
       ((ifthenelse)
        (begin
-	 (tailcheck 3 #t) #t))
+         (tailcheck 3 #t) #t))
       ((multidefine forx wait)
        (begin
-	 (tailcheck 1 #f) #t))
+         (tailcheck 1 #f) #t))
       ((cd define dollarat elgetopt elgetpositionals
-	   elglob emptyenv envfile exec export fdblock
-	   fdclose fdmove fdreserve fdswap forstdin
-	   getcwd getpid heredoc homeof importas
-	   piperw redirfd runblock shift umask
-	   unexport withstdinas chroot unshare
-	   loopwhilex xargs sudo su nice)
+           elglob emptyenv envfile exec export fdblock
+           fdclose fdmove fdreserve fdswap forstdin
+           getcwd getpid heredoc homeof importas
+           piperw redirfd runblock shift umask
+           unexport withstdinas chroot unshare
+           loopwhilex xargs sudo su nice)
        ;; none of these should have block arguments
        (begin
-	 (when (any list? (cdr lst))
-	   (error "bad non-terminal command syntax" lst))
-	 #t))
+         (when (any list? (cdr lst))
+           (error "bad non-terminal command syntax" lst))
+         #t))
       (else #f)))
 
   (let loop ((head (car lst))
-	     (rest (cdr lst)))
+             (rest (cdr lst)))
     (if (null? rest)
       (begin
-	(when (nonterminal-cmd? head)
-	  (error "expected terminal command:" head))
-	#t)
+        (when (nonterminal-cmd? head)
+          (error "expected terminal command:" head))
+        #t)
       (begin
-	(unless (nonterminal-cmd? head)
-	  (error "expected nonterminal command:" head))
-	(loop (car rest) (cdr rest))))))
+        (unless (nonterminal-cmd? head)
+          (error "expected nonterminal command:" head))
+        (loop (car rest) (cdr rest))))))
 

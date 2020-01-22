@@ -37,7 +37,7 @@
 (: hash-file (string -> (or string false)))
 (define (hash-file fp)
   (let* ((out (make-u8vector 44))
-	 (res (raw-hash-file! out fp)))
+         (res (raw-hash-file! out fp)))
     (cond
       ((= res 0) (buf->string out))
       ((= res 2) #f)
