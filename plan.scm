@@ -322,8 +322,8 @@
     (write
       (list (cons 'inputs inputs)
             (cons 'env (real-env recipe))
-            (cons 'script (call-with-output-string
-                            (cute write-exexpr (recipe-script recipe) <>))))
+            (cons 'script (with-output-to-string
+                            (lambda () (write-exexpr (recipe-script recipe))))))
       out)))
 
 ;; plan-hash returns the canonical hash of a plan,
@@ -336,10 +336,11 @@
                          (cute
                            %write-plan-inputs (plan-inputs p) (plan-recipe p) <>)))
                   (h   (hash-string str))
-                  (ofd (filepath-join (plan-dir) h "inputs.scm"))
-                  (lfd (filepath-join (plan-dir) h "label")))
+                  (dir (filepath-join (plan-dir) h))
+                  (ofd (string-append dir "/inputs.scm"))
+                  (lfd (string-append dir "/label")))
              (unless (file-exists? ofd)
-               (create-directory (dirname ofd) #t)
+               (create-directory dir #t)
                (call-with-output-file ofd (cut write-string str <>))
                (call-with-output-file lfd (cute display (plan-name p) <>)))
              (plan-saved-hash-set! p h)
@@ -524,9 +525,9 @@
     (call-with-output-file
       (filepath-join dst *envfile-path*)
       (cut write-env env <>))
-    (call-with-output-file
+    (with-output-to-file
       (filepath-join dst *buildfile-path*)
-      (cut write-exexpr script <>))
+      (lambda () (write-exexpr script)))
     (set-file-permissions! (filepath-join dst *buildfile-path*) #o744)))
 
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
@@ -671,6 +672,7 @@
 (: build-plan! ((struct plan) #!rest * -> *))
 (define (build-plan! top #!key (rebuild #f))
   (define (do-plan! p)
+    (fatal "refusing rebuild:" (plan-name p))
     (info "building" (plan-name p))
     (save-plan-outputs! p (plan->outputs! p)))
   (plan-dfs

@@ -45,6 +45,7 @@
 	(only (chicken file) file-exists? move-file copy-file create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
 	(only (chicken file posix) file-permissions set-file-permissions! create-symbolic-link file-size)
         (only (chicken base) flatten)
+        (only (chicken port) with-output-to-string)
 	(only (chicken io) read-string write-string)
 	(only (chicken process) process-run process-wait)
 	(only (chicken sort) sort)

@@ -4,7 +4,6 @@
     execline-shebang
     execline-execs
     exec-begin
-    fmt-execline
     execline*)
   (import
     (scheme write)
@@ -16,6 +15,5 @@
     (chicken
       (import
         (chicken bitwise)
-        (chicken type)
-	fmt)))
+        (chicken type))))
   (include "execline.scm"))

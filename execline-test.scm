@@ -9,8 +9,8 @@
   fmt)
 
 (define (exexpr->string expr)
-  (call-with-output-string
-    (cut write-exexpr expr <>)))
+  (with-output-to-string
+    (lambda () (write-exexpr expr))))
 
 (define conf "/etc/sysctl.conf")
 
@@ -39,7 +39,8 @@ EOF
   (execline*
     ;; test string quoting when spaces are present
     (if ((sed -e s/foo/bar/g "s/foo = bar/bar = foo/g" file)))
-    (if ((echo #u8(127 69 76 70))))
+    (ifelse ((echo #u8(127 69 76 70)))
+            ((echo "echo failed")))
     (if ((sysctl -p ,conf)))
     ;; test (lack of) quoting for simple strings
     (forbacktickx file ((pipeline ((elglob extra "/etc/sysctl.d/*.conf")
@@ -55,8 +56,10 @@ EOF
 if {
 	sed -e s/foo/bar/g "s/foo = bar/bar = foo/g" file
 }
-if {
+ifelse {
 	echo "\0x7fELF"
+} {
+	echo "echo failed"
 }
 if {
 	sysctl -p /etc/sysctl.conf
@@ -83,7 +86,7 @@ EOF
   (error "scripts not equal"))
 
 (let ((got (reverse (execline-execs script)))
-      (want '(if sed if echo if sysctl forbacktickx pipeline elglob echo sort importas echo)))
+      (want '(if sed ifelse echo echo if sysctl forbacktickx pipeline elglob echo sort importas echo)))
   (when (not (equal? got want))
     (display "---- exexpr-fold got: ----\n")
     (display got)
