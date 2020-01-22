@@ -24,4 +24,4 @@
   (with-output-to-file
     (conc "prebuilt-"  arch ".scm")
     (lambda ()
-      (write (cons 'quote alist)))))
+      (write (list 'quote alist)))))
