@@ -459,9 +459,8 @@
 ;; or #f if the plan has never been built with its inputs
 (: plan-outputs ((struct plan) -> (or artifact false)))
 (define (plan-outputs p)
-  (let ((saved (plan-saved-output p))
-        (desc  (plan-outputs-file p)))
-    (or saved
+  (or (plan-saved-output p)
+      (let ((desc (plan-outputs-file p)))
         (and desc (file-exists? desc)
              (let ((vec (with-input-from-file desc read)))
                (unless (artifact? vec)
