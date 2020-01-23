@@ -35,7 +35,7 @@
 (define build-config
   (make-parameter
     (table->proc (table `((arch . ,*this-machine*)
-                           (CFLAGS -pipe -fstack-protector-strong -Os))))))
+                          (CFLAGS -pipe -fstack-protector-strong -Os))))))
 
 (define (%check-conf conf)
   (or (memq (conf 'arch) '(x86_64 aarch64 ppc64 ppc64le armv7))
