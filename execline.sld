@@ -6,8 +6,9 @@
     exec-begin
     execline*)
   (import
-    (scheme write)
+    scheme
     (scheme base)
+    (scheme write)
     (srfi 4)
     (srfi 13)
     (srfi 26))

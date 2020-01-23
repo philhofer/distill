@@ -11,6 +11,7 @@
   (only (chicken string) conc))
 
 (import-for-syntax
+  (scheme read)
   (only (chicken string) conc))
 
 ;; this registers the following units as compiled modules
@@ -20,12 +21,26 @@
                (er-macro-transformer
                  (lambda (expr rename cmp)
                    (cons 'begin
-                         (map
-                           (lambda (sym)
-                             `(begin
-                                (include ,(conc sym ".import.scm"))
-                                (declare (uses ,sym))))
-                           (cdr expr)))))))
+                         (cons
+                           `(declare (uses ,@(cdr expr)))
+                           (map
+                             ;; the 'foo.import.scm' files generally contain two expressions;
+                             ;; the first is (eval '(import-syntax ...)) in case syntax definitions
+                             ;; reference imported symbols, and the second is (##sys#register-compiled-module ...);
+                             ;; we're only interested in the second one because we can just import-syntax here
+                             (lambda (sym)
+                               (with-input-from-file
+                                 (conc sym ".import.scm")
+                                 (lambda ()
+                                   (let loop ((expr (read)))
+                                     (cond
+                                       ((eof-object? expr)
+                                        (error "didn't find import module for" sym))
+                                       ((eq? (car expr) '##sys#register-compiled-module)
+                                        expr)
+                                       (else
+                                         (loop (read))))))))
+                             (cdr expr))))))))
   (include-imports
     memo
     execline
@@ -99,8 +114,7 @@
 		    (when (not (eq? v (void)))
 		      (when (>= nv (vector-length sav))
 			(let ((newn (* nv 2)))
-			  (set! sav (vector-resize sav newn #f))
-			  (set! nv newn)))
+			  (set! sav (vector-resize sav newn #f))))
 		      (vector-set! sav nv v)
 		      (set! nv (+ nv 1)))))
 	   (ref   (lambda (n)
