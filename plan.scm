@@ -22,15 +22,6 @@
 (define (short-hash h)
   (substring/shared h 0 6))
 
-(: *this-machine* symbol)
-(define *this-machine*
-  (cond-expand
-    (x86-64 'x86_64)
-    (arm64  'aarch64)
-    (arm    'armv7)
-    ((and ppc64 little-endian) 'ppc64le)
-    ((and ppc64 big-endian) 'ppc64)))
-
 ;; artifact-repr converts an artifact to its
 ;; external representation (which omits metadata
 ;; that doesn't change the contents of the artifact)
@@ -130,19 +121,6 @@
 (define (real-env r)
   (append *default-env* (recipe-env r)))
 
-(define-type conf-lambda (symbol -> *))
-(define-type package-lambda (conf-lambda -> (struct package)))
-
-;; package: a "portable" intermediate representation of a package
-;; that is converted into a plan by combining it with the configuration
-(defstruct package
-  (label : string)                    ;; human-readable name
-  (src : (or artifact (list-of artifact))) ;; where to get the package source
-  (tools : (list-of package-lambda))  ;; build tools (built for host)
-  (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
-  (prebuilt : (or artifact false))    ;; bootstrap replacement binary
-  (build : (struct recipe)))          ;; build script (see execline*)
-
 ;; plan is the lowest-level representation of a "package"
 ;; or other build step; it simply connects itself to other
 ;; inputs plus a recipe for producing the output
@@ -156,7 +134,7 @@
 ;; DO NOT USE SETTERS on this structure; you will invalidate
 ;; the saved-* values that are used to reduce the amount
 ;; of dependency graph traversal necessary to produce plan input and output hashes
-(define-type plan-input-type (or (struct plan) vector))
+(define-type plan-input-type (or (struct plan) artifact))
 (defstruct plan
   (name : string)
   ;; recipe is the code+environment to be executed
@@ -170,12 +148,6 @@
   ((saved-hash #f) : (or false string))
   ((saved-output #f) : (or false vector)))
 
-(define (%plan name recipe inputs)
-  (make-plan
-    #:name       name
-    #:recipe     recipe
-    #:inputs     inputs))
-
 (define-syntax require
   (syntax-rules ()
     ((_ pred? obj)
@@ -186,52 +158,6 @@
      (if (pred? obj)
        obj
        (error msg rest* ...)))))
-
-;; XXX this needs to stay in-sync with base
-(define (sysroot conf)
-  (string-append "/sysroot/"
-                 (symbol->string (conf 'arch))
-                 "-linux-musl"))
-
-;; note here that 'host' is the config for the
-;; machine running the build, and 'target' is
-;; the config for the machines that consumes
-;; build outputs (in GNU 'configure' terminology,
-;; those would be 'build' and 'host,' respectively)
-(: %package->plan (package-lambda conf-lambda conf-lambda -> (struct plan)))
-(define %package->plan
-  (memoize-lambda
-    (pkg-proc host target)
-    (let ((pkg (pkg-proc target)))
-      (or (package-prebuilt pkg)
-          (let* ((->tool (lambda (tool)
-                           (if (artifact? tool)
-                             tool
-                             (%package->plan tool host host))))
-                 (->input (lambda (input)
-                            (if (artifact? input)
-                              input
-                              (%package->plan input host target))))
-                 (tools  (package-tools pkg))
-                 (inputs (package-inputs pkg)))
-            (%plan
-              (require ok-plan-name? (package-label pkg))
-              (package-build pkg)
-              (list
-                ;; build tools live here
-                (cons "/" (flatten (package-src pkg) (map ->tool tools)))
-                ;; host headers+libraries live here
-                (cons (sysroot target) (map ->input inputs)))))))))
-
-;; since we use plans in filepaths, disallow
-;; plans that begin with '.' or contain '/' or whitespace, etc.
-(: ok-plan-name? (string --> boolean))
-(define (ok-plan-name? str)
-  (and (not (eqv? (string-ref str 0) #\.))
-       (not (string-any
-              (lambda (c)
-                (memv c '(#\/ #\space #\newline)))
-              str))))
 
 (: write-env ((list-of pair) port -> void))
 (define (write-env env prt)
@@ -667,6 +593,9 @@
 (define (plan-built? p)
   (and-let* ((out (plan-outputs p)))
     (file-exists?
+      ;; TODO: if we're here, we already know the plan outputs,
+      ;; so we could try to fetch the output from the CDN
+      ;; instead of performing a re-build
       (filepath-join (artifact-dir) (artifact-hash out)))))
 
 (: build-plan! ((struct plan) #!rest * -> *))
@@ -683,55 +612,3 @@
         (do-plan! p)))
     top))
 
-(: build-package! (package-lambda conf-lambda conf-lambda #!rest * -> artifact))
-(define (build-package! proc host target #!key (rebuild #f))
-  (let ((plan (%package->plan proc host target)))
-    (build-plan! plan #:rebuild rebuild)
-    (info (plan-name plan)
-          (short-hash (plan-hash plan))
-          "is" (short-hash (artifact-hash (plan-outputs plan))))
-    (plan-outputs plan)))
-
-;; write-digraph displays the dependency graph for a list of packages
-;; in a format that can be used by the dot(1) tool
-(: write-digraph (conf-lambda conf-lambda #!rest package-lambda -> *))
-(define (write-digraph host target . pkgs)
-  (let* ((plans (map (cut %package->plan <> host target) pkgs))
-         (ht    (make-hash-table))
-         (label (lambda (p)
-                  (string-append (plan-name p) " " (short-hash (plan-hash p)))))
-         (outhash (lambda (p)
-                    (short-hash (artifact-hash (plan-outputs p))))))
-    (display "digraph packages {\n")
-    (for-each
-      (lambda (p)
-        (plan-dfs
-          (lambda (p)
-            (when (and (plan? p)
-                       (not (hash-table-ref/default ht p #f)))
-              (hash-table-set! ht p #t)
-              (write (label p))
-              (display " -> ")
-              (write (outhash p))
-              (display ";\n")
-              (for-each
-                (lambda (in)
-                  (cond
-                    ((plan? in)
-                     (write (outhash in)))
-                    ((artifact? in)
-                     (case (vector-ref (artifact-format in) 0)
-                       ;; try to produce a moderately informative textual representation;
-                       ;; track labels so that bootstrap packages create the appropriate
-                       ;; circular references
-                       ((archive)      (write (or (artifact-extra in)
-                                                  (short-hash (artifact-hash in)))))
-                       ((file symlink) (write (vector-ref (artifact-format in) 1)))
-                       (else           (write (short-hash (artifact-hash in)))))))
-                  (display " -> ")
-                  (write (label p))
-                  (display ";\n"))
-                (apply append (map cdr (plan-inputs p))))))
-          p))
-      plans)
-    (display "}\n")))

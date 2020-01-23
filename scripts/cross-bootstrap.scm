@@ -1,7 +1,8 @@
 (import
   (chicken process-context)
   (chicken string)
-  (log)
+  (package)
+  (eprint)
   (base))
 
 ;; this script builds prebuilt bootstrap binaries
@@ -14,8 +15,8 @@
       (string->symbol (car args)))))
 
 (define build!
-  (config-builder `((arch . ,arch)
-		    (CFLAGS . (-pipe -fstack-protector-strong -Os)))))
+  (config->builder `((arch . ,arch)
+                     (CFLAGS . (-pipe -fstack-protector-strong -Os)))))
 
 (let ((alist `((make .     ,(build! make))
 	       (execline . ,(build! execline-tools))

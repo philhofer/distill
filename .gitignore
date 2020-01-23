@@ -1,4 +1,5 @@
 *.so
+*.mod.scm
 *.import.scm
 *.o
 *.types

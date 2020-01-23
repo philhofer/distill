@@ -1,6 +1,6 @@
 (import
   (hash)
-  (log)
+  (eprint)
   (chicken process-context))
 (for-each
   (lambda (f)

@@ -1,33 +1,17 @@
-;; *build-config* is the configuration used
-;; to build tools for the build machine
-(define *build-config*
-  (table->proc
-    (table
-      `((arch . ,*this-machine*)
-        (CFLAGS -pipe -fstack-protector-strong -Os)))))
 
 (define *prebuilts*
   `((x86_64 . ,(include "prebuilt-x86_64.scm"))
     (aarch64 . ,(include "prebuilt-aarch64.scm"))))
 
-(define (config-builder alist)
-  (let ((conf (table->proc (table alist))))
-    (lambda (pkg)
-      (build-package! pkg *build-config* conf))))
-
 (define (maybe-prebuilt conf ref)
-  (and-let* ((_ (eq? conf *build-config*))
+  (and-let* ((_ (eq? conf (build-config)))
              (c (assq *this-machine* *prebuilts*))
              (c (assq ref (cdr c))))
     (cdr c)))
 
 (define (bootstrap-base!)
-  (let* ((build *build-config*)
-         (target build)
-         ;; this is a bit of a hack: here we get a reference
-         ;; to a global that we set-cdr! on below to override
-         ;; the prebuilts with new prebuilts that we have
-         ;; bootstrapped
+  (let* ((host   (build-config))
+         (build! (config->builder host))
          (built  (assq *this-machine* *prebuilts*))
          (->boot (lambda (pkg)
                    (lambda (conf)
@@ -38,14 +22,13 @@
          (pkgs   `((make . ,(->boot make))
                    (busybox . ,(->boot busybox-core))
                    (execline . ,(->boot execline-tools))
-                   (binutils . ,(->boot (binutils-for-target target)))
-                   (gcc . ,(->boot (gcc-for-target target)))))
+                   (binutils . ,(->boot (binutils-for-target host)))
+                   (gcc . ,(->boot (gcc-for-target host)))))
          (remake! (lambda ()
                     ;; use pkgs to build a new prebuilt alist
                     (map
                       (lambda (p)
-                        (cons (car p)
-                              (build-package! (cdr p) build target)))
+                        (cons (car p) (build! (cdr p))))
                       pkgs)))
          (stable? (lambda (alist)
                     ;; check if the given alist and built alist are equivalent

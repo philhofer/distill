@@ -6,10 +6,11 @@
     (srfi 2)
     (srfi 69)
     (table)
-    (log)
+    (eprint)
     (filepath)
     (memo)
     (plan)
+    (package)
     (execline))
   (cond-expand
     (chicken
@@ -21,7 +22,6 @@
         (only (chicken io) read-string))))
   (export
     bootstrap-base!
-    config-builder
     musl
     libgmp
     libmpfr

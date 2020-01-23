@@ -5,13 +5,33 @@
   (chicken repl)
   (only (chicken read-syntax)
 	set-parameterized-read-syntax!)
-  (only (chicken base) vector-resize)
-  (execline)
-  (hash)
-  (filepath)
-  (log)
-  (plan)
-  (base))
+  (only (chicken base) vector-resize))
+
+(import-for-syntax
+  (only (chicken string) conc))
+
+;; this registers the following units as compiled modules
+;; (and declares that they should be linked in) without
+;; pulling them into the top-level environment
+(let-syntax ((include-imports
+               (er-macro-transformer
+                 (lambda (expr rename cmp)
+                   (cons 'begin
+                         (map
+                           (lambda (sym)
+                             `(begin
+                                (include ,(conc sym ".import.scm"))
+                                (declare (uses ,sym))))
+                           (cdr expr)))))))
+  (include-imports
+    memo
+    execline
+    hash
+    filepath
+    eprint
+    plan
+    package
+    base))
 
 (let ((args (command-line-arguments)))
   (if (null? args)

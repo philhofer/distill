@@ -1,6 +1,5 @@
 (define-library (plan)
   (export
-    *this-machine*
     artifact-dir
     plan-dir
     interned
@@ -10,7 +9,17 @@
     local-archive
     remote-archive
 
+    build-plan!
+    plan?
+    make-plan
+    plan-name
+    plan-hash
+    plan-inputs
+    plan-outputs
+    plan-dfs
+
     short-hash
+    artifact?
     artifact-hash
     artifact-format
     artifact-extra
@@ -18,20 +27,7 @@
     make-recipe
     recipe-env
     recipe-script
-    update-recipe
-    recipe->alist
-    alist->recipe
-    make-package
-    package?
-    package-label
-    package-src
-    package-tools
-    package-inputs
-    package-build
-    package-prebuilt
-    update-package
-    build-package!
-    write-digraph)
+    update-recipe)
 
   ;; for non-r7rs imports, please try to keep
   ;; the requisite imported functions explicit
@@ -51,19 +47,18 @@
 	(only (chicken sort) sort)
 	(typed-records))))
 
-  (import (scheme)
-  	  (scheme base)
-  	  (scheme read)
-          (scheme write)
-	  (scheme case-lambda)
-	  (srfi 2) ;; and-let*
-	  (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
-	  (srfi 26) ;; cut, cute
-	  (srfi 69) ;; hash tables
-	  (memo)
-	  (table)
-	  (filepath)
-	  (log)
-	  (execline)
-	  (hash))
+  (import
+    scheme
+    (scheme base)
+    (scheme read)
+    (scheme write)
+    (srfi 2) ;; and-let*
+    (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
+    (srfi 26) ;; cut, cute
+    (srfi 69) ;; hash tables
+    (memo)
+    (filepath)
+    (eprint)
+    (execline)
+    (hash))
   (include "plan.scm"))
