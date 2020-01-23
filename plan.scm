@@ -601,7 +601,6 @@
 (: build-plan! ((struct plan) #!rest * -> *))
 (define (build-plan! top #!key (rebuild #f))
   (define (do-plan! p)
-    (fatal "refusing rebuild:" (plan-name p))
     (info "building" (plan-name p))
     (save-plan-outputs! p (plan->outputs! p)))
   (plan-dfs

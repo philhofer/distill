@@ -43,5 +43,12 @@
     execline-tools
     gnu-build
     gcc-for-target
-    cc-env)
+    cc-for-target
+    pair->string=
+    sysroot
+    cc-env
+    make-env
+    triple
+    libssp-nonshared
+    makeflags)
   (include "base.scm"))

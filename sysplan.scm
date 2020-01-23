@@ -3,9 +3,12 @@
   (scheme load)
   (chicken process-context)
   (chicken repl)
+  (chicken file)
+  (srfi 69)
   (only (chicken read-syntax)
 	set-parameterized-read-syntax!)
-  (only (chicken base) vector-resize))
+  (only (chicken base) vector-resize)
+  (only (chicken string) conc))
 
 (import-for-syntax
   (only (chicken string) conc))
@@ -32,6 +35,61 @@
     plan
     package
     base))
+
+(import
+  (filepath)
+  (eprint))
+
+(define search-dirs
+  (make-parameter (list ".")))
+
+(define %maybe-load
+  (let* ((loaded (make-hash-table))
+         (load!  (lambda (relpath)
+                   (call/cc
+                     (lambda (ret)
+                       (for-each
+                         (lambda (dir)
+                           (let ((full (filepath-join dir relpath)))
+                             (when (file-exists? full)
+                               (begin (load full) (ret #t)))))
+                         (search-dirs))
+                       #f)))))
+    ;; desc->relpath converts
+    ;;  (foo) -> foo.scm
+    ;;  (foo bar) -> foo/bar.scm
+    ;;  (foo bar baz) -> foo/bar/baz.scm
+    ;; ... and so forth
+    (define (desc->relpath desc)
+      (apply
+        filepath-join
+        (let loop ((lst desc))
+          (if (null? (cdr lst))
+            (cons (conc (car lst) ".scm") '())
+            (cons (car lst) (loop (cdr lst)))))))
+    (lambda (lst)
+      (for-each
+        (lambda (desc)
+          (hash-table-ref loaded desc
+                          (lambda ()
+                            (or (load! (desc->relpath desc))
+                                (fatal "unable to load" desc))
+                            (hash-table-set! loaded desc #t))))
+        lst))))
+
+;; kind of a hack: expose code-loading syntax
+;; through a module available to interpreted code
+(eval
+  `(module (loader)
+     (find-libs)
+     (import
+       scheme)
+     (define-syntax find-libs
+       (er-macro-transformer
+         (lambda (expr rename cmp)
+           (,%maybe-load (cdr expr))
+           (let ((_import (rename 'import)))
+             (cons _import (cdr expr))))))))
 
 (let ((args (command-line-arguments)))
   (if (null? args)

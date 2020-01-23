@@ -8,7 +8,7 @@ CSC_LIBFLAGS:=-regenerate-import-libraries -setup-mode -D compiling-extension \
 SLDS=$(wildcard *.sld)
 MODS=$(SLDS:%.sld=%.mod.scm)
 
-Makefile.dep $(MODS): $(wildcard *.sld) autodep.scm
+Makefile.dep: $(wildcard *.sld) autodep.scm
 	$(R7RSI) -s autodep.scm > Makefile.dep
 
 include Makefile.dep
@@ -31,4 +31,4 @@ test: sysplan $(TESTS)
 all: sysplan ${UNITS:%=%.o}
 
 clean:
-	$(RM) sysplan *.types *.import.scm *.mod.scm *.so *.o *.link
+	$(RM) sysplan Makefile.dep *.types *.import.scm *.mod.scm *.so *.o *.link
