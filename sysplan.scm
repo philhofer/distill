@@ -114,7 +114,8 @@
                          (im (cadddr expr))
                          (_  (form? 'import im)))
                 (scan-imports (cdr im)))
-              (eval expr)))))))
+              (eval expr)
+              (loop (read))))))))
 
 (let ((args (command-line-arguments)))
   (if (null? args)

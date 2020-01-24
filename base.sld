@@ -42,6 +42,7 @@
     busybox-core
     execline-tools
     gnu-build
+    ska-build
     gcc-for-target
     cc-for-target
     pair->string=
