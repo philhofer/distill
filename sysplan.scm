@@ -1,5 +1,6 @@
 (import
   scheme
+  (scheme read)
   (scheme load)
   (chicken process-context)
   (chicken repl)
@@ -7,8 +8,7 @@
   (srfi 69)
   (only (chicken read-syntax)
 	set-parameterized-read-syntax!)
-  (only (chicken base) vector-resize)
-  (only (chicken string) conc))
+  (only (chicken base) vector-resize))
 
 (import-for-syntax
   (scheme read)
@@ -58,53 +58,63 @@
 (define search-dirs
   (make-parameter (list ".")))
 
-(define %maybe-load
-  (let* ((loaded (make-hash-table))
-         (load!  (lambda (relpath)
-                   (call/cc
-                     (lambda (ret)
-                       (for-each
-                         (lambda (dir)
-                           (let ((full (filepath-join dir relpath)))
-                             (when (file-exists? full)
-                               (begin (load full) (ret #t)))))
-                         (search-dirs))
-                       #f)))))
-    ;; desc->relpath converts
-    ;;  (foo) -> foo.scm
-    ;;  (foo bar) -> foo/bar.scm
-    ;;  (foo bar baz) -> foo/bar/baz.scm
-    ;; ... and so forth
-    (define (desc->relpath desc)
-      (apply
-        filepath-join
-        (let loop ((lst desc))
-          (if (null? (cdr lst))
-            (cons (conc (car lst) ".scm") '())
-            (cons (car lst) (loop (cdr lst)))))))
-    (lambda (lst)
-      (for-each
-        (lambda (desc)
-          (hash-table-ref loaded desc
-                          (lambda ()
-                            (or (load! (desc->relpath desc))
-                                (fatal "unable to load" desc))
-                            (hash-table-set! loaded desc #t))))
-        lst))))
+(define (form? head expr)
+  (and (pair? expr) (eq? (car expr) head)))
 
-;; kind of a hack: expose code-loading syntax
-;; through a module available to interpreted code
-(eval
-  `(module (loader)
-     (find-libs)
-     (import
-       scheme)
-     (define-syntax find-libs
-       (er-macro-transformer
-         (lambda (expr rename cmp)
-           (,%maybe-load (cdr expr))
-           (let ((_import (rename 'import)))
-             (cons _import (cdr expr))))))))
+;; load-package loads a package with the given symbol
+;; from (search-dirs)/<sym>.scm, taking care to load
+;; its dependencies in advance by walking the import table
+(define load-package
+  (let ((loaded (make-hash-table)))
+    (lambda (sym)
+      (or (hash-table-ref/default loaded sym #f)
+          (begin
+            (hash-table-set! loaded sym #t)
+            (let ((file (let loop ((dirs (search-dirs)))
+                          (if (null? dirs)
+                            (error "can't find pkg" sym)
+                            (let ((f (filepath-join (car dirs) "pkg" (string-append (symbol->string sym) ".scm"))))
+                              (if (file-exists? f) f (loop (cdr dirs))))))))
+              (with-input-from-file
+                file
+                (lambda ()
+                  (trace "load pkg:" file)
+                  (let ((toplvl (read))
+                        (end    (read)))
+                    (unless (and (form? 'module toplvl)
+                                 (eof-object? end))
+                      (error "expected pkg to be a single (module ...) form" sym))
+                    (let ((modname (cadr toplvl)))
+                      (unless (and (form? 'pkg modname)
+                                   (eq? sym (cadr modname)))
+                        (error "unexpected pkg name" modname)))
+                    (let ((_import (cadddr toplvl)))
+                      (unless (form? 'import _import)
+                        (error "expected module form to be (module (pkg <name>) (...) (import ...) ...)"))
+                      (scan-imports (cdr _import)))
+                    (eval toplvl))))))))))
+
+(define (scan-imports lst)
+  (for-each
+    (lambda (im)
+      (when (and (pair? im) (eq? (car im) 'pkg))
+        (load-package (cadr im))))
+    lst))
+
+(define (%load file)
+  (with-input-from-file
+    file
+    (lambda ()
+      (let loop ((expr (read)))
+        (or (eof-object? expr)
+            (begin
+              (when (form? 'import expr)
+                (scan-imports (cdr expr)))
+              (and-let* ((_  (form? 'module expr))
+                         (im (cadddr expr))
+                         (_  (form? 'import im)))
+                (scan-imports (cdr im)))
+              (eval expr)))))))
 
 (let ((args (command-line-arguments)))
   (if (null? args)
@@ -122,6 +132,7 @@
 		      (vector-ref sav n)
 		      (void))))
 	   (%eval (lambda (expr)
+                    (when (form? 'import expr) (scan-imports (cdr expr)))
 		    (let ((res (eval expr)))
 		      (push! res)
 		      res))))
@@ -139,4 +150,4 @@
     ;; as the command-line-arguments
     (parameterize ((program-name           (car args))
                    (command-line-arguments (cdr args)))
-      (load (car args)))))
+      (%load (car args)))))
