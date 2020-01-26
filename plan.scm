@@ -315,7 +315,7 @@
 (: run (string #!rest string -> undefined))
 (define (run prog . args)
   (trace "run" (cons prog args))
-  (let-values (((pid ok? status) (process-wait (process-run prog args))))
+  (let-values (((pid ok? status) (process-wait/yield (process-run prog args))))
     (unless (and ok? (= status 0))
       (error "command failed:" (cons prog args)))))
 
@@ -597,6 +597,50 @@
       ;; so we could try to fetch the output from the CDN
       ;; instead of performing a re-build
       (filepath-join (artifact-dir) (artifact-hash out)))))
+
+(define (build-graph top #!key (maxprocs 4))
+  (let ((sema (make-semaphore maxprocs))
+        (ht   (make-hash-table test: eq? hash: eq?-hash))
+        (err  #f))
+    (define (input-jobs p)
+      (let loop ((lst (plan-inputs p))
+                 (out '()))
+        (if (null? lst)
+          out
+          (let inner ((lhs (cdar lst))
+                      (out out))
+            (cond
+              ((null? lhs)
+               (loop (cdr lst) out))
+              ((not (plan? (car lhs)))
+               (inner (cdr lhs) out))
+              ((plan-built? (car lhs))
+               (inner (cdr lhs) out))
+              (else
+                (inner (cdr lhs)
+                       (cons (hash-table-ref ht p) out))))))))
+    ;; this bit is executed asynchronously:
+    ;; wait for all input jobs to complete without error,
+    ;; then either a) return if a child exited abnormally,
+    ;; or b) acquire the build semaphore and build the plan
+    (define (do! p)
+      (let loop ((inputs (input-jobs p)))
+        (if (null? inputs)
+          (with-semaphore
+            sema
+            (lambda () (or err
+                           (save-plan-outputs! p (plan->outputs! p)))))
+          (let ((v (join/value (car inputs))))
+            (cond
+              (err err)
+              ((condition? v) (begin (set! err v) err))
+              (else (loop (cdr inputs))))))))
+    (plan-dfs
+      (lambda (p)
+        (when (and (plan? p)
+                   (not (plan-built? p)))
+          (hash-table-set! ht p (spawn do! p))))
+      top)))
 
 (: build-plan! ((struct plan) #!rest * -> *))
 (define (build-plan! top #!key (rebuild #f))

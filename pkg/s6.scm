@@ -22,10 +22,10 @@
                     "uwnwdcxfc7i3LTjeNPcnouhShXzpMPIG0I2AbQfjL_I=")))
     (lambda (conf)
       (make-package
-        #:label  (conc "s6-" (conf 'arch))
-        #:src    src
-        #:tools  (cc-for-target conf)
-        #:inputs (list skalibs execline-tools musl libssp-nonshared)
-        #:build  (ska-build (conc "s6-" version) conf
-                            #:extra-configure `(,(conc '--with-sysdeps= (sysroot conf) "/lib/skalibs/sysdeps")
-                                                 --enable-static-libc))))))
+        label:  (conc "s6-" (conf 'arch))
+        src:    src
+        tools:  (cc-for-target conf)
+        inputs: (list skalibs execline-tools musl libssp-nonshared)
+        build:  (ska-build (conc "s6-" version) conf
+                           extra-configure: `(,(conc '--with-sysdeps= (sysroot conf) "/lib/skalibs/sysdeps")
+                                               --enable-static-libc))))))

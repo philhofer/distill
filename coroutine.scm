@@ -72,7 +72,7 @@
       (pushcont! (queue-pop! q)))))
 
 (: with-semaphore ((vector fixnum pair) (-> 'a) -> 'a))
-(define (with-sempahore s thunk)
+(define (with-semaphore s thunk)
   (semacquire s)
   (let ((v (thunk)))
     (semrelease s)
@@ -130,7 +130,7 @@
 (: %poll (-> undefined))
 (define (%poll)
   (when (= 0 (hash-table-size *wait-tab*))
-    (error "poll but no procs to wait on?"))
+    (error "poll but no procs to wait on?")) ;; implies deadlock
   (let-values (((pid ok status) (process-wait)))
     (let ((target (hash-table-ref/default *wait-tab* pid #f)))
       (if target

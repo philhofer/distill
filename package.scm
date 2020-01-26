@@ -76,13 +76,13 @@
                  (tools  (package-tools pkg))
                  (inputs (package-inputs pkg)))
             (make-plan
-              #:name   (package-label pkg)
-              #:recipe (package-build pkg)
-              #:inputs (list
-                         ;; build tools live here
-                         (cons "/" (flatten (package-src pkg) (map ->tool tools)))
-                         ;; build headers+libraries live here
-                         (cons (sysroot host) (map ->input inputs)))))))))
+              name:   (package-label pkg)
+              recipe: (package-build pkg)
+              inputs: (list
+                        ;; build tools live here
+                        (cons "/" (flatten (package-src pkg) (map ->tool tools)))
+                        ;; build headers+libraries live here
+                        (cons (sysroot host) (map ->input inputs)))))))))
 
 ;; write-digraph displays the dependency graph for a list of packages
 ;; in a format that can be used by the dot(1) tool

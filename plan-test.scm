@@ -39,16 +39,16 @@
   ;; the bootstrap leaf and ensure that the output is
   ;; a valid interned file in the right place
   (let ((p (lambda (conf)
-	     (make-package
-	       #:label  "test-package"
-	       #:src    bootstrap-input
-	       #:inputs '()
-	       #:tools  '()
-	       #:build (make-recipe
-			  #:script (execline*
-				     (redirfd -w 1 /out/out)
-				     (echo hi there!))))))
-	(conf (table->proc (table (list (cons 'arch *this-machine*))))))
+             (make-package
+               label:  "test-package"
+               src:    bootstrap-input
+               inputs: '()
+               tools:  '()
+               build: (make-recipe
+                        script: (execline*
+                                  (redirfd -w 1 /out/out)
+                                  (echo hi there!))))))
+        (conf (table->proc (table (list (cons 'arch *this-machine*))))))
     (let ((out (build-package! p conf conf)))
       (pp out))))
 

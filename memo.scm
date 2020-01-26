@@ -14,7 +14,7 @@
 ;; TODO: something more efficient than an alist?
 (: memoize-eq (forall (a b) ((a -> b) -> (a -> b))))
 (define (memoize-eq proc)
-  (let ((results (make-hash-table #:test eq?)))
+  (let ((results (make-hash-table test: eq? hash: eq?-hash)))
     (lambda (arg)
       (let ((res (hash-table-ref
                    results arg

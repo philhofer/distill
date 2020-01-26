@@ -13,10 +13,10 @@
                     "iyTO0NJ3ype1atS2SbQkeEA24JzbugW3OCxyRQVBBCw=")))
     (lambda (conf)
       (make-package
-        #:label  (conc "flex-" version "-" (conf 'arch))
-        #:src    leaf
+        label:  (conc "flex-" version "-" (conf 'arch))
+        src:    leaf
         ;; NOTE: flex builds some binaries for the build system
         ;; as part of bootstrapping, so it may need 2 C toolchains
-        #:tools  (append (list m4 bison musl) (cc-for-target conf))
-        #:inputs (list musl)
-        #:build  (gnu-build (conc "flex-" version) conf)))))
+        tools:  (append (list m4 bison musl) (cc-for-target conf))
+        inputs: (list musl)
+        build:  (gnu-build (conc "flex-" version) conf)))))

@@ -3,6 +3,7 @@
     make-semaphore
     semacquire
     semrelease
+    with-semaphore
     process-wait/yield
     proc-status
     proc-return
