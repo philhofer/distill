@@ -37,6 +37,10 @@
     (table->proc (table `((arch . ,*this-machine*)
                           (CFLAGS -pipe -fstack-protector-strong -Os))))))
 
+(define (default-config arch)
+  (table->proc (table `((arch . ,arch)
+                        (CFLAGS -pipe -fstack-protector-strong -Os)))))
+
 (define (%check-conf conf)
   (or (memq (conf 'arch) '(x86_64 aarch64 ppc64 ppc64le armv7))
       (error "bad config (unrecognized arch)" (conf 'arch))))
@@ -54,7 +58,8 @@
                   (package->plan pl build host))))
     (lambda args
       (let ((plans (map ->pln args)))
-        (build-graph! plans)
+        (unless (null? plans)
+          (build-graph! plans))
         (map plan-outputs plans)))))
 
 ;; package->plan is the low-level package expansion code;

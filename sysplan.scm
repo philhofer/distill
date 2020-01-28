@@ -2,6 +2,7 @@
   scheme
   (scheme read)
   (scheme load)
+  (chicken eval)
   (chicken process-context)
   (chicken repl)
   (chicken file)
@@ -61,6 +62,11 @@
 (define (form? head expr)
   (and (pair? expr) (eq? (car expr) head)))
 
+;; we re-parameterize 'eval' so
+;; we need to ensure that we're using the right
+;; procedure inside load-package, etc.
+(define real-eval (eval-handler))
+
 ;; load-package loads a package with the given symbol
 ;; from (search-dirs)/<sym>.scm, taking care to load
 ;; its dependencies in advance by walking the import table
@@ -87,9 +93,9 @@
                 file
                 (lambda ()
                   (trace "load pkg:" file)
-                  (eval `(module (pkg ,sym)
-                           (,sym)
-                           ,@(read*)))))))))))
+                  (real-eval `(module (pkg ,sym)
+                                (,sym)
+                                ,@(read*)))))))))))
 
 (define (scan-imports lst)
   (for-each
@@ -111,8 +117,12 @@
                          (im (cadddr expr))
                          (_  (form? 'import im)))
                 (scan-imports (cdr im)))
-              (eval expr)
+              (real-eval expr)
               (loop (read))))))))
+
+(define (child-eval form . rest)
+  (when (form? 'import form) (scan-imports (cdr form)))
+  (apply real-eval form rest))
 
 (let ((args (command-line-arguments)))
   (if (null? args)
@@ -147,5 +157,6 @@
     ;; load the first argument with the remaining args
     ;; as the command-line-arguments
     (parameterize ((program-name           (car args))
-                   (command-line-arguments (cdr args)))
+                   (command-line-arguments (cdr args))
+                   (eval-handler           child-eval))
       (%load (car args)))))

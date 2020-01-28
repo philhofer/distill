@@ -16,6 +16,7 @@
   (export
     *this-machine*
     build-config
+    default-config
     config->builder
     package->stages
     package?
