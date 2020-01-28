@@ -27,7 +27,7 @@
 (define *cont-queue* '(() . ()))
 
 ;; continuations parked on wait(2)
-(define *wait-tab* (make-hash-table #:test = #:hash number-hash))
+(define *wait-tab* (make-hash-table test: = hash: number-hash))
 
 ;; push a continuation onto the tail of the cont-queue
 (: pushcont! (procedure -> undefined))
@@ -53,10 +53,12 @@
       (queue-push! p (lambda () (ret #t)))
       (%yield))))
 
+;; make-semaphore makes a semaphore with value 'n'
 (: make-semaphore (fixnum -> (vector fixnum pair)))
 (define (make-semaphore n)
   (vector n '(() . ())))
 
+;; semacquire decreases the semaphore value by 1
 (: semacquire ((vector fixnum pair) -> undefined))
 (define (semacquire s)
   (let ((v (vector-ref s 0)))
@@ -64,12 +66,45 @@
       (queue-wait! (vector-ref s 1))
       (vector-set! s 0 (- v 1)))))
 
+;; semacquire/n decreases the semaphore value by 'n'
+(: semacquire/n ((vector fixnum pair) fixnum -> undefined))
+(define (semacquire/n s n)
+  (or (<= n 0)
+      (begin (semacquire s) (semacquire/n s (- n 1)))))
+
+;; semacquire/max decreases the semaphore value by
+;; 1 <= value <= num
+;; and returns the amount decreased
+(: semacquire/max ((vector fixnum pair) fixnum -> fixnum))
+(define (semacquire/max s num)
+  (let ((v (vector-ref s 0)))
+    (if (<= v 0)
+      (begin
+        ;; waiting implies we took 1;
+        ;; try to take some more on wakeup
+        (queue-wait! (vector-ref s 1))
+        (let* ((left (vector-ref s 0))
+               (take (min left (- num 1)))
+               (got  (+ 1 take)))
+          (vector-set! s 0 (- left take))
+          got))
+      (let ((take (min num v)))
+        (vector-set! s 0 (- v take))
+        take))))
+
+;; semrelease increases the semaphore value by 1
 (: semrelease ((vector fixnum pair) -> undefined))
 (define (semrelease s)
   (let ((q (vector-ref s 1)))
     (if (null? (car q))
       (vector-set! s 0 (+ (vector-ref s 0) 1))
       (pushcont! (queue-pop! q)))))
+
+;; semrelease/n increases the semaphore value by 'n'
+(: semrelease/n ((vector fixnum pair) fixnum -> undefined))
+(define (semrelease/n s n)
+  (or (<= n 0)
+      (begin (semrelease s) (semrelease/n s (- n 1)))))
 
 (: with-semaphore ((vector fixnum pair) (-> 'a) -> 'a))
 (define (with-semaphore s thunk)
@@ -154,4 +189,3 @@
         (vector-set! proc 2 (cons ret (vector-ref proc 2)))
         (%yield)))
     (proc-return proc)))
-

@@ -18,11 +18,9 @@
   (config->builder `((arch . ,arch)
                      (CFLAGS . (-pipe -fstack-protector-strong -Os)))))
 
-(let ((alist `((make .     ,(build! make))
-	       (execline . ,(build! execline-tools))
-	       (busybox .  ,(build! busybox-core))
-	       (binutils . ,(build! native-binutils))
-	       (gcc .      ,(build! native-gcc)))))
+(let ((alist (map cons
+                  '(make execline busybox binutils gcc)
+                  (build! make execline-tools busybox-core native-binutils native-gcc))))
   (with-output-to-file
     (conc "prebuilt-"  arch ".scm")
     (lambda ()

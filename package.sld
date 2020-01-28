@@ -17,6 +17,7 @@
     *this-machine*
     build-config
     config->builder
+    package->stages
     package?
     make-package
     update-package

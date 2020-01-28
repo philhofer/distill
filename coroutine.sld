@@ -2,7 +2,10 @@
   (export
     make-semaphore
     semacquire
+    semacquire/n
+    semacquire/max
     semrelease
+    semrelease/n
     with-semaphore
     process-wait/yield
     proc-status

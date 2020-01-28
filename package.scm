@@ -44,17 +44,18 @@
 ;; config->builder takes a configuration (as an alist or conf-lambda)
 ;; and returns a function that builds the package
 ;; and yields its output artifact
-(: config->builder ((or (list-of pair) conf-lambda) -> (package-lambda #!rest * -> artifact)))
+(: config->builder ((or (list-of pair) conf-lambda) -> (#!rest package-lambda -> artifact)))
 (define (config->builder env)
-  (let ((host  (if (pair? env)
-                 (table->proc (table env))
-                 (begin (%check-conf env) env)))
-        (build (build-config)))
-    (lambda (pl . rest)
-      (let ((plan (package->plan pl build host)))
-        (trace "building" (plan-name plan))
-        (apply build-plan! plan rest)
-        (plan-outputs plan)))))
+  (let* ((host  (if (pair? env)
+                  (table->proc (table env))
+                  (begin (%check-conf env) env)))
+         (build (build-config))
+         (->pln (lambda (pl)
+                  (package->plan pl build host))))
+    (lambda args
+      (let ((plans (map ->pln args)))
+        (build-graph! plans)
+        (map plan-outputs plans)))))
 
 ;; package->plan is the low-level package expansion code;
 ;; it recursively simplifies packges into plans, taking care
@@ -83,6 +84,11 @@
                         (cons "/" (flatten (package-src pkg) (map ->tool tools)))
                         ;; build headers+libraries live here
                         (cons (sysroot host) (map ->input inputs)))))))))
+
+(: package->stages (conf-lambda package-lambda -> vector))
+(define (package->stages conf root)
+  (let ((plan (package->plan root (build-config) conf)))
+    (compute-stages plan)))
 
 ;; write-digraph displays the dependency graph for a list of packages
 ;; in a format that can be used by the dot(1) tool

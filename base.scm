@@ -25,11 +25,9 @@
                    (binutils . ,(->boot (binutils-for-target host)))
                    (gcc . ,(->boot (gcc-for-target host)))))
          (remake! (lambda ()
-                    ;; use pkgs to build a new prebuilt alist
-                    (map
-                      (lambda (p)
-                        (cons (car p) (build! (cdr p))))
-                      pkgs)))
+                    (let ((lhs (map car pkgs))
+                          (rhs (apply build! (map cdr pkgs))))
+                      (map cons lhs rhs))))
          (stable? (lambda (alist)
                     ;; check if the given alist and built alist are equivalent
                     (let loop ((lst alist))
@@ -201,9 +199,8 @@
                                                --prefix=/usr ,(pair->string= CC)
                                                ,(pair->string= CFLAGS)
                                                --target ,(conf 'arch))))
-                             (if ((backtick -n -D 4 ncpu ((nproc)))
-                                  (importas -u ncpu ncpu)
-                                  (make -j $ncpu ,@(makeflags conf))))
+                             (if ((importas -u "-i" nproc nproc)
+                                  (make -j $nproc ,@(makeflags conf))))
                              (make DESTDIR=/out install)))))))
 
 (define libssp-nonshared
@@ -297,9 +294,8 @@ EOF
               ;; it's helpful (mandatory?) that the script not change
               ;; based on the number of cpus on the host, so we have
               ;; to make that determination in the script itself
-              (if ((backtick -n -D 4 ncpu ((nproc)))
-                   (importas -u ncpu ncpu)
-                   (make -j $ncpu ,@(append
+              (if ((importas -u "-i" nproc nproc)
+                   (make -j $nproc ,@(append
                                       (makeflags target)
                                       make-flags))))
               (if ((make DESTDIR=/out install)))
@@ -440,9 +436,8 @@ EOF
                                   ,(conc "--with-lib=" (filepath-join sysrt "/lib"))
                                   ,(conc "--with-lib=" (filepath-join sysrt "/usr/lib"))
                                   --disable-shared --enable-static ,@extra-configure)))
-                (if ((backtick -n -D 4 ncpu ((nproc)))
-                     (importas -u ncpu ncpu)
-                     (make -j $ncpu ,@(makeflags conf))))
+                (if ((importas -u "-i" nproc nproc)
+                     (make -j $nproc ,@(makeflags conf))))
                 (if ((make DESTDIR=/out install)))
                 ,@(strip-binaries-script conf)))))
 
@@ -705,9 +700,8 @@ EOF
                      (make-recipe
                        script: (execline*
                                  (cd ,(conc "fakemusl-" version))
-                                 (if ((backtick -D 4 -n jflag ((nproc)))
-                                      (importas -u jflag jflag)
-                                      (make -j $jflag
+                                 (if ((importas -u "-i" nproc nproc)
+                                      (make -j $nproc
                                             ,(conc "AS=" target-as)
                                             ,(conc "AR=" target-ar)
                                             all)))
@@ -854,9 +848,8 @@ EOF
                               (export KCONFIG_NOTIMESTAMP 1)
                               ,@(script-apply-patches patches)
                               (if ((mv /src/config.head .config)))
-                              (if ((backtick -n -D 1 jflag ((nproc)))
-                                   (importas -u jflag jflag)
-                                   (make V=1 -j $jflag ,@make-flags busybox)))
+                              (if ((importas -u "-i" nproc nproc)
+                                   (make V=1 -j $nproc ,@make-flags busybox)))
                               (if ((make V=1 busybox.links)))
                               (if ((install -D -m "755" busybox /out/bin/busybox)))
                               (if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))

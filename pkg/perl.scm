@@ -71,9 +71,8 @@
             script: (execline*
                       (cd ,(conc "perl-" version))
                       (if ((./Configure -des ,@configure-flags)))
-                      (if ((backtick -n -D 4 ncpu ((nproc)))
-                           (importas -u ncpu ncpu)
-                           (make -j $ncpu ,@(makeflags conf))))
+                      (if ((importas -u nproc nproc)
+                           (make -j $nproc ,@(makeflags conf))))
                       (if ((make DESTDIR=/out install)))
                       (if ((rm -rf /out/usr/share/man)))
                       (find /out -name ".*" -delete))))))))

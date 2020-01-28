@@ -22,6 +22,10 @@
 (define (short-hash h)
   (substring/shared h 0 6))
 
+(define info-prefix (make-parameter ""))
+
+(define (infoln . args) (apply info (info-prefix) args))
+
 ;; artifact-repr converts an artifact to its
 ;; external representation (which omits metadata
 ;; that doesn't change the contents of the artifact)
@@ -146,7 +150,8 @@
   (inputs : (list-of
               (pair string (list-of plan-input-type))))
   ((saved-hash #f) : (or false string))
-  ((saved-output #f) : (or false vector)))
+  ((saved-output #f) : (or false vector))
+  ((parallel #t) : (or boolean symbol)))
 
 (define-syntax require
   (syntax-rules ()
@@ -348,7 +353,7 @@
 (define (fetch! src hash)
   (let* ((dst (filepath-join (artifact-dir) hash))
          (tmp (string-append dst ".tmp")))
-    (info "  -- fetching" src)
+    (infoln "fetching" src)
     (run "wget" "-q" "-O" tmp src)
     (let ((h (hash-file tmp)))
       (if (string=? h hash)
@@ -378,7 +383,7 @@
            (with-output-to-file outfile (lambda () (write ar)))
            (plan-saved-output-set! p ar)))
         ((equal? old ar)
-         (info "plan for" (plan-name p) "reproduced" (short-hash (plan-hash p))))
+         (infoln "plan for" (plan-name p) "reproduced" (short-hash (plan-hash p))))
         (else
           (fatal "plan for" (plan-name p) "failed to reproduce:" old ar))))))
 
@@ -423,7 +428,7 @@
       (when (not (file-exists? infile))
         (fetch! (or src
                     (begin
-                      (info "  -- trying to fetch" (short-hash hash) "from fallback cdn...")
+                      (infoln "trying to fetch" (short-hash hash) "from fallback cdn...")
                       (string-append (cdn-url) hash)))
                 hash))
       (create-directory dst #t)
@@ -521,7 +526,7 @@
            (dst (filepath-join (artifact-dir) h)))
       (if (and (file-exists? dst) (equal? (hash-file dst) h))
         (begin
-          (info "  -- artifact reproduced:" (short-hash h))
+          (infoln "artifact reproduced:" (short-hash h))
           (delete-file tmp))
         (move-file tmp dst #t 32768))
       (local-archive format h))))
@@ -533,8 +538,8 @@
 ;; all of the input plan's dependencies must
 ;; have been built (i.e. have plan-outputs)
 ;; in order for this to work
-(: plan->outputs! ((struct plan) -> artifact))
-(define (plan->outputs! p)
+(: plan->outputs! ((struct plan) fixnum -> artifact))
+(define (plan->outputs! p nproc)
   (with-tmpdir
     (lambda (root)
       (define outdir (filepath-join root "out"))
@@ -551,7 +556,7 @@
                   (if (plan? in)
                     (or
                       (begin
-                        (info "  -- unpacking output of" (plan-name in))
+                        (infoln "unpacking output of" (plan-name in))
                         (plan-outputs in))
                       (fatal "unbuilt plan prerequisite:" (plan-name in)))
                     in)
@@ -561,7 +566,7 @@
       (write-recipe-to-dir (plan-recipe p) root)
 
       ;; fork+exec into the recipe inside the sandbox
-      (info "  -- running build script ...")
+      (infoln "running build script ...")
       (sandbox-run
         root
         "/bin/emptyenv"
@@ -571,6 +576,7 @@
         "redirfd" "-r" "0" "/dev/null"
         "redirfd" "-w" "1" "/build.log"
         "fdmove" "-c" "2" "1"
+        "export" "nproc" (number->string nproc)
         *buildfile-path*)
 
       ;; save the compressed build log independently
@@ -598,55 +604,118 @@
       ;; instead of performing a re-build
       (filepath-join (artifact-dir) (artifact-hash out)))))
 
-(define (build-graph top #!key (maxprocs 4))
-  (let ((sema (make-semaphore maxprocs))
-        (ht   (make-hash-table test: eq? hash: eq?-hash))
-        (err  #f))
-    (define (input-jobs p)
-      (let loop ((lst (plan-inputs p))
-                 (out '()))
-        (if (null? lst)
-          out
-          (let inner ((lhs (cdar lst))
-                      (out out))
-            (cond
-              ((null? lhs)
-               (loop (cdr lst) out))
-              ((not (plan? (car lhs)))
-               (inner (cdr lhs) out))
-              ((plan-built? (car lhs))
-               (inner (cdr lhs) out))
-              (else
-                (inner (cdr lhs)
-                       (cons (hash-table-ref ht p) out))))))))
-    ;; this bit is executed asynchronously:
-    ;; wait for all input jobs to complete without error,
-    ;; then either a) return if a child exited abnormally,
-    ;; or b) acquire the build semaphore and build the plan
-    (define (do! p)
-      (let loop ((inputs (input-jobs p)))
+(define (input-map proc p)
+  (let loop ((lst (plan-inputs p))
+             (out '()))
+    (if (null? lst)
+      out
+      (let inner ((lhs (cdar lst))
+                  (out out))
+        (cond
+          ((null? lhs)
+           (loop (cdr lst) out))
+          ((not (plan? (car lhs)))
+           (inner (cdr lhs) out))
+          ((plan-built? (car lhs))
+           (inner (cdr lhs) out))
+          (else
+            (inner (cdr lhs)
+                   (cons (proc (car lhs)) out))))))))
+
+(: unbuilt-dfs (((struct plan) -> *) (struct plan) -> *))
+(define (unbuilt-dfs proc p)
+  (plan-dfs
+    (lambda (p)
+      (when (and (plan? p)
+                 (not (plan-built? p)))
+        (proc p)))
+    p))
+
+;; compute-stages assigns stages to the build,
+;; where leaf nodes of the DAG are stage 0,
+;; their dependents are stage 1, and so forth
+(: compute-stages ((list-of (struct plan)) -> vector))
+(define (compute-stages lst)
+  (let ((stage (make-hash-table test: eq? hash: eq?-hash)))
+    (define (stage-of p)
+      (let ((in (input-map
+                  (lambda (inp)
+                    (hash-table-ref stage inp))
+                  p)))
+        (if (null? in) 0 (+ 1 (apply max in)))))
+    (for-each
+      (lambda (p)
+        (unbuilt-dfs
+          (lambda (p)
+            (or (hash-table-ref/default stage p #f)
+                (let ((val (stage-of p)))
+                  (hash-table-set! stage p val))))
+          p))
+      lst)
+    (let* ((endstage (apply max (map (cut hash-table-ref/default stage <> 0) lst)))
+           (vec      (make-vector (+ endstage 1) '())))
+      (hash-table-for-each
+        stage
+        (lambda (p stage)
+          (vector-set! vec stage (cons p (vector-ref vec stage)))))
+      vec)))
+
+(: build-graph! ((list-of (struct plan)) #!rest * -> *))
+(define (build-graph! lst #!key (maxprocs 8))
+  (let ((sema   (make-semaphore maxprocs))
+        (stages (compute-stages lst))
+        (ht     (make-hash-table test: eq? hash: eq?-hash))
+        (err    #f))
+    ;; core build procedure:
+    ;; first, wait for inputs (dependencies) to complete,
+    ;; then either a) return, if there has been an error,
+    ;; or b) acquire up to maxjobs jobs from the semaphore
+    ;; and then execute with that level of intra-build parallelism
+    (define (build-one! p maxjobs)
+      (let loop ((inputs (input-map (cut hash-table-ref ht <>) p)))
         (if (null? inputs)
-          (with-semaphore
-            sema
-            (lambda () (or err
-                           (save-plan-outputs! p (plan->outputs! p)))))
+          ;; by the time all the inputs are built,
+          ;; we may *discover* that this plan is identical
+          ;; to one that is already built; in that case, bail
+          (if (plan-built? p)
+            (plan-outputs p)
+            (let ((jobs (semacquire/max sema maxjobs)))
+              (or err
+                  (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
+                    (infoln "building")
+                    (save-plan-outputs! p (plan->outputs! p jobs))))
+              (semrelease/n sema jobs)))
           (let ((v (join/value (car inputs))))
             (cond
               (err err)
-              ((condition? v) (begin (set! err v) err))
+              ((condition? v) (begin (set! err v) v))
               (else (loop (cdr inputs))))))))
-    (plan-dfs
-      (lambda (p)
-        (when (and (plan? p)
-                   (not (plan-built? p)))
-          (hash-table-set! ht p (spawn do! p))))
-      top)))
+    ;; spawn a builder coroutine for each unbuilt package
+    (let loop ((i 0))
+      (or (>= i (vector-length stages))
+          (let* ((stage (vector-ref stages i))
+                 (slen  (length stage))
+                 (maxp  (max 1 (quotient maxprocs (max slen 1)))))
+            ;; spawn builds for each stage
+            (for-each
+              (lambda (p)
+                (hash-table-set! ht p (spawn build-one! p maxp)))
+              stage)
+            (loop (+ i 1)))))
+    ;; join the arguments
+    (let loop ((lst lst))
+      (or (null? lst)
+          (let ((proc (hash-table-ref/default ht (car lst) #f)))
+            (when proc
+              (join/value proc))
+            (loop (cdr lst)))))
+    (if err (abort err) #t)))
 
 (: build-plan! ((struct plan) #!rest * -> *))
 (define (build-plan! top #!key (rebuild #f))
   (define (do-plan! p)
-    (info "building" (plan-name p))
-    (save-plan-outputs! p (plan->outputs! p)))
+    (infoln "building" (plan-name p))
+    (save-plan-outputs! p (plan->outputs! p 1)))
   (plan-dfs
     (lambda (p)
       (when (and

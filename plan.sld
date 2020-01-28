@@ -10,6 +10,7 @@
     remote-archive
 
     build-plan!
+    build-graph!
     plan?
     make-plan
     plan-name
@@ -23,6 +24,8 @@
     artifact-hash
     artifact-format
     artifact-extra
+
+    compute-stages
 
     make-recipe
     recipe-env
@@ -53,7 +56,7 @@
     (scheme read)
     (scheme write)
     (srfi 2) ;; and-let*
-    (only (srfi 12) condition?)
+    (only (srfi 12) condition? abort)
     (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
     (srfi 26) ;; cut, cute
     (srfi 69) ;; hash tables
