@@ -25,12 +25,7 @@
     artifact-format
     artifact-extra
 
-    compute-stages
-
-    make-recipe
-    recipe-env
-    recipe-script
-    update-recipe)
+    compute-stages)
 
   ;; for non-r7rs imports, please try to keep
   ;; the requisite imported functions explicit
@@ -44,7 +39,6 @@
 	(only (chicken file) file-exists? move-file copy-file create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
 	(only (chicken file posix) file-permissions set-file-permissions! create-symbolic-link file-size)
         (only (chicken base) flatten)
-        (only (chicken port) with-output-to-string)
 	(only (chicken io) read-string write-string)
 	(only (chicken process) process-run process-wait)
 	(only (chicken sort) sort)
@@ -64,6 +58,5 @@
     (filepath)
     (eprint)
     (coroutine)
-    (execline)
     (hash))
   (include "plan.scm"))

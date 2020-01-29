@@ -81,13 +81,16 @@
                               input
                               (package->plan input build host))))
                  (tools  (package-tools pkg))
-                 (inputs (package-inputs pkg)))
+                 (inputs (package-inputs pkg))
+                 (recipe (package-build pkg)))
             (make-plan
               name:   (package-label pkg)
               recipe: (package-build pkg)
               inputs: (list
-                        ;; build tools live here
-                        (cons "/" (flatten (package-src pkg) (map ->tool tools)))
+                        (cons "/" (flatten
+                                    (recipe-envfile recipe)
+                                    (recipe-buildfile recipe)
+                                    (package-src pkg) (map ->tool tools)))
                         ;; build headers+libraries live here
                         (cons (sysroot host) (map ->input inputs)))))))))
 
@@ -96,47 +99,35 @@
   (let ((plan (package->plan root (build-config) conf)))
     (compute-stages plan)))
 
-;; write-digraph displays the dependency graph for a list of packages
-;; in a format that can be used by the dot(1) tool
-(: write-digraph (conf-lambda conf-lambda #!rest package-lambda -> *))
-(define (write-digraph build host . pkgs)
-  (let* ((plans (map (cut package->plan <> build host) pkgs))
-         (ht    (make-hash-table))
-         (label (lambda (p)
-                  (string-append (plan-name p) " " (short-hash (plan-hash p)))))
-         (outhash (lambda (p)
-                    (short-hash (artifact-hash (plan-outputs p))))))
-    (display "digraph packages {\n")
-    (for-each
-      (lambda (p)
-        (plan-dfs
-          (lambda (p)
-            (when (and (plan? p)
-                       (not (hash-table-ref/default ht p #f)))
-              (hash-table-set! ht p #t)
-              (write (label p))
-              (display " -> ")
-              (write (outhash p))
-              (display ";\n")
-              (for-each
-                (lambda (in)
-                  (cond
-                    ((plan? in)
-                     (write (outhash in)))
-                    ((artifact? in)
-                     (case (vector-ref (artifact-format in) 0)
-                       ;; try to produce a moderately informative textual representation;
-                       ;; track labels so that bootstrap packages create the appropriate
-                       ;; circular references
-                       ((archive)      (write (or (artifact-extra in)
-                                                  (short-hash (artifact-hash in)))))
-                       ((file symlink) (write (vector-ref (artifact-format in) 1)))
-                       (else           (write (short-hash (artifact-hash in)))))))
-                  (display " -> ")
-                  (write (label p))
-                  (display ";\n"))
-                (apply append (map cdr (plan-inputs p))))))
-          p))
-      plans)
-    (display "}\n")))
+;; default environment for recipes
+(define *default-env*
+  '((PATH . "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin")
+    (LC_ALL . "C.UTF-8")
+    (SOURCE_DATE_EPOCH . "0")))
 
+(defstruct recipe
+  ((env '()) : (list-of pair))
+  (script : list))
+
+(: real-env ((struct recipe) --> (list-of pair)))
+(define (real-env r)
+  (append *default-env* (recipe-env r)))
+
+(define (recipe-envfile r)
+  (let ((str (call-with-output-string
+               (lambda (oport)
+                 (for-each
+                   (lambda (pr)
+                     (display (car pr) oport)
+                     (display "=" oport)
+                     (display (cdr pr) oport)
+                     (newline oport))
+                   (real-env r))))))
+    (interned
+      "/env" #o644 str)))
+
+(define (recipe-buildfile r)
+  (let ((str (with-output-to-string
+               (lambda () (write-exexpr (recipe-script r))))))
+    (interned
+      "/build" #x744 str)))

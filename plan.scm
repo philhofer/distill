@@ -111,20 +111,6 @@
 (define plan-dir (make-parameter "./plans"))
 (define artifact-dir (make-parameter "./artifacts"))
 
-;; default environment for recipes
-(define *default-env*
-  '((PATH . "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin")
-    (LC_ALL . "C.UTF-8")
-    (SOURCE_DATE_EPOCH . "0")))
-
-(defstruct recipe
-  ((env '()) : (list-of pair))
-  (script : list))
-
-(: real-env ((struct recipe) --> (list-of pair)))
-(define (real-env r)
-  (append *default-env* (recipe-env r)))
-
 ;; plan is the lowest-level representation of a "package"
 ;; or other build step; it simply connects itself to other
 ;; inputs plus a recipe for producing the output
@@ -135,14 +121,17 @@
 ;; or, viewed as code:
 ;; (%package->plan host-conf target-conf (package-lambda target-conf))
 ;;
+;; the entry point for a plan build is the executable "/build"
+;; with the environment from "/env," keeping in mind that
+;; the environment itself is set with /bin/envfile, so you'll
+;; need at least execline-tools in /bin no matter what
+;;
 ;; DO NOT USE SETTERS on this structure; you will invalidate
 ;; the saved-* values that are used to reduce the amount
 ;; of dependency graph traversal necessary to produce plan input and output hashes
 (define-type plan-input-type (or (struct plan) artifact))
 (defstruct plan
   (name : string)
-  ;; recipe is the code+environment to be executed
-  (recipe : (struct recipe))
   ;; inputs are the set of filesystem inputs
   ;; represented as an alist of root directories
   ;; and contents to be extracted relative to those roots
@@ -163,16 +152,6 @@
      (if (pred? obj)
        obj
        (error msg rest* ...)))))
-
-(: write-env ((list-of pair) port -> void))
-(define (write-env env prt)
-  (for-each
-    (lambda (p)
-      (display (car p) prt)
-      (display "=" prt)
-      (display (cdr p) prt)
-      (newline prt))
-    env))
 
 ;; not defined in R7RS, but trivial enough to implement
 (: call-with-output-string ((output-port -> *) -> string))
@@ -205,9 +184,8 @@
 (: %write-plan-inputs
    ((list-of
       (pair string (list-of plan-input-type)))
-    (struct recipe)
     output-port -> undefined))
-(define (%write-plan-inputs inputs recipe out)
+(define (%write-plan-inputs inputs out)
   (define (->artifact in)
     (if (plan? in)
       (or (plan-outputs in)
@@ -250,12 +228,7 @@
   ;; have the code that generated them (as long as
   ;; we have the original artifacts)
   (let ((inputs (sort (cons*-inputs inputs '()) art<?)))
-    (write
-      (list (cons 'inputs inputs)
-            (cons 'env (real-env recipe))
-            (cons 'script (with-output-to-string
-                            (lambda () (write-exexpr (recipe-script recipe))))))
-      out)))
+    (write inputs out)))
 
 ;; plan-hash returns the canonical hash of a plan,
 ;; or #f if any of its inputs have unknown outputs
@@ -265,7 +238,7 @@
       (and (plan-resolved? p)
            (let* ((str (call-with-output-string
                          (cute
-                           %write-plan-inputs (plan-inputs p) (plan-recipe p) <>)))
+                           %write-plan-inputs (plan-inputs p) <>)))
                   (h   (hash-string str))
                   (dir (filepath-join (plan-dir) h))
                   (ofd (string-append dir "/inputs.scm"))
@@ -409,11 +382,15 @@
 (define (unpack! i dst)
 
   (define (unpack-file dst abspath mode hash content)
-    (let ((dstfile (filepath-join dst abspath)))
+    (let ((dstfile (filepath-join dst abspath))
+          (artfile (filepath-join (artifact-dir) hash)))
+      ;; if this file data is inlined, save it to artifacts/
+      ;; so that the plan can be reproduced even if we don't
+      ;; necessarily have access to the inlined data any more
+      (when (and content (not (file-exists? artfile)))
+        (with-output-to-file artfile (lambda () (write-string content))))
       (create-directory (dirname dstfile) #t)
-      (if content
-        (with-output-to-file dstfile (lambda () (write-string content)))
-        (copy-file (filepath-join (artifact-dir) hash) dstfile))
+      (copy-file (filepath-join (artifact-dir) hash) dstfile)
       (set-file-permissions! dstfile mode)))
 
   (define (unpack-archive dst kind hash src)
@@ -449,52 +426,12 @@
 (define *envfile-path* "/env")
 (define *buildfile-path* "/build")
 
-(: write-recipe-to-dir ((struct recipe) string -> *))
-(define (write-recipe-to-dir r dst)
-  (let ((script (recipe-script r))
-        (env    (real-env r)))
-    (call-with-output-file
-      (filepath-join dst *envfile-path*)
-      (cut write-env env <>))
-    (with-output-to-file
-      (filepath-join dst *buildfile-path*)
-      (lambda () (write-exexpr script)))
-    (set-file-permissions! (filepath-join dst *buildfile-path*) #o744)))
-
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
 (define (with-tmpdir proc)
   (let* ((dir (create-temporary-directory))
          (res (proc dir)))
     (delete-directory dir #t)
     res))
-
-(define *max-inline-file-size* 128)
-
-(define (%file->string f)
-  (call-with-input-file
-    f
-    (lambda (p)
-      (let ((v (read-string #f p)))
-        (if (eof-object? v) "" v)))))
-
-;; %intern! interns an ordinary file
-;; and returns the interned-file handle
-(: %intern! (string string -> artifact))
-(define (%intern! f abspath)
-  (if (< (file-size f) *max-inline-file-size*)
-    (let ((str (%file->string f)))
-      (interned abspath (file-permissions f) str))
-    (let* ((h   (hash-file f))
-           (dst (filepath-join (artifact-dir) h)))
-      (begin
-        ;; TODO: this could be really slow for
-        ;; many/large outputs; there is some serious
-        ;; room for optimization here...
-        (unless (file-exists? dst)
-          (copy-file f dst #t 32768)
-          (set-file-permissions! dst #o600))
-        (%local-file abspath (file-permissions f) h)))))
-
 
 (: dir->artifact (string -> artifact))
 (define (dir->artifact dir)
@@ -543,8 +480,6 @@
   (with-tmpdir
     (lambda (root)
       (define outdir (filepath-join root "out"))
-      ;; unpack plan inputs and turn the recipe
-      ;; into executables
       (trace "building in root" root)
       (create-directory outdir #t)
       (for-each
@@ -563,7 +498,6 @@
                   dir))
               (cdr p))))
         (plan-inputs p))
-      (write-recipe-to-dir (plan-recipe p) root)
 
       ;; fork+exec into the recipe inside the sandbox
       (infoln "running build script ...")
@@ -626,9 +560,9 @@
 (define (unbuilt-dfs proc p)
   (plan-dfs
     (lambda (p)
-      (when (and (plan? p)
-                 (not (plan-built? p)))
-        (proc p)))
+      (and (plan? p)
+           (or (plan-built? p)
+               (proc p))))
     p))
 
 ;; compute-stages assigns stages to the build,
@@ -683,8 +617,10 @@
               (or err
                   (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
                     (infoln "building")
-                    (save-plan-outputs! p (plan->outputs! p jobs))))
-              (semrelease/n sema jobs)))
+                    (save-plan-outputs! p (plan->outputs! p jobs))
+                    (infoln "completed")))
+              (semrelease/n sema jobs)
+              #t))
           (let ((v (join/value (car inputs))))
             (cond
               (err err)
@@ -718,9 +654,7 @@
     (save-plan-outputs! p (plan->outputs! p 1)))
   (plan-dfs
     (lambda (p)
-      (when (and
-              (plan? p)
-              (or (not (plan-built? p)) (and (eq? p top) rebuild)))
+      (when (or (not (plan-built? p)) (and (eq? p top) rebuild))
         (do-plan! p)))
     top))
 

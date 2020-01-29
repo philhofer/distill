@@ -1,8 +1,9 @@
 (import
   scheme
-  (only (package) make-package)
+  (only (package)
+        make-package
+        make-recipe)
   (only (plan)
-        make-recipe
         fetch-remote-file!)
   (only (chicken string) conc)
   (only (base)

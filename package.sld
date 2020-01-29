@@ -7,11 +7,15 @@
     (memo)
     (table)
     (eprint)
+    (execline)
     (plan))
   (cond-expand
     (chicken (import
                (chicken type)
                typed-records
+               (only (chicken port)
+                     with-output-to-string
+                     call-with-output-string)
                (only (chicken base) flatten))))
   (export
     *this-machine*
@@ -26,5 +30,10 @@
     package-tools
     package-inputs
     package-build
-    package-prebuilt)
+    package-prebuilt
+    make-recipe
+    update-recipe
+    recipe?
+    recipe-env
+    recipe-script)
   (include "package.scm"))
