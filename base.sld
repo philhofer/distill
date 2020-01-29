@@ -37,6 +37,7 @@
     skalibs
     binutils-for-target
     gcc-for-target
+    native-toolchain
     native-binutils
     native-gcc
     busybox-core
@@ -48,6 +49,7 @@
     pair->string=
     sysroot
     cc-env
+    cc-env/kbuild
     make-env
     triple
     libssp-nonshared

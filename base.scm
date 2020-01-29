@@ -126,6 +126,20 @@
       (CXXFLAGS_FOR_BUILD . ,need-cflags)
       (LDFLAGS_FOR_BUILD  . ,need-ldflags))))
 
+;; cc-env/kbuild translates cc-env/build into
+;; the makefile variables that Kbuild understands...
+(define (cc-env/kbuild)
+  (let ((chomp (string-length "_FOR_BUILD")))
+    (map
+      (lambda (p)
+        (cons
+          (let ((old (symbol->string (car p))))
+            (string->symbol
+              (string-append "HOST"
+                             (substring old 0 (- (string-length old) chomp)))))
+          (cdr p)))
+      cc-env/build)))
+
 (define (apply-conc x)
   (if (list? x)
     (if (null? x)
@@ -169,6 +183,7 @@
     (lambda (target)
       (lambda (host)
         (make-package
+          parallel: #f
           label: (conc "musl-headers-" *musl-version* "-" (target 'arch))
           src:   *musl-src*
           tools: (list make execline-tools busybox-core)
@@ -206,6 +221,7 @@
 (define libssp-nonshared
   (lambda (conf)
     (make-package
+      parallel: #f
       label:   (conc "libssp-nonshared-" (conf 'arch))
       tools:   (cc-for-target conf)
       inputs:  '()

@@ -20,7 +20,8 @@
   (tools : (list-of package-lambda))  ;; build tools (built for host)
   (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
   (prebuilt : (or artifact false))    ;; bootstrap replacement binary
-  (build : (struct recipe)))          ;; build script (see execline*)
+  (build : (struct recipe))           ;; build script (see execline*)
+  ((parallel #t) : boolean))
 
 ;; XXX this needs to stay in-sync with base
 (: sysroot (conf-lambda --> string))
