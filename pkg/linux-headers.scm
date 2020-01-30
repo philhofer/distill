@@ -1,5 +1,6 @@
 (import
   scheme
+  (scheme base)
   (base)
   (plan)
   (package)
@@ -18,7 +19,15 @@
                       (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" version "." patchlvl ".xz")
                       "DclHfO37RNB0C0ffq15VHvPY1a88IdSPP-3gZ1HLL6w="
                       "/src/linux.patch"
-                      #o644))))
+                      #o644)))
+         (arch-name (lambda (arch)
+                      (case arch
+                        ((x86_64)        'x86_64)
+                        ((x86)           'i386)
+                        ((ppc64 ppc64le) 'powerpc)
+                        ((aarch64)       'arm64)
+                        ((armv7)         'arm)
+                        (else (error "unrecognized arch" arch))))))
     (lambda (conf)
       (make-package
         parallel: #f
@@ -32,7 +41,7 @@
                             (cd ,(conc "linux-" version))
                             (if ((pipeline ((xzcat /src/linux.patch)))
                                  (patch -p1)))
-                            (if ((make ,(conc 'ARCH= (conf 'arch))
+                            (if ((make ,(conc 'ARCH= (arch-name (conf 'arch)))
                                   ,@(map pair->string= (cc-env/kbuild))
                                   headers)))
                             ;; headers_install uses rsync, which is a
