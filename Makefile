@@ -1,6 +1,6 @@
 
 R7RSI:=csi
-CSC_FLAGS:=-O3 -disable-interrupts -d1 -clustering
+CSC_FLAGS:=-O3 -disable-interrupts -clustering
 R7RSC:=csc $(CSC_FLAGS)
 CSC_LIBFLAGS:=-regenerate-import-libraries -setup-mode -D compiling-extension \
 	-D compiling-static-extension -static -J

@@ -17,6 +17,7 @@
     plan-inputs
     plan-outputs
     plan-dfs
+    load-plan
 
     short-hash
     artifact?

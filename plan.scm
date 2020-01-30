@@ -625,14 +625,36 @@
             (loop (cdr lst)))))
     (if err (abort err) #t)))
 
-(: build-plan! ((struct plan) #!rest * -> *))
-(define (build-plan! top #!key (rebuild #f))
-  (define (do-plan! p)
-    (infoln "building" (plan-name p))
-    (save-plan-outputs! p (plan->outputs! p 1)))
-  (plan-dfs
-    (lambda (p)
-      (when (or (not (plan-built? p)) (and (eq? p top) rebuild))
-        (do-plan! p)))
-    top))
+;; build-plan! unconditionally builds a plan
+;; and produces its output artifact
+;; (it does not save the output)
+(: build-plan! ((struct plan) -> artifact))
+(define (build-plan! top)
+  (unless (plan-resolved? top)
+    (error "called build-plan! on unresolved plan"))
+  (plan->outputs! top 8))
 
+;; load-plan loads an old plan from the plan directory
+(: load-plan (string -> (struct plan)))
+(define (load-plan hash)
+  (let* ((label   (with-input-from-file
+                    (filepath-join (plan-dir) hash "label")
+                    read-string))
+         (vinput  (with-input-from-file
+                    (filepath-join (plan-dir) hash "inputs.scm")
+                    read))
+         (vec->in (lambda (v)
+                    (cons (vector-ref v 0)
+                          (list
+                            (vector
+                              (vector-ref v 1)
+                              (vector-ref v 2)
+                              #f)))))
+         (inputs  (map vec->in vinput))
+         (plan    (make-plan
+                    name:   label
+                    inputs: inputs))
+         (newhash (plan-hash plan)))
+    (unless (string=? newhash hash)
+      (error "loaded plan has different hash:" newhash))
+    plan))
