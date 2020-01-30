@@ -55,6 +55,7 @@
     (srfi 26) ;; cut, cute
     (srfi 69) ;; hash tables
     (memo)
+    (nproc)
     (filepath)
     (eprint)
     (coroutine)

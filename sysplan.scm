@@ -44,6 +44,7 @@
                              (cdr expr))))))))
   (include-imports
     memo
+    nproc
     execline
     hash
     filepath

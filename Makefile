@@ -1,6 +1,6 @@
 
 R7RSI:=csi
-CSC_FLAGS:=-O3 -disable-interrupts -clustering
+CSC_FLAGS:=-O3 -disable-interrupts -d1 -clustering
 R7RSC:=csc $(CSC_FLAGS)
 CSC_LIBFLAGS:=-regenerate-import-libraries -setup-mode -D compiling-extension \
 	-D compiling-static-extension -static -J
@@ -14,7 +14,7 @@ Makefile.dep: $(wildcard *.sld) autodep.scm
 include Makefile.dep
 
 # these are the translation units that make up the final binary
-UNITS:=hash table plan package execline filepath eprint memo base
+UNITS:=hash nproc table plan package execline filepath eprint memo base
 
 %.import.scm %.o:
 	$(R7RSC) $(CSC_LIBFLAGS) -unit $* -ot $*.types -c $< -o $*.o

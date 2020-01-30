@@ -573,7 +573,7 @@
       vec)))
 
 (: build-graph! ((list-of (struct plan)) #!rest * -> *))
-(define (build-graph! lst #!key (maxprocs 8))
+(define (build-graph! lst #!key (maxprocs (nproc)))
   (let ((sema   (make-semaphore maxprocs))
         (stages (compute-stages lst))
         (ht     (make-hash-table test: eq? hash: eq?-hash))
@@ -632,7 +632,8 @@
 (define (build-plan! top)
   (unless (plan-resolved? top)
     (error "called build-plan! on unresolved plan"))
-  (plan->outputs! top 8))
+  (infoln "building" (plan-name top))
+  (plan->outputs! top (nproc)))
 
 ;; load-plan loads an old plan from the plan directory
 (: load-plan (string -> (struct plan)))
