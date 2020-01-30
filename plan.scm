@@ -54,7 +54,7 @@
     hash
     src))
 
-(: remote-file (string string string fixnum --> artifact))
+(: remote-file ((or false string) string string fixnum --> artifact))
 (define (remote-file src hash abspath mode)
   (%artifact
     `#(file ,abspath ,mode)

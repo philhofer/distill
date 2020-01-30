@@ -833,8 +833,10 @@ EOF
       ;; NOTE: the busybox config we've selected here is carefully
       ;; chosen so as not to require any linux headers; otherwise
       ;; we'd have to bring in a kernel source tree and perl (shudders)
-      (let* ((small-config (interned "/src/config.head" #o644
-                                     (include-file-text "patches/busybox/config-small")))
+      (let* ((small-config (remote-file
+                             #f
+                             "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k="
+                             "/src/config.head" #o644))
              (cenv         (cc-env conf))
              (patches      (patch*
                              (include-file-text "patches/busybox/busybox-bc.patch")))
