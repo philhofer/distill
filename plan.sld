@@ -4,10 +4,9 @@
     plan-dir
     interned
     interned-symlink
-    import-archive!
-    fetch-remote-file!
     local-archive
     remote-archive
+    remote-file
 
     build-plan!
     build-graph!

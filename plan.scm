@@ -1,5 +1,3 @@
-
-
 ;; artifacts are just vectors
 ;;
 ;; note that artifact-extra must not contain
@@ -56,27 +54,12 @@
     hash
     src))
 
-(: fetch-remote-file! (string string string integer -> artifact))
-(define (fetch-remote-file! src hash abspath mode)
-  (unless (file-exists? (filepath-join (artifact-dir) hash))
-    (fetch! src hash))
-  (%local-file abspath mode hash))
-
-;; import-archive! imports an archive from
-;; a given location in the filesystem by
-;; symlinking it into the artifacts directory
-(: import-archive! (string -> artifact))
-(define (import-archive! path)
-  (let ((h    (hash-file path))
-        (kind (impute-format path)))
-    (unless h (fatal "file doesn't exist:" path))
-    (let ((artpath (filepath-join (artifact-dir) h)))
-      (or (file-exists? artpath)
-          (copy-file path (abspath artpath) #f 32768))
-      (%artifact
-        `#(archive ,kind)
-        h
-        #f))))
+(: remote-file (string string string fixnum --> artifact))
+(define (remote-file src hash abspath mode)
+  (%artifact
+    `#(file ,abspath ,mode)
+    hash
+    (cons 'remote src)))
 
 (: local-archive (symbol string --> artifact))
 (define (local-archive kind hash)
@@ -85,19 +68,12 @@
     hash
     #f))
 
-(: %local-file (string integer string --> artifact))
-(define (%local-file abspath mode hash)
-  (%artifact
-    `#(file ,abspath ,mode)
-    hash
-    #f))
-
 (: interned (string integer string --> artifact))
 (define (interned abspath mode contents)
   (%artifact
     `#(file ,abspath ,mode)
     (hash-string contents)
-    contents))
+    (cons 'inline contents)))
 
 (: interned-symlink (string string --> vector))
 (define (interned-symlink abspath lnk)
@@ -322,9 +298,12 @@
     "--"
     args))
 
-(: fetch! (string string -> *))
+(: fetch! ((or false string) string -> *))
 (define (fetch! src hash)
-  (let* ((dst (filepath-join (artifact-dir) hash))
+  (let* ((url (or src (begin
+                        (infoln "trying to fetch" (short-hash hash) "from fallback CDN")
+                        (string-append (cdn-url) hash))))
+         (dst (filepath-join (artifact-dir) hash))
          (tmp (string-append dst ".tmp")))
     (infoln "fetching" src)
     (run "wget" "-q" "-O" tmp src)
@@ -376,19 +355,25 @@
 (define cdn-url (make-parameter
                   "https://b2cdn.sunfi.sh/file/pub-cdn/"))
 
-;; unpack! installs a plan input into the
-;; given destination directory
+;; unpack! unpacks an artifact at a given root directory
 (: unpack! (artifact string -> *))
 (define (unpack! i dst)
 
   (define (unpack-file dst abspath mode hash content)
     (let ((dstfile (filepath-join dst abspath))
           (artfile (filepath-join (artifact-dir) hash)))
-      ;; if this file data is inlined, save it to artifacts/
-      ;; so that the plan can be reproduced even if we don't
-      ;; necessarily have access to the inlined data any more
-      (when (and content (not (file-exists? artfile)))
-        (with-output-to-file artfile (lambda () (write-string content))))
+      ;; ensure that the file is present in artifacts/
+      ;; before copying it into the destination
+      (when (not (file-exists? artfile))
+        (match content
+          (`(inline . ,content)
+           (with-output-to-file artfile (lambda () (write-string content))))
+          (`(remote . ,url)
+           (fetch! url hash))
+          (#f
+           (fetch! #f hash))
+          (else
+            (error "unrecognized file content spec:" content))))
       (create-directory (dirname dstfile) #t)
       (copy-file (filepath-join (artifact-dir) hash) dstfile)
       (set-file-permissions! dstfile mode)))
@@ -403,11 +388,7 @@
                   (else (error "unknown/unsupported archive kind" kind))))
           (infile  (filepath-join (artifact-dir) hash)))
       (when (not (file-exists? infile))
-        (fetch! (or src
-                    (begin
-                      (infoln "trying to fetch" (short-hash hash) "from fallback cdn...")
-                      (string-append (cdn-url) hash)))
-                hash))
+        (fetch! src hash))
       (create-directory dst #t)
       (run "tar" comp "-xkf" infile "-C" dst)))
 
@@ -422,9 +403,6 @@
       (#('archive kind)        (unpack-archive dst kind hash extra))
       (#('symlink abspath lnk) (unpack-symlink dst abspath lnk))
       (else (error "unrecognized artifact format" format)))))
-
-(define *envfile-path* "/env")
-(define *buildfile-path* "/build")
 
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
 (define (with-tmpdir proc)
@@ -504,14 +482,14 @@
       (sandbox-run
         root
         "/bin/emptyenv"
-        "/bin/envfile" *envfile-path*
+        "/bin/envfile" "/env"
         ;; close stdin and redirect stdin+stderr to a log file
         ;; (otherwise builds just get really noisy in the terminal)
         "redirfd" "-r" "0" "/dev/null"
         "redirfd" "-w" "1" "/build.log"
         "fdmove" "-c" "2" "1"
         "export" "nproc" (number->string nproc)
-        *buildfile-path*)
+        "/build")
 
       ;; save the compressed build log independently
       ;; (it's not 'reproduced' as such) and delete

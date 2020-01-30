@@ -4,7 +4,7 @@
         make-package
         make-recipe)
   (only (plan)
-        fetch-remote-file!)
+        remote-file)
   (only (chicken string) conc)
   (only (base)
         cc-env
@@ -19,7 +19,7 @@
   (lambda (conf)
     (make-package
       label:  (conc "ssl-client-" (conf 'arch))
-      src:    (fetch-remote-file!
+      src:    (remote-file
                 "https://raw.githubusercontent.com/alpinelinux/aports/bb3bc00f304cb4f0611d45555d124221d365bdce/main/busybox/ssl_client.c"
                 "l6ULeIMMPl9KsPmufaCZH0W94xBheoS5k1u5a-56zUU="
                 "/src/ssl_client.c"

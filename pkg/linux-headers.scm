@@ -15,7 +15,7 @@
                     (remote-archive
                       (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-" version ".tar.xz")
                       "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
-                    (fetch-remote-file!
+                    (remote-file
                       (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" version "." patchlvl ".xz")
                       "DclHfO37RNB0C0ffq15VHvPY1a88IdSPP-3gZ1HLL6w="
                       "/src/linux.patch"
