@@ -591,7 +591,7 @@
           ;; to one that is already built; in that case, bail
           (if (plan-built? p)
             (plan-outputs p)
-            (let ((jobs (semacquire/max sema maxjobs)))
+            (let ((jobs (semacquire/max sema (if (plan-parallel p) maxjobs 1))))
               (or err
                   (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
                     (infoln "building")

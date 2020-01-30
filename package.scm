@@ -84,6 +84,7 @@
                  (inputs (package-inputs pkg))
                  (recipe (package-build pkg)))
             (make-plan
+              parallel: (package-parallel pkg)
               name:   (package-label pkg)
               recipe: (package-build pkg)
               inputs: (list
