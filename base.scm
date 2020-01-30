@@ -352,6 +352,11 @@ EOF
         native-gcc
         native-binutils))
 
+(define (native-toolchain-for conf)
+  (if (eq? (conf 'arch) *this-machine*)
+    (list musl libssp-nonshared)
+    (list native-gcc native-binutils musl libssp-nonshared)))
+
 (define libgmp
   (let* ((version '6.1.2)
          (leaf    (remote-archive
@@ -361,9 +366,9 @@ EOF
       (make-package
         label:  (conc "gmp-" version "-" (conf 'arch))
         src:    leaf
-        tools:  (+cross
-                  conf (cons m4 (cc-for-target conf))
-                  (native-toolchain))
+        tools:  (append
+                  (cons m4 (cc-for-target conf))
+                  (native-toolchain-for conf))
         inputs: libc
         build:  (gnu-build (conc "gmp-" version) conf
                            pre-configure:
@@ -852,13 +857,9 @@ EOF
           prebuilt: (maybe-prebuilt conf 'busybox)
           label:  (conc "busybox-core-" version "-" (conf 'arch))
           src:    (cons* small-config leaf patches)
-          tools:  (cons bzip2
-                        (append
-                          (cc-for-target conf)
-                          ;; add a native toolchain if it isn't already implied
-                          (if (eq? (conf 'arch) *this-machine*)
-                            libc
-                            (native-toolchain))))
+          tools:  (append
+                    (cons bzip2 (cc-for-target conf))
+                    (native-toolchain-for conf))
           inputs: libc
           build:  (make-recipe
                     script: (execline*

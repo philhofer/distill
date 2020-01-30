@@ -37,6 +37,7 @@
     skalibs
     binutils-for-target
     gcc-for-target
+    native-toolchain-for
     native-toolchain
     native-binutils
     native-gcc
@@ -49,10 +50,12 @@
     pair->string=
     sysroot
     cc-env
+    cc-env/build
     cc-env/kbuild
     make-env
     triple
     libssp-nonshared
     makeflags
+    +cross
     config-prepend)
   (include "base.scm"))
