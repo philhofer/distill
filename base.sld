@@ -57,5 +57,6 @@
     libssp-nonshared
     makeflags
     +cross
+    script-apply-patches
     config-prepend)
   (include "base.scm"))

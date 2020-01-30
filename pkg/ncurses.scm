@@ -51,8 +51,10 @@
                                                   ,@(build-env-lines)))
                   ;; lib*w.a are source-compatible with lib*.a
                   post-install: (let ((libs '(ncurses form panel menu)))
-                                  (map
-                                    (lambda (lib)
-                                      `(if ((ln -s ,(conc "lib" lib "w.a") ,(conc "/out/usr/lib/lib" lib ".a")))))
-                                    libs)))))))
+                                  (cons
+                                    `(if ((ln -s libncurses.a /out/usr/lib/libcurses.a)))
+                                    (map
+                                      (lambda (lib)
+                                        `(if ((ln -s ,(conc "lib" lib "w.a") ,(conc "/out/usr/lib/lib" lib ".a")))))
+                                      libs))))))))
 
