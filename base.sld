@@ -53,5 +53,6 @@
     make-env
     triple
     libssp-nonshared
-    makeflags)
+    makeflags
+    config-prepend)
   (include "base.scm"))
