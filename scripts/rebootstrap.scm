@@ -1,4 +1,4 @@
 (import
-  (base))
+  (distill base))
 
 (bootstrap-base!)

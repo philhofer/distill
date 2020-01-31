@@ -1,4 +1,4 @@
-(define-library (memo)
+(define-library (distill memo)
   (import
     (scheme base)
     (srfi 2)

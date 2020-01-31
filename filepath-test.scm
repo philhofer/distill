@@ -5,7 +5,7 @@
 
 (import
   (only (chicken process-context) current-directory)
-  (filepath))
+  (distill filepath))
 
 (include "test-helpers.scm")
 

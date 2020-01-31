@@ -4,7 +4,7 @@
 *.o
 *.types
 *.link
-sysplan
+distill
 Makefile.dep
 artifacts/
 plans/

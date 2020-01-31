@@ -1,4 +1,4 @@
-(define-library (coroutine)
+(define-library (distill coroutine)
   (export
     make-semaphore
     semacquire
@@ -17,7 +17,7 @@
     (scheme base)
     (srfi 12)
     (srfi 69)
-    (eprint))
+    (distill eprint))
   (cond-expand
     (chicken (import
                (chicken type)

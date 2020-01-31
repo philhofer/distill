@@ -1,8 +1,8 @@
 (import
   scheme
-  (plan)
-  (package)
-  (base)
+  (distill plan)
+  (distill package)
+  (distill base)
   (only (chicken string) conc)
   (pkg libedit)
   (pkg ncurses)

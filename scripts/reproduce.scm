@@ -1,7 +1,7 @@
 (import
   scheme
-  (plan)
-  (eprint)
+  (distill plan)
+  (distill eprint)
   (chicken process-context)
   (chicken port))
 

@@ -1,17 +1,17 @@
-(define-library (base)
+(define-library (distill base)
   (import
     (scheme base)
     (scheme write)
     (scheme file)
     (srfi 2)
     (srfi 69)
-    (table)
-    (eprint)
-    (filepath)
-    (memo)
-    (plan)
-    (package)
-    (execline))
+    (distill table)
+    (distill eprint)
+    (distill filepath)
+    (distill memo)
+    (distill plan)
+    (distill package)
+    (distill execline))
   (cond-expand
     (chicken
       (import

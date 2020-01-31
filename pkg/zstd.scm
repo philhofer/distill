@@ -1,9 +1,9 @@
 (import
   scheme
-  (package)
-  (plan)
-  (execline)
-  (base)
+  (distill package)
+  (distill plan)
+  (distill execline)
+  (distill base)
   (only (chicken string) conc))
 
 (define zstd

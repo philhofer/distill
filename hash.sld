@@ -1,4 +1,4 @@
-(define-library (hash)
+(define-library (distill hash)
   (export
     hash-u8vector
     hash-bytevector

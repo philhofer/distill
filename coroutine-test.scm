@@ -10,8 +10,8 @@
   (chicken process)
   (chicken condition)
   (srfi 69)
-  (coroutine)
-  (eprint))
+  (distill coroutine)
+  (distill eprint))
 
 (include "test-helpers.scm")
 

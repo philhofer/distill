@@ -1,7 +1,7 @@
 (import
-  (plan)
-  (hash)
-  (filepath)
+  (distill plan)
+  (distill hash)
+  (distill filepath)
   (srfi 13)
   (chicken process-context)
   (chicken file)

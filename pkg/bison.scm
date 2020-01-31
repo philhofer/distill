@@ -2,10 +2,10 @@
   scheme
   (only (chicken load) require)
   (only (chicken string) conc)
-  (plan)
-  (package)
-  (base) ;; gnu-build, m4
-  (execline)
+  (distill plan)
+  (distill package)
+  (distill base) ;; gnu-build, m4
+  (distill execline)
   (pkg perl))
 
 (define bison

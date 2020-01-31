@@ -1,4 +1,4 @@
-(define-library (eprint)
+(define-library (distill eprint)
   (export
     trace-log
     trace

@@ -1,17 +1,17 @@
 (import
   scheme
-  (only (package)
+  (only (distill package)
         make-package
         make-recipe)
-  (only (plan)
+  (only (distill plan)
         remote-file)
   (only (chicken string) conc)
-  (only (base)
+  (only (distill base)
         cc-env
         cc-for-target
         musl
         libssp-nonshared)
-  (execline)
+  (distill execline)
   (pkg libressl))
 
 ;; TLS client for wget (shamelessly lifted from Alpine)

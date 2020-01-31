@@ -1,4 +1,4 @@
-(define-library (table)
+(define-library (distill table)
   (export
     table
     table?

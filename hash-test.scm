@@ -1,8 +1,10 @@
 (import
   (scheme base)
-  (hash)
+  (distill hash)
   (chicken base)
   (chicken io))
+
+(include "test-helpers.scm")
 
 (define (slow-hash-file f)
   (call-with-input-file f (lambda (prt) (hash-string (read-string #f prt)))))

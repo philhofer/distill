@@ -14,21 +14,24 @@ Makefile.dep: $(wildcard *.sld) autodep.scm
 include Makefile.dep
 
 # these are the translation units that make up the final binary
-UNITS:=hash nproc table plan package execline filepath eprint memo base
+UNITS:=distill.hash distill.nproc distill.table \
+	distill.plan distill.package distill.execline \
+	distill.filepath distill.eprint distill.memo \
+	distill.base
 
 %.import.scm %.o:
 	$(R7RSC) $(CSC_LIBFLAGS) -unit $* -ot $*.types -c $< -o $*.o
 
-sysplan: sysplan.scm ${UNITS:%=%.o} ${UNITS:%=%.import.scm}
+distill: distill.scm ${UNITS:%=%.o} ${UNITS:%=%.import.scm}
 	$(R7RSC) -setup-mode -m main -static -L -static-pie $< ${UNITS:%=%.o} -o $@
 
 TESTS:=$(wildcard *-test.scm)
 .PHONY: test all
 
-test: sysplan $(TESTS)
+test: distill $(TESTS)
 	./sysplan $(TESTS)
 
-all: sysplan ${UNITS:%=%.o}
+all: distill ${UNITS:%=%.o}
 
 clean:
-	$(RM) sysplan Makefile.dep *.types *.import.scm *.mod.scm *.so *.o *.link
+	$(RM) distill Makefile.dep *.types *.import.scm *.mod.scm *.so *.o *.link

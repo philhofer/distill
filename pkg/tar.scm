@@ -1,9 +1,9 @@
 (import
   scheme
-  (base)
-  (plan)
-  (package)
-  (execline)
+  (distill base)
+  (distill plan)
+  (distill package)
+  (distill execline)
   (only (chicken string) conc))
 
 (define tar

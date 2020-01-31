@@ -1,10 +1,10 @@
 (import
   scheme
   (scheme base)
-  (base)
-  (plan)
-  (package)
-  (execline)
+  (distill base)
+  (distill plan)
+  (distill package)
+  (distill execline)
   (only (chicken string) conc)
   (pkg xz-utils))
 

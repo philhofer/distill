@@ -1,10 +1,10 @@
 (import
   scheme
-  (plan)
-  (filepath)
+  (distill plan)
+  (distill filepath)
   (chicken file)
   (chicken process-context)
-  (package)
+  (distill package)
   (only (srfi 1) filter)
   (only (srfi 13) substring/shared))
 

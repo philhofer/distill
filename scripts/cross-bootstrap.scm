@@ -1,9 +1,9 @@
 (import
   (chicken process-context)
   (chicken string)
-  (package)
-  (eprint)
-  (base))
+  (distill package)
+  (distill eprint)
+  (distill base))
 
 ;; this script builds prebuilt bootstrap binaries
 ;; for a specific architecture

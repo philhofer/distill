@@ -1,14 +1,14 @@
-(define-library (package)
+(define-library (distill package)
   (import
     (scheme base)
     (scheme write)
     (srfi 26) ;; cut
     (srfi 69) ;; make-hash-table, etc
-    (memo)
-    (table)
-    (eprint)
-    (execline)
-    (plan))
+    (distill memo)
+    (distill table)
+    (distill eprint)
+    (distill execline)
+    (distill plan))
   (cond-expand
     (chicken (import
                (chicken type)

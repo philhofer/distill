@@ -1,4 +1,4 @@
-(define-library (filepath)
+(define-library (distill filepath)
   (export
     filepath-join
     dirname

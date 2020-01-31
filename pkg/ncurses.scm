@@ -1,8 +1,8 @@
 (import
   scheme
-  (plan)
-  (base)
-  (package)
+  (distill plan)
+  (distill base)
+  (distill package)
   (only (chicken string) conc))
 
 ;; ncurses uses BUILD_XXX instead of XXX_FOR_BUILD

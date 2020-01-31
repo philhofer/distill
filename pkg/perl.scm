@@ -2,12 +2,12 @@
   scheme
   (only (chicken base) unless)
   (only (chicken string) conc)
-  (filepath)
-  (execline)
-  (eprint)
-  (plan)
-  (package)
-  (base))
+  (distill filepath)
+  (distill execline)
+  (distill eprint)
+  (distill plan)
+  (distill package)
+  (distill base))
 
 ;; perl packages a statically-linked perl binary
 ;;

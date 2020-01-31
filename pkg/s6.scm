@@ -2,11 +2,11 @@
   scheme
   (only (chicken string)
         conc)
-  (only (package)
+  (only (distill package)
         make-package)
-  (only (plan)
+  (only (distill plan)
         remote-archive)
-  (only (base)
+  (only (distill base)
         sysroot
         cc-for-target
         skalibs

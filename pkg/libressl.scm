@@ -1,10 +1,10 @@
 (import
   scheme
   (only (chicken string) conc)
-  (execline)
-  (plan)
-  (base)
-  (package))
+  (distill execline)
+  (distill plan)
+  (distill base)
+  (distill package))
 
 ;; busybox needs libcrypto and ssl-client needs libtls
 (define libressl

@@ -1,4 +1,4 @@
-(define-library (nproc)
+(define-library (distill nproc)
   (export
     nproc)
   (import

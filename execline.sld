@@ -1,4 +1,4 @@
-(define-library (execline)
+(define-library (distill execline)
   (export
     write-exexpr
     execline-shebang

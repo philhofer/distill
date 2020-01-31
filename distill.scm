@@ -43,19 +43,19 @@
                                          (loop (read))))))))
                              (cdr expr))))))))
   (include-imports
-    memo
-    nproc
-    execline
-    hash
-    filepath
-    eprint
-    plan
-    package
-    base))
+    distill.memo
+    distill.nproc
+    distill.execline
+    distill.hash
+    distill.filepath
+    distill.eprint
+    distill.plan
+    distill.package
+    distill.base))
 
 (import
-  (filepath)
-  (eprint))
+  (distill filepath)
+  (distill eprint))
 
 (define search-dirs
   (make-parameter (list ".")))
@@ -154,7 +154,7 @@
 	  (string-append "#" (number->string nv) "! = ")))
       (repl %eval))
 
-    ;; when invoked as 'sysplan <foo.scm> args ...'
+    ;; when invoked as 'distill <foo.scm> args ...'
     ;; load the first argument with the remaining args
     ;; as the command-line-arguments
     (parameterize ((program-name           (car args))

@@ -5,8 +5,7 @@
 
 (import
   (chicken port)
-  (execline)
-  fmt)
+  (distill execline))
 
 (define (exexpr->string expr)
   (with-output-to-string

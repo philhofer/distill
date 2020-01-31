@@ -1,8 +1,8 @@
 (import
   scheme
-  (plan)
-  (eprint)
-  (filepath)
+  (distill plan)
+  (distill eprint)
+  (distill filepath)
   (srfi 69)
   (chicken file))
 

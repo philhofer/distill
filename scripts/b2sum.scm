@@ -1,6 +1,6 @@
 (import
-  (hash)
-  (eprint)
+  (distill hash)
+  (distill eprint)
   (chicken process-context))
 (for-each
   (lambda (f)
