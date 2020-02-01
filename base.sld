@@ -48,6 +48,7 @@
     gcc-for-target
     cc-for-target
     pair->string=
+    strip-binaries-script
     sysroot
     cc-env
     cc-env/build
