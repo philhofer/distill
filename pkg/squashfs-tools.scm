@@ -7,6 +7,7 @@
   (distill execline)
   (only (chicken string) conc)
   (only (chicken module) export)
+  (only (chicken port) with-output-to-string)
 
   (pkg lz4)
   (pkg zstd)
@@ -15,6 +16,8 @@
 (export mksquashfs)
 
 (define squashfs-tools
+  ;; NOTE: mksquashfs before 4.4 does not honor SOURCE_DATE_EPOCH
+  ;; nor does it produce reproducible images (without a lot of additional trouble)
   (let* ((version '4.4)
          (src     (remote-archive
                     (conc "https://github.com/plougher/squashfs-tools/archive/" version ".tar.gz")
@@ -50,5 +53,42 @@
                               (if ((mkdir -p /out/usr/bin)))
                               (cp mksquashfs unsquashfs /out/usr/bin))))))))
 
-(define (mksquashfs inputs #!key (compress 'zstd))
-  (error "mksquashfs: unimplemented"))
+;; mksquashfs produces a squashfs root filesystem from a set of inputs
+(define (mksquashfs inputs #!key (pseudo '()) (compress 'zstd))
+  ;; mksquashfs accepts 'pseudo-file' definitions
+  ;; that let us modify the mode/uid/gid of files;
+  (define pseudo-file
+    (interned "/src/pseudo" #o644
+              (with-output-to-string
+                (lambda ()
+                  (for-each
+                    (lambda (pd)
+                      (unless (= (length pd) 4)
+                        (error "pseudo-file definitions should be (path mode uid gid)"))
+                      (let ((file (car pd))
+                            (mode (cadr pd))
+                            (uid  (caddr pd))
+                            (gid  (cadddr pd)))
+                        (display file)
+                        (display " m ")
+                        (display (number->string mode 8))
+                        (display " ")
+                        (display uid)
+                        (display " ")
+                        (display gid)
+                        (newline)))
+                    pseudo)))))
+  (lambda (conf)
+    (make-package
+      label:  "mksquashfs"
+      src:    pseudo-file
+      tools:  (list squashfs-tools execline-tools)
+      inputs: inputs
+      build:  (let ((opts `(-all-root
+                             -processors $nproc
+                             -pf "/src/pseudo"
+                             -comp ,compress)))
+                (make-recipe
+                  script: (execline*
+                            (importas -u "-i" nproc nproc)
+                            (mksquashfs ,(sysroot conf) /out/rootfs.img ,@opts)))))))
