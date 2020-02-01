@@ -3,6 +3,7 @@
   (distill plan)
   (distill base)
   (distill package)
+  (distill buildenv)
   (only (chicken string) conc))
 
 ;; ncurses uses BUILD_XXX instead of XXX_FOR_BUILD

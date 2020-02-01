@@ -18,7 +18,6 @@
                      call-with-output-string)
                (only (chicken base) flatten))))
   (export
-    *this-machine*
     build-config
     default-config
     config->builder

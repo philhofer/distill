@@ -3,11 +3,10 @@
   (only (distill package)
         make-package
         make-recipe)
-  (only (distill plan)
-        remote-file)
+  (only (distill plan) remote-file)
   (only (chicken string) conc)
+  (only (distill buildenv) cc-env)
   (only (distill base)
-        cc-env
         cc-for-target
         musl
         libssp-nonshared)

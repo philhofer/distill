@@ -4,6 +4,7 @@
   (distill execline)
   (distill plan)
   (distill base)
+  (distill buildenv)
   (distill package))
 
 ;; busybox needs libcrypto and ssl-client needs libtls

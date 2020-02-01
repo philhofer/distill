@@ -51,6 +51,7 @@
     distill.eprint
     distill.plan
     distill.package
+    distill.buildenv
     distill.base))
 
 (import

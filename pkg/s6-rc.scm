@@ -6,14 +6,15 @@
         make-package)
   (only (distill plan)
         remote-archive)
+  (only (distill buildenv)
+        ska-build
+        sysroot)
   (only (distill base)
-        sysroot
         cc-for-target
         skalibs
         execline-tools
         musl
-        libssp-nonshared
-        ska-build)
+        libssp-nonshared)
   (pkg s6))
 
 (define s6-rc

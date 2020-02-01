@@ -2,6 +2,7 @@
   scheme
   (distill base)
   (distill plan)
+  (distill buildenv)
   (distill package)
   (distill execline)
   (only (chicken string) conc))

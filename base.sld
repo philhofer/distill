@@ -11,6 +11,7 @@
     (distill memo)
     (distill plan)
     (distill package)
+    (distill buildenv)
     (distill execline))
   (cond-expand
     (chicken
@@ -47,18 +48,5 @@
     ska-build
     gcc-for-target
     cc-for-target
-    pair->string=
-    strip-binaries-script
-    sysroot
-    cc-env
-    cc-env/build
-    cc-env/kbuild
-    export*
-    make-env
-    triple
-    libssp-nonshared
-    makeflags
-    +cross
-    script-apply-patches
-    config-prepend)
+    libssp-nonshared)
   (include "base.scm"))

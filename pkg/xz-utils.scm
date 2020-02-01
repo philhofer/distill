@@ -3,6 +3,7 @@
   (distill plan)
   (distill base)
   (distill package)
+  (distill buildenv)
   (only (chicken string) conc))
 
 (define xz-utils

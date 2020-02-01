@@ -4,7 +4,8 @@
   (only (chicken string) conc)
   (distill plan)
   (distill package)
-  (distill base) ;; gnu-build, m4
+  (distill base)
+  (distill buildenv)
   (distill execline)
   (pkg perl))
 
@@ -18,7 +19,7 @@
         label:  (conc "bison-" version "-" (conf 'arch))
         src:    leaf
         tools:  (append (list m4 perl) (cc-for-target conf))
-        inputs: (list musl)
+        inputs: (list musl libssp-nonshared)
         build:  (gnu-build (conc "bison-" version) conf
                            ;; there is a buggy makefile in examples/ that will
                            ;; occasionally explode during parallel builds;

@@ -2,6 +2,7 @@
   scheme
   (distill plan)
   (distill package)
+  (distill buildenv)
   (distill base)
   (only (chicken string) conc)
   (pkg ncurses))

@@ -7,6 +7,7 @@
   (distill eprint)
   (distill plan)
   (distill package)
+  (distill buildenv)
   (distill base))
 
 ;; perl packages a statically-linked perl binary

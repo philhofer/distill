@@ -3,6 +3,7 @@
   (distill package)
   (distill plan)
   (distill execline)
+  (distill buildenv)
   (distill base)
   (only (chicken string) conc))
 

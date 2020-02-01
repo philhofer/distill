@@ -2,6 +2,7 @@
   scheme
   (distill plan)
   (distill filepath)
+  (distill buildenv)
   (chicken file)
   (chicken process-context)
   (distill package)

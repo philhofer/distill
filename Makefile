@@ -17,7 +17,7 @@ include Makefile.dep
 UNITS:=distill.hash distill.nproc distill.table \
 	distill.plan distill.package distill.execline \
 	distill.filepath distill.eprint distill.memo \
-	distill.base
+	distill.buildenv distill.base
 
 %.import.scm %.o:
 	$(R7RSC) $(CSC_LIBFLAGS) -unit $* -ot $*.types -c $< -o $*.o

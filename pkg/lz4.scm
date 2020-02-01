@@ -4,6 +4,7 @@
   (distill package)
   (distill base)
   (distill execline)
+  (distill buildenv)
   (only (chicken string) conc))
 
 (define lz4
