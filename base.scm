@@ -438,10 +438,11 @@ EOF
         build:  (make-recipe
                   script: (execline*
                             (cd ,(conc "bzip2-" version))
-                            (if ((make ,@(map pair->string= (cc-env conf))
-                                       ,@(makeflags conf)
-                                       all)))
-                            (make PREFIX=/out/usr install)))))))
+                            (importas -u "-i" nproc nproc)
+                            (make -j $nproc
+                                  PREFIX=/out/usr ;; no DESTDIR supported
+                                  ,@(map pair->string= (cc-env conf))
+                                  ,@(makeflags conf) install)))))))
 
 (define (ska-build dir conf #!key (extra-configure '()))
   (let ((cenv    (cc-env conf))
