@@ -37,10 +37,8 @@
                       (importas -u "-i" nproc nproc)
                       (if ((cd lib/)
                            (make -j $nproc PREFIX=/usr
-                                 DESTDIR=/out ,@makeflags install-static)))
+                                 DESTDIR=/out ,@makeflags install-static install-includes)))
                       (if ((cd programs/)
                            (make -j $nproc ,@makeflags zstd)))
-                      (if ((install -D -m "644"
-                                    lib/zstd.h /out/usr/include/zstd.h)))
                       (install -D -m "755"
                                programs/zstd /out/usr/bin/zstd))))))))

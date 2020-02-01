@@ -53,6 +53,7 @@
     cc-env
     cc-env/build
     cc-env/kbuild
+    export*
     make-env
     triple
     libssp-nonshared
