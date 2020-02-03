@@ -129,6 +129,19 @@
        obj
        (error msg rest* ...)))))
 
+;; input-seq generates a sequence from plan inputs
+(define (input-seq pl)
+  (lambda (kons seed)
+    (let outer ((inputs (plan-inputs pl))
+                (out    seed))
+      (if (null? inputs)
+        out
+        (let inner ((lst  (cdar inputs))
+                    (out  out))
+          (if (null? lst)
+            (outer (cdr inputs) out)
+            (inner (cdr lst) (kons (car lst) out))))))))
+
 ;; not defined in R7RS, but trivial enough to implement
 (: call-with-output-string ((output-port -> *) -> string))
 (define (call-with-output-string proc)
@@ -138,36 +151,28 @@
       (close-output-port p)
       s)))
 
-(define (foldl1 proc seed lst)
-  (let loop ((state seed)
-             (lst   lst))
-    (if (null? lst)
-      state
-      (loop (proc state (car lst)) (cdr lst)))))
-
+;; plan-resolved? returns whether or not
+;; all of the inputs to this plan are resolved
+;; (i.e. artifacts or plans with known outputs)
 (define (plan-resolved? p)
-  (let loop ((lst (plan-inputs p)))
-    (or (null? lst)
-        (let ((head (car lst))
-              (rest (cdr lst)))
-          (and (let inner ((lst (cdr head)))
-                 (or (null? lst)
-                     (and (or (artifact? (car lst))
-                              (plan-outputs (car lst)))
-                          (inner (cdr lst)))))
-               (loop rest))))))
+  (all/s? (lambda (in)
+            (or (artifact? in)
+                (plan-outputs in)))
+          (input-seq p)))
 
 (: %write-plan-inputs
    ((list-of
       (pair string (list-of plan-input-type)))
     output-port -> undefined))
 (define (%write-plan-inputs inputs out)
+  ;; turn an input into an artifact unconditionally
   (define (->artifact in)
     (if (plan? in)
       (or (plan-outputs in)
           (error "plan not resolved"))
       in))
-  ;; sort input artifacts by extraction directory
+
+  ;; sort input artifacts by extraction directory,
   ;; then by content hash
   (: art<? (artifact artifact --> boolean))
   (define (art<? a b)
@@ -179,31 +184,24 @@
           (and (string=? aroot broot)
                (string<? ahash bhash)))))
 
-  ;; cons the canonical representation of 'inputs' at 'root' onto tail
-  (define (cons*-reprs root inputs tail)
-    (foldl1
-      (lambda (lst v)
-        (cons (artifact-repr root (->artifact v)) lst))
-      tail
-      inputs))
-
-  ;; cons inputs onto tail
-  ;;
-  ;; produces an output like
-  ;;  (#("/" #('file "/etc/hostname" #o644) "...<hash>...")
-  ;;   #("/" #('archive 'tar.xz)            "...<hash>...") ...)
-  (define (cons*-inputs in tail)
-    (foldl1
-      (lambda (lst p)
-        (cons*-reprs (car p) (cdr p) lst))
-      tail
-      in))
+  ;; pair->inseq produces a sequence from an input pair like
+  ;;  ("/" . (artifacts ...))
+  ;; where the sequence elements are the external representation
+  ;; of the artifacts in the cdr of the pair
+  (define (pair->inseq p)
+    (let ((rt  (car p))
+          (lst (cdr p)))
+      (s/map
+        (lambda (in)
+          (artifact-repr rt (->artifact in)))
+        (list->seq lst))))
 
   ;; write plans in a format that can be deserialized;
   ;; that way we can build old plans even if we don't
   ;; have the code that generated them (as long as
   ;; we have the original artifacts)
-  (let ((inputs (sort (cons*-inputs inputs '()) art<?)))
+  (let* ((inputs ((list->seq inputs) (k/map pair->inseq (k/recur cons)) '()))
+         (inputs (sort inputs art<?)))
     (write inputs out)))
 
 ;; plan-hash returns the canonical hash of a plan,
@@ -261,7 +259,7 @@
                     proc
                     (lambda (x)
                       (if (plan? x)
-                        (flatten (map cdr (plan-inputs x)))
+                        ((input-seq x) cons '())
                         '()))))
 
 ;; fork+exec, wait for the process to exit and check
@@ -407,6 +405,7 @@
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
 (define (with-tmpdir proc)
   (let* ((dir (create-temporary-directory))
+         (_   (set-file-permissions! dir #x700))
          (res (proc dir)))
     (delete-directory dir #t)
     res))
@@ -430,8 +429,6 @@
       "-cf" (abspath tmp)
       "--format=ustar"
       "--sort=name"
-      ;; TODO: use owner-map and group-map for file ownership
-      ;; when packages need files that aren't owned by uid=0
       "--owner=0"
       "--group=0"
       "--mtime=@0"
@@ -550,11 +547,12 @@
 (define (compute-stages lst)
   (let ((stage (make-hash-table test: eq? hash: eq?-hash)))
     (define (stage-of p)
-      (let ((in (input-map
-                  (lambda (inp)
-                    (hash-table-ref stage inp))
-                  p)))
-        (if (null? in) 0 (+ 1 (apply max in)))))
+      ;; a plan's stage is 1+(greatest input stage),
+      ;; where a plan with no other inputs is stage 0
+      (+ 1
+         ((input-seq p)
+          (k/map (cut hash-table-ref stage <>) max)
+          -1)))
     (for-each
       (lambda (p)
         (unbuilt-dfs
@@ -564,7 +562,7 @@
                   (hash-table-set! stage p val))))
           p))
       lst)
-    (let* ((endstage (apply max (map (cut hash-table-ref/default stage <> 0) lst)))
+    (let* ((endstage ((list->seq lst) (k/map (cut hash-table-ref/default stage <> -1) max) -1))
            (vec      (make-vector (+ endstage 1) '())))
       (hash-table-for-each
         stage

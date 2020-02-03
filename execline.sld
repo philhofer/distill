@@ -2,7 +2,6 @@
   (export
     write-exexpr
     execline-shebang
-    execline-execs
     exec-begin
     execline*)
   (import

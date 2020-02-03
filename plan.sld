@@ -57,6 +57,7 @@
     (distill memo)
     (distill nproc)
     (distill filepath)
+    (distill sequence)
     (distill eprint)
     (distill coroutine)
     (distill hash))

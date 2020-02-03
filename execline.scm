@@ -96,13 +96,6 @@
       (join-arg (car rest) (cdr rest) indent)))
   (join-cmds lst 0))
 
-(define (foldl1 proc init lst)
-  (let loop ((val init)
-             (lst lst))
-    (if (null? lst)
-      val
-      (loop (proc val (car lst)) (cdr lst)))))
-
 ;; write-exexpr writes an execline expression
 ;; as a script to current-output-port
 (: write-exexpr (list -> undefined))
@@ -133,33 +126,6 @@
     ((_ (cmd args* ...) ... (final fargs* ...))
      (quasiquote
        ((if ((cmd args* ...))) ... (final fargs* ...))))))
-
-;; fold-exexpr folds (fn init line)
-;; for every subprogram within
-;; an execline expression
-(define (fold-exexpr fn init expr)
-  (if (null? expr)
-    init
-    (let ((line (car expr))
-          (rest (cdr expr)))
-      (fold-exexpr
-        fn
-        ;; recursively walk arguments
-        ;; that are lists
-        (foldl1
-          (lambda (acc arg)
-            (if (list? arg)
-              (fold-exexpr fn acc arg)
-              acc))
-          (fn init line)
-          (cdr line))
-        rest))))
-
-;; execline-execs produces the list of binaries
-;; executed from an execline script
-(define (execline-execs expr)
-  (fold-exexpr (lambda (lst e)
-                 (cons (car e) lst)) '() expr))
 
 ;; check-terminal checks the structure of an execline program
 ;; and determines whether or not each block consists of zero

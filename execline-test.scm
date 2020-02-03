@@ -83,12 +83,3 @@ EOF
   (display "---- want: ----\n")
   (display want)
   (error "scripts not equal"))
-
-(let ((got (reverse (execline-execs script)))
-      (want '(if sed ifelse echo echo if sysctl forbacktickx pipeline elglob echo sort importas echo)))
-  (when (not (equal? got want))
-    (display "---- exexpr-fold got: ----\n")
-    (display got)
-    (display "\n---- exexpr-fold want: ----\n")
-    (display want)
-    (error "fold results not equal")))

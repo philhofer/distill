@@ -7,7 +7,10 @@
   (import
     scheme
     (scheme base)
-    (srfi 13))
+    (srfi 2)
+    (srfi 13)
+    (srfi 26) ;; cut
+    (distill sequence))
   (cond-expand
     (chicken
       (import

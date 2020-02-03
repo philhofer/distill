@@ -1,7 +1,5 @@
-(cond-expand
-  (csi (import r7rs)
-       (load "filepath.sld"))
-  (else (begin)))
+(include "sequence.mod.scm")
+(include "filepath.mod.scm")
 
 (import
   (only (chicken process-context) current-directory)

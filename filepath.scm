@@ -1,11 +1,3 @@
-(: foldl1 (forall (a b) ((a b -> a) a (list-of b) -> a)))
-(define (foldl1 proc init lst)
-  (let loop ((val init)
-             (lst lst))
-    (if (null? lst)
-      val
-      (loop (proc val (car lst)) (cdr lst)))))
-
 (define-type stringy (or string symbol integer))
 
 (: stringify (stringy --> string))
@@ -34,53 +26,43 @@
         ((char=? (string-ref str i) #\/) (substring/shared str (+ i 1)))
         (else (loop (- i 1)))))))
 
+(define (suffixed? str suf)
+  (and-let* ((slen   (string-length str))
+             (suflen (string-length suf))
+             (_      (>= slen suflen))
+             (tail   (substring/shared str (- slen suflen) slen)))
+    (string=? suf tail)))
+
 ;; core filepath normalization routine
 ;;
 ;; join one or more filepath components together
 ;; while eliminating '.' and '..' components where possible
 (: filepath-join (stringy #!rest stringy --> string))
-(define (filepath-join first . rest)
-  ;; scan for '/'
-  (define (scan str start)
-    (let ((len (string-length str)))
-      (let loop ((i start))
-        (cond
-          ((>= i len) len)
-          ((eqv? (string-ref str i) #\/) i)
-          (else (loop (+ i 1)))))))
-  ;; foldl, but for subsections of 'str'
-  ;; that are delimited by '/'
-  (define (foldl-parts proc init str)
-    (let ((end (string-length str)))
-      (let loop ((i 0)
-                 (v init))
-        (if (>= i end)
-          v
-          (let ((seg (scan str i)))
-            (loop (+ seg 1) (proc v (substring/shared str i seg))))))))
-  (let* ((input     (cons first rest))
-         (cons-part (lambda (out part)
-                      ;; push 'part' onto 'out' unless it is
-                      ;; a special path component (".." means pop)
-                      (cond
-                        ((or (string=? part "") (string=? part "."))
-                         out)
-                        ((string=? part "..")
-                         (if (or (null? out) (string=? (car out) ".."))
-                           (cons part out)
-                           (cdr out)))
-                        (else
-                          (cons part out)))))
-         (cons-arg  (lambda (out arg)
-                      (foldl-parts cons-part out (stringify arg))))
-         (rev-parts (foldl1 cons-arg '() input))
-         (abspath?  (eqv? (string-ref (stringify first) 0) #\/))
-         (prepend   (lambda (out part)
-                      (string-append part "/" out)))
-         (fullpath  (foldl1 prepend (car rev-parts) (cdr rev-parts))))
-    (if abspath?
-      (string-append "/" fullpath)
-      fullpath)))
+(define filepath-join
+  ;; allocate the inner reducing function closure just once
+  ;; (these produce a single-pass reducer from path components
+  ;; to output path string)
+  (let* ((add-part  (lambda (part out)
+                      (if (string=? out "")
+                        part
+                        (cond
+                          ((or (string=? part "") (string=? part "."))
+                           out)
+                          ((string=? part "..")
+                           (if (suffixed? out "..")
+                             (string-append out "/..")
+                             (dirname out)))
+                          ((string=? out "/") (string-append out part))
+                          (else (string-append out "/" part))))))
+         (cons-arg  (k/map stringify (k/map (cut string-sep->seq <> #\/) (k/recur add-part)))))
+    (lambda (first . rest)
+      ((list->seq (cons first rest))
+       cons-arg
+       ;; if the first component begins with "/", then
+       ;; the result begins with "/"
+       (if (eqv? (string-ref (stringify first) 0) #\/)
+         "/"
+         "")))))
 
 ;; convert a relative path to an absolute path
 ;; if it is not one already (by prepending the current directory)
