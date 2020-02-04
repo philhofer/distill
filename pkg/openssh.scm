@@ -4,10 +4,10 @@
   (distill package)
   (distill buildenv)
   (distill base)
+  (only (distill image) libressl)
   (only (chicken string) conc)
   (pkg libedit)
   (pkg ncurses)
-  (pkg libressl)
   (pkg linux-headers))
 
 (define openssh

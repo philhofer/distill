@@ -48,10 +48,12 @@
     distill.execline
     distill.hash
     distill.filepath
+    distill.sequence
     distill.eprint
     distill.plan
     distill.package
     distill.buildenv
+    distill.image
     distill.base))
 
 (import

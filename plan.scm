@@ -114,8 +114,15 @@
   ;; (see 'unpack')
   (inputs : (list-of
               (pair string (list-of plan-input-type))))
+  ;; saved-hash caches the sum of all the inputs
   ((saved-hash #f) : (or false string))
+  ;; saved-output caches the hash of the output
   ((saved-output #f) : (or false vector))
+  ;; raw-output indicates a specific file is the output,
+  ;; rather than the entire /out directory
+  ((raw-output #f) : (or false string))
+  ;; parallel indicates if the plan can use
+  ;; more than one processor to execute
   ((parallel #t) : (or boolean symbol)))
 
 (define-syntax require
@@ -405,10 +412,39 @@
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
 (define (with-tmpdir proc)
   (let* ((dir (create-temporary-directory))
-         (_   (set-file-permissions! dir #x700))
+         (_   (set-file-permissions! dir #o700))
          (res (proc dir)))
     (delete-directory dir #t)
     res))
+
+;; intern! interns a file into the artifact directory
+;; and returns its hash
+;; NOTE: the source file is deleted as part of this
+;; operation, since it is sometimes implemented as relink(2)
+(: intern! (string -> string))
+(define (intern! fp)
+  (let ((h (hash-file fp)))
+    (unless h (error "couldn't find file" fp))
+    (let ((dst (filepath-join (artifact-dir) h)))
+      (if (and (file-exists? dst) (equal? (hash-file dst) h))
+        (begin
+          (infoln "artifact reproduced:" (short-hash h))
+          (delete-file fp))
+        (begin
+          (move-file fp dst #t 32768)
+          ;; regardless of source file permissions,
+          ;; artifacts should have 644 perms
+          (set-file-permissions! dst #o644)))
+      h)))
+
+(: file->artifact (string string -> artifact))
+(define (file->artifact f abspath)
+  (let ((perm (file-permissions f))
+        (h    (intern! f)))
+    (vector
+      `#(file ,abspath ,perm)
+      h
+      #f)))
 
 (: dir->artifact (string -> artifact))
 (define (dir->artifact dir)
@@ -434,14 +470,7 @@
       "--mtime=@0"
       "--numeric-owner"
       "-C" dir ".")
-    (let* ((h   (hash-file tmp))
-           (dst (filepath-join (artifact-dir) h)))
-      (if (and (file-exists? dst) (equal? (hash-file dst) h))
-        (begin
-          (infoln "artifact reproduced:" (short-hash h))
-          (delete-file tmp))
-        (move-file tmp dst #t 32768))
-      (local-archive format h))))
+    (local-archive format (intern! tmp))))
 
 ;; plan->outputs! builds a plan and yields
 ;; the list of interned file handles that are installed
@@ -502,7 +531,10 @@
              "-q"
              "--rm" (filepath-join root "build.log")
              "-o"   ofile))
-      (dir->artifact outdir))))
+      (let ((raw (plan-raw-output p)))
+        (if raw
+          (file->artifact (filepath-join outdir raw) raw)
+          (dir->artifact outdir))))))
 
 (: plan-built? ((struct plan) -> boolean))
 (define (plan-built? p)
@@ -513,23 +545,11 @@
       ;; instead of performing a re-build
       (filepath-join (artifact-dir) (artifact-hash out)))))
 
-(define (input-map proc p)
-  (let loop ((lst (plan-inputs p))
-             (out '()))
-    (if (null? lst)
-      out
-      (let inner ((lhs (cdar lst))
-                  (out out))
-        (cond
-          ((null? lhs)
-           (loop (cdr lst) out))
-          ((not (plan? (car lhs)))
-           (inner (cdr lhs) out))
-          ((plan-built? (car lhs))
-           (inner (cdr lhs) out))
-          (else
-            (inner (cdr lhs)
-                   (cons (proc (car lhs)) out))))))))
+(define k/unbuilt
+  (let ((unbuilt? (lambda (in)
+                    (and (plan? in) (not (plan-built? in))))))
+    (lambda (kons)
+      (k/filter unbuilt? kons))))
 
 (: unbuilt-dfs (((struct plan) -> *) (struct plan) -> *))
 (define (unbuilt-dfs proc p)
@@ -549,10 +569,8 @@
     (define (stage-of p)
       ;; a plan's stage is 1+(greatest input stage),
       ;; where a plan with no other inputs is stage 0
-      (+ 1
-         ((input-seq p)
-          (k/map (cut hash-table-ref stage <>) max)
-          -1)))
+      (+ 1 ((input-seq p)
+            (k/unbuilt (k/map (cut hash-table-ref stage <>) max)) -1)))
     (for-each
       (lambda (p)
         (unbuilt-dfs
@@ -582,45 +600,43 @@
     ;; or b) acquire up to maxjobs jobs from the semaphore
     ;; and then execute with that level of intra-build parallelism
     (define (build-one! p maxjobs)
-      (let loop ((inputs (input-map (cut hash-table-ref ht <>) p)))
-        (if (null? inputs)
-          ;; by the time all the inputs are built,
-          ;; we may *discover* that this plan is identical
-          ;; to one that is already built; in that case, bail
-          (if (plan-built? p)
-            (plan-outputs p)
+      (let* ((kons (lambda (in out)
+                     (let ((v (join/value in)))
+                       (cond
+                         (err err)
+                         ((condition? v) (begin (set! err v) v))
+                         (else out)))))
+             (inok ((input-seq p) (k/unbuilt (k/map (cut hash-table-ref ht <>) kons)) #t)))
+        (or (condition? inok)
+            ;; by the time all the inputs are built,
+            ;; we may *discover* that this plan is identical
+            ;; to one that is already built; in that case, bail
+            (plan-built? p)
             (let ((jobs (semacquire/max sema (if (plan-parallel p) maxjobs 1))))
+              ;; in the time spent waiting to acquire resources,
+              ;; another plan could have encountered an error, so
+              ;; this inner bit should become a no-op in that situation
               (or err
                   (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
                     (infoln "building")
                     (save-plan-outputs! p (plan->outputs! p jobs))
                     (infoln "completed")))
               (semrelease/n sema jobs)
-              #t))
-          (let ((v (join/value (car inputs))))
-            (cond
-              (err err)
-              ((condition? v) (begin (set! err v) v))
-              (else (loop (cdr inputs))))))))
+              #t))))
     ;; spawn a builder coroutine for each unbuilt package
-    (let loop ((i 0))
-      (or (>= i (vector-length stages))
-          (let* ((stage (vector-ref stages i))
-                 (slen  (length stage))
-                 (maxp  (max 1 (quotient maxprocs (max slen 1)))))
-            ;; spawn builds for each stage
-            (for-each
-              (lambda (p)
-                (hash-table-set! ht p (spawn build-one! p maxp)))
-              stage)
-            (loop (+ i 1)))))
-    ;; join the arguments
-    (let loop ((lst lst))
-      (or (null? lst)
-          (let ((proc (hash-table-ref/default ht (car lst) #f)))
-            (when proc
-              (join/value proc))
-            (loop (cdr lst)))))
+    (for-each/s
+      (lambda (stage)
+        (let* ((slen (length stage))
+               (maxp (max 1 (quotient maxprocs (max slen 1)))))
+          ;; TODO: this would be closer to optimal if the stage itself
+          ;; was sorted in increasing estimated build time ...
+          (for-each
+            (lambda (p)
+              (hash-table-set! ht p (spawn build-one! p maxp)))
+            stage)))
+      (vector->seq stages))
+    ;; wait for every coroutine to exit
+    (for-each join/value (hash-table-values ht))
     (if err (abort err) #t)))
 
 ;; build-plan! unconditionally builds a plan
@@ -634,6 +650,11 @@
   (plan->outputs! top (nproc)))
 
 ;; load-plan loads an old plan from the plan directory
+;;
+;; the plan *must* have a label and inputs, and *may* have outputs
+;; (however, re-building a plan without knowing its outputs may
+;; lead to the outputs being serialized differently than another
+;; build, which could lead to spurious reproducibility issues)
 (: load-plan (string -> (struct plan)))
 (define (load-plan hash)
   (let* ((label   (with-input-from-file
@@ -642,6 +663,10 @@
          (vinput  (with-input-from-file
                     (filepath-join (plan-dir) hash "inputs.scm")
                     read))
+         (voutput (let ((fp (filepath-join (plan-dir) hash "outputs.scm")))
+                    (if (file-exists? fp)
+                      (with-input-from-file fp read)
+                      #f)))
          (vec->in (lambda (v)
                     (cons (vector-ref v 0)
                           (list
@@ -652,7 +677,14 @@
          (inputs  (map vec->in vinput))
          (plan    (make-plan
                     name:   label
-                    inputs: inputs))
+                    inputs: inputs
+                    saved-output: voutput
+                    ;; if the original build had a raw output, then
+                    ;; use the same output file name
+                    ;; to retain reproducibility
+                    raw-output: (and voutput
+                                  (let ((format (artifact-format voutput)))
+                                    (and (eq? (vector-ref format 0) 'file) (vector-ref format 1))))))
          (newhash (plan-hash plan)))
     (unless (string=? newhash hash)
       (error "loaded plan has different hash:" newhash))

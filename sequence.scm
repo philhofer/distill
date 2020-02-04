@@ -157,7 +157,7 @@
   (seq (lambda (item out)
          (and out (pred? item))) #t))
 
-;; s/for-each calls (proc item) for each item
+;; for-each/s calls (proc item) for each item
 ;; in seq and returns (void)
 ;;
 ;; it is equivalent to (but more efficient than):

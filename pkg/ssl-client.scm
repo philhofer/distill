@@ -10,8 +10,8 @@
         cc-for-target
         musl
         libssp-nonshared)
-  (distill execline)
-  (pkg libressl))
+  (only (distill image) libressl)
+  (distill execline))
 
 ;; TLS client for wget (shamelessly lifted from Alpine)
 (define ssl-client

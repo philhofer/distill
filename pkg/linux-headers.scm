@@ -6,8 +6,8 @@
   (distill package)
   (distill buildenv)
   (distill execline)
-  (only (chicken string) conc)
-  (pkg xz-utils))
+  (only (distill image) xz-utils)
+  (only (chicken string) conc))
 
 (define linux-headers
   (let* ((version  '5.4)

@@ -21,6 +21,7 @@
   (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
   (prebuilt : (or artifact false))    ;; bootstrap replacement binary
   (build : (struct recipe))           ;; build script (see execline*)
+  ((raw-output #f) : (or false string)) ;; see plan#plan-raw-output
   ((parallel #t) : boolean))
 
 ;; XXX this needs to stay in-sync with base
@@ -56,12 +57,14 @@
                   (begin (%check-conf env) env)))
          (build (build-config))
          (->pln (lambda (pl)
-                  (package->plan pl build host))))
+                  (package->plan pl build host)))
+         (->out (lambda (pln)
+                  (if (artifact? pln) pln (plan-outputs pln)))))
     (lambda args
       (let ((plans (map ->pln args)))
         (unless (null? plans)
           (build-graph! plans))
-        (map plan-outputs plans)))))
+        (map ->out plans)))))
 
 ;; package->plan is the low-level package expansion code;
 ;; it recursively simplifies packges into plans, taking care
@@ -84,6 +87,7 @@
                  (inputs (package-inputs pkg))
                  (recipe (package-build pkg)))
             (make-plan
+              raw-output: (package-raw-output pkg)
               parallel: (package-parallel pkg)
               name:   (package-label pkg)
               recipe: (package-build pkg)
