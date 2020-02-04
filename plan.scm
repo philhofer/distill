@@ -161,6 +161,7 @@
 ;; plan-resolved? returns whether or not
 ;; all of the inputs to this plan are resolved
 ;; (i.e. artifacts or plans with known outputs)
+(: plan-resolved? ((struct plan) -> boolean))
 (define (plan-resolved? p)
   (all/s? (lambda (in)
             (or (artifact? in)

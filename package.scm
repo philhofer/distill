@@ -16,7 +16,7 @@
 ;; that is converted into a plan by combining it with the configuration
 (defstruct package
   (label : string)                    ;; human-readable name
-  (src : (or artifact (list-of artifact))) ;; where to get the package source
+  ((src '()) : (or artifact (list-of artifact))) ;; where to get the package source
   (tools : (list-of package-lambda))  ;; build tools (built for host)
   (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
   (prebuilt : (or artifact false))    ;; bootstrap replacement binary

@@ -49,8 +49,9 @@
   (lambda (conf)
     (make-package
       raw-output: "initramfs.zst"
+      src:    '()
       label:  "initramfs"
-      tools:  (list busybox-core zstd libarchive) ;; need bsdtar
+      tools:  (list execline-tools busybox-core zstd libarchive) ;; need bsdtar
       inputs: inputs
       build:  (let ((compressor (case compress
                                   ;; (see note above about compressor nondeterminism)
@@ -59,14 +60,18 @@
                 (make-recipe
                   script: (execline*
                             (cd ,(sysroot conf))
+                            ;; set mtime to 0, since bsdtar(1)
+                            ;; does not have an option to override it
+                            (if ((find "." -mindepth 1
+                                       -exec touch -hcd "@0" "{}" ";")))
                             ;; terribly gross hack courtesy of Arch:
                             ;; in order to ensure that the cpio image doesn't
                             ;; include inode numbers, we feed a tar archive
                             ;; back into bsdtar to create a cpio archive
                             (pipeline ((find "." -mindepth 1 -print0)))
                             (pipeline ((sort -z)))
-                            (pipeline ((bsdtar --null -cnf - -T -)))
-                            (pipeline ((bsdtar --uid 0 --gid 0 -null -cf - --format=newc @-)))
+                            (pipeline ((bsdtar --null -vcnf - -T -)))
+                            (pipeline ((bsdtar --uid 0 --gid 0 --null -cf - --format=newc "@-")))
                             ,@compressor))))))
 
 (define squashfs-tools
