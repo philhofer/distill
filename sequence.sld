@@ -10,11 +10,17 @@
     k/filter
     s/map
     k/map
+    k/hash-ref
     s/uniq
     k/uniq
     s/append
     k/recur
     s/cons*
+    k/preorder
+    k/postorder
+    k/bfs-uniq
+    k/dfs-uniq
+    empty-seq
     any/s?
     all/s?
     for-each/s)

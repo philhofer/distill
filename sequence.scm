@@ -63,6 +63,14 @@
   (lambda (in out)
     (kons (proc in) out)))
 
+;; k/hash-ref is a reducer that transforms
+;; each element by looking up a value in
+;; a hash table and then calling the inner
+;; reducing function 'kons'
+(define (k/hash-ref ht kons)
+  (lambda (in out)
+    (kons (hash-table-ref ht in) out)))
+
 ;; s/map takes a procedure and a sequence
 ;; and yields another sequence that produces
 ;; items as (proc item) for each item
@@ -186,4 +194,62 @@
           v
           (let ((seg (scan i)))
             (loop (+ seg 1) (kons (substring/shared str i seg) v))))))))
+
+(define empty-seq (lambda (kons seed) seed))
+
+(define (app flst obj)
+  (if (null? flst)
+    obj
+    (app (cdr flst) ((car flst) obj))))
+
+;; k/preorder does recursive pre-order traversal
+;; using (child node) to produce the sequence
+;; of children at each node and 'kons' as the
+;; inner reducing function
+;;
+;; the 'rest' argument of k/recur-postorder is
+;; a set of reducer transformers that are evaluated
+;; in advance of the recursion (such as k/uniq, etc.)
+(define (k/preorder child kons . outer)
+  (letrec ((self (app outer
+                      (lambda (in out)
+                        ((child in) self (kons in out))))))
+    self))
+
+;; k/postorder does recursive post-order traversal
+;; using (child node) to produce the sequence of
+;; children at each node and 'kons' as the inner
+;; reducing function
+;;
+;; the 'rest' argument of k/recur-postorder is
+;; a set of reducer transformers that are evaluated
+;; in advance of any recursion
+(define (k/postorder child kons . outer)
+  (letrec ((self (app outer
+                      (lambda (in out)
+                        (kons in ((child in) self out))))))
+    self))
+
+;; k/bfs-uniq performs breadth-first recursion
+;; using 'child' as a procedure on each node to
+;; produce the sequence of children, and 'kons'
+;; to reduce each visited node
+;;
+;; k/bfs-uniq accepts 'rest' arguments that
+;; are passed verbatim to the end of k/uniq
+;; in order to control deduplication
+;;
+;; note that nodes are only visited once
+(define (k/bfs-uniq child kons . rest)
+  (k/preorder child kons (lambda (inner)
+                           (apply k/uniq inner rest))))
+
+;; k/dfs-uniq performs a depth-first recursion
+;; using 'child' as a procedure on each not
+;; to produce the sequence of children, and 'kons'
+;; to reduce each visited node
+;; (see k/bfs-uniq)
+(define (k/dfs-uniq child kons . rest)
+  (k/postorder child kons (lambda (inner)
+                            (apply k/uniq inner rest))))
 

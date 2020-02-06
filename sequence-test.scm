@@ -36,3 +36,35 @@
        (seq (string-sep->seq str #\/)))
   (test equal? '("a" "b" "c") (seq->list seq))
   (test equal? '("abc") (seq->list (string-sep->seq "abc" #\/))))
+
+(let* ((tree '(0 . ((1 . ((3 . ()) . (4 . ()))) . (2 . ((5 . ()) . (6 . ()))))))
+       (seq  (list->seq (list tree)))
+       (sub  (lambda (p)
+               (if (pair? (cdr p))
+                 (lambda (kons seed)
+                   (kons (cddr p) (kons (cadr p) seed)))
+                 empty-seq)))
+       (val  (lambda (p)
+               (if (pair? p) (car p) p))))
+  (test equal? (reverse '(0 1 3 4 2 5 6))
+        (seq
+         (k/preorder sub (k/map val cons))
+         '()))
+  (test equal? (reverse '(3 4 1 5 6 2 0))
+        (seq
+          (k/postorder sub (k/map val cons))
+          '())))
+
+;; test a graph in adjacency-list format
+;; which yields itself in reverse in BFS
+;; and in ordinary order in DFS traversal
+(let* ((graph '#((1 2 3)
+                 (2 0 3)
+                 (3 1 0)
+                 (0 1 2)))
+       (seq   (vector->seq graph))
+       (child (lambda (lst)
+                (s/map (cut vector-ref graph <>) (list->seq lst))))
+       (revg  (seq cons '())))
+  (test equal? revg (seq (k/bfs-uniq child cons test: eq? hash: eq?-hash) '()))
+  (test equal? (vector->list graph) (seq (k/dfs-uniq child cons test: eq? hash: eq?-hash) '())))

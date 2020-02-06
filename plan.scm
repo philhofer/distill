@@ -232,44 +232,6 @@
              (plan-saved-hash-set! p h)
              h))))
 
-;; generic DFS DAG-walking procedure
-;;
-;; call (proc node) on each node, and use
-;; (get-edges node) to get a list of edges
-;;
-;; throws an error on cycles in the graph
-;;
-(: for-each-dag-dfs (forall (a) (a (a -> *) (a -> (list-of a)) -> *)))
-(define (for-each-dag-dfs root proc get-edges)
-  (define tbl (make-hash-table))
-  (define (walked? x)
-    (let ((c (hash-table-ref/default tbl x 0)))
-      (when (= c 1)
-        (error "cycle: " x))
-      (not (= c 0))))
-  (define (walk x)
-    (unless (walked? x)
-      (begin
-        (hash-table-set! tbl x 1)
-        (for-each walk (get-edges x))
-        (hash-table-set! tbl x 2)
-        (proc x))))
-  (walk root))
-
-;; plan-dfs calls (proc plan) on
-;; each plan in a graph starting at 'root,'
-;; ensuring that 'proc' is applied to all
-;; inputs of a plan before being applied
-;; to the plan itself
-(: plan-dfs ((plan-input-type -> *) (struct plan) -> undefined))
-(define (plan-dfs proc root)
-  (for-each-dag-dfs root
-                    proc
-                    (lambda (x)
-                      (if (plan? x)
-                        ((input-seq x) cons '())
-                        '()))))
-
 ;; fork+exec, wait for the process to exit and check
 ;; that it exited successfully
 (: run (string #!rest string -> undefined))
@@ -546,40 +508,46 @@
       ;; instead of performing a re-build
       (filepath-join (artifact-dir) (artifact-hash out)))))
 
+;; k/unbuilt is a reducer that takes another reducer
+;; and filters its inputs to only include unbuilt plans
 (define k/unbuilt
   (let ((unbuilt? (lambda (in)
                     (and (plan? in) (not (plan-built? in))))))
     (lambda (kons)
       (k/filter unbuilt? kons))))
 
-(: unbuilt-dfs (((struct plan) -> *) (struct plan) -> *))
-(define (unbuilt-dfs proc p)
-  (plan-dfs
-    (lambda (p)
-      (and (plan? p)
-           (or (plan-built? p)
-               (proc p))))
-    p))
+;; for-each/unbuilt-dfs walks a list of plans
+;; in depth-first order and calls (proc p) on
+;; each plan that is unbuilt
+(: for-each/unbuilt-dfs (((struct plan) -> *) (list-of (struct plan)) -> undefined))
+(define (for-each/unbuilt-dfs proc pl)
+  ((list->seq pl)
+   (k/unbuilt
+     (k/dfs-uniq
+       input-seq
+       (k/unbuilt
+         (lambda (in out)
+           (proc in)
+           (void)))))
+   (void)))
 
 ;; compute-stages assigns stages to the build,
 ;; where leaf nodes of the DAG are stage 0,
-;; their dependents are stage 1, and so forth
+;; their dependents are stage 1, and so forth;
+;; compute-stages returns a vector of lists where
+;; each element of the vector is a list of plans
+;; that can be built in parallel
 (: compute-stages ((list-of (struct plan)) -> vector))
 (define (compute-stages lst)
-  (let ((stage (make-hash-table test: eq? hash: eq?-hash)))
+  (let* ((stage   (make-hash-table test: eq? hash: eq?-hash))
+         (k/stage (k/unbuilt (k/hash-ref stage max))))
     (define (stage-of p)
-      ;; a plan's stage is 1+(greatest input stage),
-      ;; where a plan with no other inputs is stage 0
-      (+ 1 ((input-seq p)
-            (k/unbuilt (k/map (cut hash-table-ref stage <>) max)) -1)))
-    (for-each
+      (+ 1 ((input-seq p) k/stage -1)))
+    (for-each/unbuilt-dfs
       (lambda (p)
-        (unbuilt-dfs
-          (lambda (p)
-            (or (hash-table-ref/default stage p #f)
-                (let ((val (stage-of p)))
-                  (hash-table-set! stage p val))))
-          p))
+        (or (hash-table-ref/default stage p #f)
+            (let ((val (stage-of p)))
+              (hash-table-set! stage p val))))
       lst)
     (let* ((endstage ((list->seq lst) (k/map (cut hash-table-ref/default stage <> -1) max) -1))
            (vec      (make-vector (+ endstage 1) '())))
