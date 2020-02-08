@@ -54,7 +54,11 @@
                              (dirname out)))
                           ((string=? out "/") (string-append out part))
                           (else (string-append out "/" part))))))
-         (cons-arg  (k/map stringify (k/map (cut string-sep->seq <> #\/) (k/recur add-part)))))
+         (k/part    (kompose
+                      (k/map stringify)
+                      (k/map (cut string-sep->seq <> #\/))
+                      k/recur))
+         (cons-arg  (k/part add-part)))
     (lambda (first . rest)
       ((list->seq (cons first rest))
        cons-arg

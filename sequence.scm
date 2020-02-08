@@ -23,12 +23,14 @@
 ;; list->seq turns a list into a sequence
 (: list->seq (list -> seq))
 (define (list->seq lst)
-  (lambda (kons seed)
-    (let loop ((lst lst)
-               (out seed))
-      (if (null? lst)
-        out
-        (loop (cdr lst) (kons (car lst) out))))))
+  (if (null? lst)
+    empty-seq
+    (lambda (kons seed)
+      (let loop ((lst lst)
+                 (out seed))
+        (if (null? lst)
+          out
+          (loop (cdr lst) (kons (car lst) out)))))))
 
 (: seq->list (seq -> list))
 (define (seq->list seq)
@@ -36,13 +38,15 @@
 
 (: vector->seq (vector -> seq))
 (define (vector->seq vec)
-  (lambda (kons seed)
-    (let ((end (vector-length vec)))
-      (let loop ((i 0)
-                 (out seed))
-        (if (>= i end)
-          out
-          (loop (+ i 1) (kons (vector-ref vec i) out)))))))
+  (if (= 0 (vector-length vec))
+    empty-seq
+    (lambda (kons seed)
+      (let ((end (vector-length vec)))
+        (let loop ((i 0)
+                   (out seed))
+          (if (>= i end)
+            out
+            (loop (+ i 1) (kons (vector-ref vec i) out))))))))
 
 (: seq->vector (seq -> vector))
 (define (seq->vector seq)
@@ -58,18 +62,19 @@
         (let ((rhs (iter out res)))
           (loop (proc) rhs))))))
 
-(: k/map (('a -> 'c) ('c 'b -> 'b) -> ('c 'b -> 'b)))
-(define (k/map proc kons)
-  (lambda (in out)
-    (kons (proc in) out)))
+(define (k/map proc)
+  (lambda (kons)
+    (lambda (in out)
+      (kons (proc in) out))))
 
 ;; k/hash-ref is a reducer that transforms
 ;; each element by looking up a value in
 ;; a hash table and then calling the inner
 ;; reducing function 'kons'
-(define (k/hash-ref ht kons)
-  (lambda (in out)
-    (kons (hash-table-ref ht in) out)))
+(define (k/hash-ref ht)
+  (lambda (kons)
+    (lambda (in out)
+      (kons (hash-table-ref ht in) out))))
 
 ;; s/map takes a procedure and a sequence
 ;; and yields another sequence that produces
@@ -77,14 +82,14 @@
 (: s/map (('x -> 'a) seq -> seq))
 (define (s/map proc seq)
   (lambda (kons seed)
-    (seq (k/map proc kons) seed)))
+    (seq ((k/map proc) kons) seed)))
 
-(: k/filter (('b -> *) ('a 'b -> 'b) -> ('a 'b -> 'b)))
-(define (k/filter pred? kons)
-  (lambda (in out)
-    (if (pred? in)
-      (kons in out)
-      out)))
+(define (k/filter pred?)
+  (lambda (kons)
+    (lambda (in out)
+      (if (pred? in)
+        (kons in out)
+        out))))
 
 ;; s/filter takes a predicate and a sequence
 ;; and yields another sequence that conjoins
@@ -92,17 +97,17 @@
 (: s/filter (('x -> *) seq -> seq))
 (define (s/filter pred? seq)
   (lambda (kons seed)
-    (seq (k/filter pred? kons) seed)))
+    (seq ((k/filter pred?) kons) seed)))
 
-(: k/uniq (('a 'b -> 'b) #!rest * -> ('a 'b -> 'b)))
-(define (k/uniq kons . args)
-  (let ((ht (apply make-hash-table args)))
-    (lambda (in out)
-      (if (hash-table-ref/default ht in #f)
-        out
-        (begin
-          (hash-table-set! ht in #t)
-          (kons in out))))))
+(define (k/uniq . args)
+  (lambda (kons)
+    (let ((ht (apply make-hash-table args)))
+      (lambda (in out)
+        (if (hash-table-ref/default ht in #f)
+          out
+          (begin
+            (hash-table-set! ht in #t)
+            (kons in out)))))))
 
 ;; s/uniq takes a sequence (and optionally arguments
 ;; to make-hash-table) and yields a sequence that
@@ -112,14 +117,14 @@
 ;;   (s/uniq seq test: = hash: number-hash)
 ;; would be suitable for producing unique numbers from a sequence
 (define (s/uniq seq . args)
-  (lambda (kons seed)
-    (seq (apply k/uniq kons args) seed)))
+  (let ((k (apply k/uniq args)))
+    (lambda (kons seed)
+      (seq (k kons) seed))))
 
-;; k/recur is a reducer that reduces inner sequences
-;; using the reducer 'kons'
-(define (k/recur kons)
-  (lambda (inseq out)
-    (inseq kons out)))
+(define k/recur
+  (lambda (kons)
+    (lambda (inseq out)
+      (inseq kons out))))
 
 ;; s/append takes a list of sequences
 ;; and produces a sequence that produces all of
@@ -176,6 +181,18 @@
                 (void))))
     (seq kons (void))))
 
+;; lines/s produces a string from a sequence
+;; by applying (display item) (newline) to
+;; each item and collecting the output as a string
+(define (lines/s seq)
+  (call-with-output-string
+    (lambda (prt)
+      (seq (lambda (in out)
+             (display in out)
+             (newline out)
+             out)
+           prt))))
+
 ;; string-sep->seq produces a sequence
 ;; of strings that are the components of 'str'
 ;; separated by the character 'sep'
@@ -200,56 +217,40 @@
 (define (app flst obj)
   (if (null? flst)
     obj
-    (app (cdr flst) ((car flst) obj))))
+    ((car flst) (app (cdr flst) obj))))
 
 ;; k/preorder does recursive pre-order traversal
 ;; using (child node) to produce the sequence
-;; of children at each node and 'kons' as the
-;; inner reducing function
-;;
-;; the 'rest' argument of k/recur-postorder is
-;; a set of reducer transformers that are evaluated
-;; in advance of the recursion (such as k/uniq, etc.)
-(define (k/preorder child kons . outer)
-  (letrec ((self (app outer
-                      (lambda (in out)
-                        ((child in) self (kons in out))))))
-    self))
+;; and 'inner' as the inner reducer function
+(define (k/preorder inner child)
+  (lambda (kons)
+    (lambda (in out)
+      ((child in) inner (kons in out)))))
 
 ;; k/postorder does recursive post-order traversal
 ;; using (child node) to produce the sequence of
-;; children at each node and 'kons' as the inner
-;; reducing function
-;;
-;; the 'rest' argument of k/recur-postorder is
-;; a set of reducer transformers that are evaluated
-;; in advance of any recursion
-(define (k/postorder child kons . outer)
-  (letrec ((self (app outer
-                      (lambda (in out)
-                        (kons in ((child in) self out))))))
-    self))
+;; children at each node and 'inner' as the
+;; reducing function for the children
+(define (k/postorder inner child)
+  (lambda (kons)
+    (lambda (in out)
+      (kons in ((child in) inner out)))))
 
-;; k/bfs-uniq performs breadth-first recursion
-;; using 'child' as a procedure on each node to
-;; produce the sequence of children, and 'kons'
-;; to reduce each visited node
-;;
-;; k/bfs-uniq accepts 'rest' arguments that
-;; are passed verbatim to the end of k/uniq
-;; in order to control deduplication
-;;
-;; note that nodes are only visited once
-(define (k/bfs-uniq child kons . rest)
-  (k/preorder child kons (lambda (inner)
-                           (apply k/uniq inner rest))))
-
-;; k/dfs-uniq performs a depth-first recursion
-;; using 'child' as a procedure on each not
-;; to produce the sequence of children, and 'kons'
-;; to reduce each visited node
-;; (see k/bfs-uniq)
-(define (k/dfs-uniq child kons . rest)
-  (k/postorder child kons (lambda (inner)
-                            (apply k/uniq inner rest))))
+(define-syntax kompose
+  (syntax-rules (label)
+    ((_ "recur" kvar last)
+     (last kvar))
+    ((_ "recur" kvar (label sym) rest* ...)
+     ;; we need the explicit lambda here in order
+     ;; to ensure that uses of 'sym' within the rest
+     ;; of the macro expansion are not (void) when
+     ;; they are evaluated
+     (letrec* ((sym (lambda (in out) (val in out)))
+               (val (kompose "recur" kvar rest* ...)))
+        val))
+    ((_ "recur" kvar xfrm rest* ...)
+     (xfrm (kompose "recur" kvar rest* ...)))
+    ((_ head rest* ...)
+     (lambda (kons)
+       (kompose "recur" kons head rest* ...)))))
 

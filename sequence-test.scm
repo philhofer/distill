@@ -2,7 +2,8 @@
   (scheme base)
   (srfi 69)
   (chicken type)
-  (only (srfi 13) substring/shared))
+  (only (srfi 13) substring/shared)
+  (only (chicken port) call-with-output-string))
 
 (include "sequence.scm")
 (include "test-helpers.scm")
@@ -13,7 +14,8 @@
   (test equal? (list->vector lst) (seq->vector seq))
   (test equal? (list->vector lst) (seq->vector (vector->seq (list->vector lst))))
   (test eq? #t (any/s? symbol? seq))
-  (test eq? #t (all/s? symbol? seq)))
+  (test eq? #t (all/s? symbol? seq))
+  (test string=? "a\nb\nc\nd\n" (lines/s seq)))
 
 (let* ((lst   '(1 3 5 7 1 3 5))
        (seq   (list->seq lst))
@@ -45,15 +47,31 @@
                    (kons (cddr p) (kons (cadr p) seed)))
                  empty-seq)))
        (val  (lambda (p)
-               (if (pair? p) (car p) p))))
+               (if (pair? p) (car p) p)))
+       (kpre  (kompose
+                (label self)
+                (k/preorder self sub)
+                (k/map val)))
+       (kpost (kompose
+                (label self)
+                (k/postorder self sub)
+                (k/map val))))
   (test equal? (reverse '(0 1 3 4 2 5 6))
-        (seq
-         (k/preorder sub (k/map val cons))
-         '()))
+        (seq (kpre cons) '()))
   (test equal? (reverse '(3 4 1 5 6 2 0))
-        (seq
-          (k/postorder sub (k/map val cons))
-          '())))
+        (seq (kpost cons) '())))
+
+(define (bfs-uniq child)
+  (kompose
+    (label top)
+    (k/uniq test: eq? hash: eq?-hash)
+    (k/preorder top child)))
+
+(define (dfs-uniq child)
+  (kompose
+    (label top)
+    (k/uniq test: eq? hash: eq?-hash)
+    (k/postorder top child)))
 
 ;; test a graph in adjacency-list format
 ;; which yields itself in reverse in BFS
@@ -65,6 +83,8 @@
        (seq   (vector->seq graph))
        (child (lambda (lst)
                 (s/map (cut vector-ref graph <>) (list->seq lst))))
-       (revg  (seq cons '())))
-  (test equal? revg (seq (k/bfs-uniq child cons test: eq? hash: eq?-hash) '()))
-  (test equal? (vector->list graph) (seq (k/dfs-uniq child cons test: eq? hash: eq?-hash) '())))
+       (revg  (seq cons '()))
+       (kbfs  (bfs-uniq child))
+       (kdfs  (dfs-uniq child)))
+  (test equal? revg (seq (kbfs cons) '()))
+  (test equal? (vector->list graph) (seq (kdfs cons) '())))

@@ -43,6 +43,7 @@
     native-binutils
     native-gcc
     busybox-core
+    busybox/config
     execline-tools
     gcc-for-target
     cc-for-target

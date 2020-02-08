@@ -11,14 +11,14 @@
 
 (define linux-headers
   (let* ((version  '5.4)
-         (patchlvl 15)
+         (patchlvl 18)
          (src     (list
                     (remote-archive
                       (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-" version ".tar.xz")
                       "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
                     (remote-file
                       (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" version "." patchlvl ".xz")
-                      "DclHfO37RNB0C0ffq15VHvPY1a88IdSPP-3gZ1HLL6w="
+                      "H5rTuxdmrplile5RY3POO60aARqvqvwTY3rmB6Iwz2I="
                       "/src/linux.patch"
                       #o644)))
          (arch-name (lambda (arch)

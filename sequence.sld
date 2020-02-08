@@ -18,8 +18,7 @@
     s/cons*
     k/preorder
     k/postorder
-    k/bfs-uniq
-    k/dfs-uniq
+    kompose
     empty-seq
     any/s?
     all/s?
@@ -32,6 +31,7 @@
   (cond-expand
     (chicken (import
                (chicken type)
+               (only (chicken port) call-with-output-string)
                (only (chicken base) void))))
   (include "sequence.scm"))
 

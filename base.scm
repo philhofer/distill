@@ -595,7 +595,7 @@ EOF
   (lambda (build)
     ((binutils-for-target build) build)))
 
-(define busybox-core
+(define (busybox/config config-hash extra-inputs)
   (let* ((version '1.31.1)
          (leaf    (remote-archive
                     (conc "https://busybox.net/downloads/busybox-" version ".tar.bz2")
@@ -604,10 +604,8 @@ EOF
       ;; NOTE: the busybox config we've selected here is carefully
       ;; chosen so as not to require any linux headers; otherwise
       ;; we'd have to bring in a kernel source tree and perl (shudders)
-      (let* ((small-config (remote-file
-                             #f
-                             "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k="
-                             "/src/config.head" #o644))
+      (let* ((config       (remote-file
+                             #f config-hash "/src/config.head" #o644))
              (cenv         (cc-env conf))
              (patches      (patch*
                              (include-file-text "patches/busybox/busybox-bc.patch")))
@@ -622,11 +620,11 @@ EOF
         (make-package
           prebuilt: (maybe-prebuilt conf 'busybox)
           label:  (conc "busybox-core-" version "-" (conf 'arch))
-          src:    (cons* small-config leaf patches)
+          src:    (cons* config leaf patches)
           tools:  (append
                     (cons bzip2 (cc-for-target conf))
                     (native-toolchain-for conf))
-          inputs: libc
+          inputs: (append libc extra-inputs)
           build:  (make-recipe
                     script: (execline*
                               (cd ,(conc "busybox-" version))
@@ -642,3 +640,10 @@ EOF
                               (forstdin -o 0 link)
                               (importas "-i" -u link link)
                               (ln -s /bin/busybox "/out/${link}"))))))))
+
+;; busybox-core is just enough busybox to build packages;
+;; it doesn't include system utilities that would require
+;; linux headers
+(define busybox-core
+  (busybox/config "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=" '()))
+

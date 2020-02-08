@@ -82,6 +82,18 @@
     (hash-string lnk)
     #f))
 
+(define (interned-dir abspath mode)
+  (%artifact
+    `#(dir ,abspath ,mode)
+    (hash-string abspath)
+    #f))
+
+(: overlay (string -> vector))
+(define (overlay abspath)
+  (file->artifact
+    (filepath-join (current-directory) abspath)
+    abspath))
+
 ;; by default, dump stuff into these directories
 ;; TODO: inherit these from the environment
 (define plan-dir (make-parameter "./plans"))
@@ -208,7 +220,7 @@
   ;; that way we can build old plans even if we don't
   ;; have the code that generated them (as long as
   ;; we have the original artifacts)
-  (let* ((inputs ((list->seq inputs) (k/map pair->inseq (k/recur cons)) '()))
+  (let* ((inputs ((list->seq inputs) ((k/map pair->inseq) (k/recur cons)) '()))
          (inputs (sort inputs art<?)))
     (write inputs out)))
 
@@ -363,11 +375,20 @@
   (define (unpack-symlink dst abspath lnk)
     (create-symbolic-link lnk (filepath-join dst abspath)))
 
+  (define (unpack-dir dst abspath mode)
+    (let ((dir (filepath-join dst abspath)))
+      (when (and (directory-exists? dir)
+                 (not (= mode (file-permissions dir))))
+        (error "directory exists but has conflicting permissions:" dir))
+      (create-directory dir #t)
+      (set-file-permissions! dir mode)))
+
   (let ((format (artifact-format i))
         (hash   (artifact-hash i))
         (extra  (artifact-extra i)))
     (match format
       (#('file abspath mode)   (unpack-file dst abspath mode hash extra))
+      (#('dir abspath mode)    (unpack-dir dst abspath mode))
       (#('archive kind)        (unpack-archive dst kind hash extra))
       (#('symlink abspath lnk) (unpack-symlink dst abspath lnk))
       (else (error "unrecognized artifact format" format)))))
@@ -508,13 +529,21 @@
       ;; instead of performing a re-build
       (filepath-join (artifact-dir) (artifact-hash out)))))
 
-;; k/unbuilt is a reducer that takes another reducer
-;; and filters its inputs to only include unbuilt plans
+;; k/unbuilt is a reducer-transformer
+;; that yields only unbuilt plans to its reducer
 (define k/unbuilt
   (let ((unbuilt? (lambda (in)
                     (and (plan? in) (not (plan-built? in))))))
-    (lambda (kons)
-      (k/filter unbuilt? kons))))
+    (k/filter unbuilt?)))
+
+;; k/unbuilt-dfs is a reducer-transformer
+;; that walks unbuilt plans in DFS order
+(define k/unbuilt-dfs
+  (kompose
+    (label top)
+    (k/uniq test: eq? hash: eq?-hash)
+    k/unbuilt
+    (k/postorder top input-seq)))
 
 ;; for-each/unbuilt-dfs walks a list of plans
 ;; in depth-first order and calls (proc p) on
@@ -522,13 +551,10 @@
 (: for-each/unbuilt-dfs (((struct plan) -> *) (list-of (struct plan)) -> undefined))
 (define (for-each/unbuilt-dfs proc pl)
   ((list->seq pl)
-   (k/unbuilt
-     (k/dfs-uniq
-       input-seq
-       (k/unbuilt
-         (lambda (in out)
-           (proc in)
-           (void)))))
+   (k/unbuilt-dfs
+     (lambda (in out)
+       (proc in)
+       (void)))
    (void)))
 
 ;; compute-stages assigns stages to the build,
@@ -539,17 +565,17 @@
 ;; that can be built in parallel
 (: compute-stages ((list-of (struct plan)) -> vector))
 (define (compute-stages lst)
-  (let* ((stage   (make-hash-table test: eq? hash: eq?-hash))
-         (k/stage (k/unbuilt (k/hash-ref stage max))))
+  (let* ((stage   (make-hash-table eq? eq?-hash))
+         (kstage  ((kompose k/unbuilt (k/hash-ref stage)) max)))
     (define (stage-of p)
-      (+ 1 ((input-seq p) k/stage -1)))
+      (+ 1 ((input-seq p) kstage -1)))
     (for-each/unbuilt-dfs
       (lambda (p)
         (or (hash-table-ref/default stage p #f)
             (let ((val (stage-of p)))
               (hash-table-set! stage p val))))
       lst)
-    (let* ((endstage ((list->seq lst) (k/map (cut hash-table-ref/default stage <> -1) max) -1))
+    (let* ((endstage ((list->seq lst) ((k/map (cut hash-table-ref/default stage <> -1)) max) -1))
            (vec      (make-vector (+ endstage 1) '())))
       (hash-table-for-each
         stage
@@ -559,39 +585,47 @@
 
 (: build-graph! ((list-of (struct plan)) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
-  (let ((sema   (make-semaphore maxprocs))
-        (stages (compute-stages lst))
-        (ht     (make-hash-table test: eq? hash: eq?-hash))
-        (err    #f))
+  (let* ((sema           (make-semaphore maxprocs))
+         (stages         (compute-stages lst))
+         (ht             (make-hash-table eq? eq?-hash))
+         (k/input-status (kompose
+                           k/unbuilt
+                           (k/hash-ref ht)
+                           (k/map join/value)))
+         (err            #f)
+         (kinput         (k/input-status
+                           (lambda (in out)
+                             (cond
+                               (err err)
+                               ((condition? in) (begin (set! err in) in))
+                               (else out)))))
+         ;; should-build? waits for all of the
+         ;; input plans for 'p' to be done building
+         ;; and then checks if we should really build
+         ;; (i.e. no error has been encountered and
+         ;; the plan is actually stale)
+         (should-build?  (lambda (p)
+                           (or (condition?
+                                 ((input-seq p) kinput #t))
+                               (not (plan-built? p))))))
     ;; core build procedure:
     ;; first, wait for inputs (dependencies) to complete,
     ;; then either a) return, if there has been an error,
     ;; or b) acquire up to maxjobs jobs from the semaphore
     ;; and then execute with that level of intra-build parallelism
     (define (build-one! p maxjobs)
-      (let* ((kons (lambda (in out)
-                     (let ((v (join/value in)))
-                       (cond
-                         (err err)
-                         ((condition? v) (begin (set! err v) v))
-                         (else out)))))
-             (inok ((input-seq p) (k/unbuilt (k/map (cut hash-table-ref ht <>) kons)) #t)))
-        (or (condition? inok)
-            ;; by the time all the inputs are built,
-            ;; we may *discover* that this plan is identical
-            ;; to one that is already built; in that case, bail
-            (plan-built? p)
-            (let ((jobs (semacquire/max sema (if (plan-parallel p) maxjobs 1))))
-              ;; in the time spent waiting to acquire resources,
-              ;; another plan could have encountered an error, so
-              ;; this inner bit should become a no-op in that situation
-              (or err
-                  (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
-                    (infoln "building")
-                    (save-plan-outputs! p (plan->outputs! p jobs))
-                    (infoln "completed")))
-              (semrelease/n sema jobs)
-              #t))))
+      (if (should-build? p)
+        (let ((jobs (semacquire/max sema (if (plan-parallel p) maxjobs 1))))
+          ;; in the time spent waiting to acquire resources,
+          ;; another plan could have encountered an error, so
+          ;; this inner bit should become a no-op in that situation
+          (or err
+              (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
+                (infoln "building")
+                (save-plan-outputs! p (plan->outputs! p jobs))
+                (infoln "completed")))
+          (semrelease/n sema jobs))
+          #t))
     ;; spawn a builder coroutine for each unbuilt package
     (for-each/s
       (lambda (stage)
