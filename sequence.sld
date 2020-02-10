@@ -20,6 +20,7 @@
     k/postorder
     kompose
     empty-seq
+    lines/s
     any/s?
     all/s?
     for-each/s)

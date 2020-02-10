@@ -4,6 +4,7 @@
     plan-dir
     interned
     interned-symlink
+    interned-dir
     local-archive
     remote-archive
     remote-file

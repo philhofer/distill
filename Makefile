@@ -18,7 +18,7 @@ UNITS:=distill.hash distill.nproc distill.table \
 	distill.plan distill.package distill.execline \
 	distill.filepath distill.eprint distill.memo \
 	distill.sequence distill.buildenv distill.base \
-	distill.image
+	distill.image distill.linux distill.service
 
 %.import.scm %.o:
 	$(R7RSC) $(CSC_LIBFLAGS) -unit $* -ot $*.types -c $< -o $*.o

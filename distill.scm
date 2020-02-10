@@ -54,7 +54,9 @@
     distill.package
     distill.buildenv
     distill.image
-    distill.base))
+    distill.base
+    distill.linux
+    distill.service))
 
 (import
   (distill filepath)

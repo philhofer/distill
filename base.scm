@@ -618,8 +618,7 @@ EOF
                                (HOSTCFLAGS  --sysroot=/ -fPIE -static-pie)
                                (HOSTLDFLAGS --sysroot=/ -static-pie)))))
         (make-package
-          prebuilt: (maybe-prebuilt conf 'busybox)
-          label:  (conc "busybox-core-" version "-" (conf 'arch))
+          label:  (conc "busybox-" version "-" (conf 'arch))
           src:    (cons* config leaf patches)
           tools:  (append
                     (cons bzip2 (cc-for-target conf))
@@ -645,5 +644,13 @@ EOF
 ;; it doesn't include system utilities that would require
 ;; linux headers
 (define busybox-core
-  (busybox/config "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=" '()))
+  (lambda (conf)
+    ;; busybox-core is a prebuilt bootstrap package,
+    ;; so we have to update the package struct to reflect that
+    (let* ((config "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=")
+           (bbpkg  ((busybox/config config '()) conf))
+           (pre    (maybe-prebuilt conf 'busybox)))
+      (if pre
+        (update-package bbpkg prebuilt: pre)
+        bbpkg))))
 

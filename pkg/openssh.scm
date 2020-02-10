@@ -4,11 +4,11 @@
   (distill package)
   (distill buildenv)
   (distill base)
+  (only (distill linux) linux-headers)
   (only (distill image) libressl)
   (only (chicken string) conc)
   (pkg libedit)
-  (pkg ncurses)
-  (pkg linux-headers))
+  (pkg ncurses))
 
 (define openssh
   (let* ((version '8.1p1)
