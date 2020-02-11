@@ -6,6 +6,7 @@
     seq->vector
     proc->seq
     string-sep->seq
+    s/bind
     s/filter
     k/filter
     s/map
@@ -21,6 +22,7 @@
     kompose
     empty-seq
     lines/s
+    join/s
     any/s?
     all/s?
     for-each/s)

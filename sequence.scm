@@ -62,6 +62,23 @@
         (let ((rhs (iter out res)))
           (loop (proc) rhs))))))
 
+;; s/bind is the fundamental sequence transformer:
+;; it yields a sequence that applies 'xfrm' to
+;; the reducer before using it to reduce the
+;; provided sequence
+;;
+;; for example, (s/map proc seq) can be defined
+;; as (s/bind seq (k/map proc)), and (s/filter pred? seq)
+;; can be defined as (s/bind seq (k/filter pred?)), and
+;; so forth
+;;
+;; it is often the case that the 'xfrm' argument
+;; is the result of the 'kompose' macro
+(: s/bind (seq (('a 'b -> 'b) -> ('a 'b -> 'c)) -> seq))
+(define (s/bind seq xfrm)
+  (lambda (kons seed)
+    (seq (xfrm kons) seed)))
+
 (define (k/map proc)
   (lambda (kons)
     (lambda (in out)
@@ -81,8 +98,7 @@
 ;; items as (proc item) for each item
 (: s/map (('x -> 'a) seq -> seq))
 (define (s/map proc seq)
-  (lambda (kons seed)
-    (seq ((k/map proc) kons) seed)))
+  (s/bind seq (k/map proc)))
 
 (define (k/filter pred?)
   (lambda (kons)
@@ -96,8 +112,7 @@
 ;; only items that pass (pred? item)
 (: s/filter (('x -> *) seq -> seq))
 (define (s/filter pred? seq)
-  (lambda (kons seed)
-    (seq ((k/filter pred?) kons) seed)))
+  (s/bind seq (k/filter pred?)))
 
 (define (k/uniq . args)
   (lambda (kons)
@@ -117,9 +132,7 @@
 ;;   (s/uniq seq test: = hash: number-hash)
 ;; would be suitable for producing unique numbers from a sequence
 (define (s/uniq seq . args)
-  (let ((k (apply k/uniq args)))
-    (lambda (kons seed)
-      (seq (k kons) seed))))
+  (s/bind seq (apply k/uniq args)))
 
 (define k/recur
   (lambda (kons)
@@ -130,9 +143,7 @@
 ;; and produces a sequence that produces all of
 ;; the items in those sequences in order from left to right
 (define (s/append . seqs)
-  (let ((inner (list->seq seqs)))
-    (lambda (kons seed)
-      (inner (k/recur kons) seed))))
+  (s/bind (list->seq seqs) k/recur))
 
 ;; s/cons* takes a list of arguments,
 ;; the last of which is a sequence,
@@ -192,6 +203,18 @@
              (newline out)
              out)
            prt))))
+
+(define (join/s sep seq)
+  (call-with-output-string
+    (lambda (prt)
+      (let* ((first #t)
+             (kons  (lambda (in out)
+                      (if first
+                        (set! first #f)
+                        (display sep out))
+                      (display in out)
+                      out)))
+        (seq kons prt)))))
 
 ;; string-sep->seq produces a sequence
 ;; of strings that are the components of 'str'

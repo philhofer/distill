@@ -4,6 +4,7 @@
   (distill package)
   (distill buildenv)
   (distill base)
+  (distill execline)
   (only (distill linux) linux-headers)
   (only (distill image) libressl)
   (only (chicken string) conc)
@@ -42,5 +43,10 @@
                                      --with-privsep-user=sshd
                                      --with-md5-passwords
                                      --with-libedit))
-                  pre-configure: (script-apply-patches (list patch0)))))))
+                  pre-configure: (script-apply-patches (list patch0))
+                  post-install:  (execline*
+                                   ;; do NOT keep config files;
+                                   ;; those are inserted via overlay
+                                   (if ((rm -rf /out/var)))
+                                   (if ((rm -rf /out/etc)))))))))
 

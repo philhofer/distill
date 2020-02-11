@@ -2,7 +2,7 @@
 (define-type svc-params (list-of (pair keyword *)))
 (define-type s6-svc (pair (or string symbol) (list-of svc-params)))
 
-(define (s6-svc name . args)
+(define (s6-svc name args)
   (cons name
         (let loop ((args args))
           (if (null? args)
@@ -36,17 +36,23 @@
 
 ;; s6-rc-db converts a sequence of s6-rc package specifications
 ;; and produces a package-lambda for the compiled service database
-(define (s6-rc-db spec-seq)
-  (let ((artifacts (spec-seq (k/map spec->artifact-seq (k/recur cons)) '())))
-    (lambda (conf)
-      (make-package
-        label:  "s6-rc-db"
-        src:    artifacts
-        tools:  (list execline-tools s6 s6-rc)
-        inputs: '()
-        build:  (make-recipe
-                  script: (execline*
-                            (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services")))))))
+(define s6-rc-db
+  (let* ((k/spec->art    (kompose
+                           (k/map spec->artifact-seq)
+                           k/recur))
+         (cons-artifacts (k/spec->art cons)))
+    (lambda (spec-seq)
+      (let ((artifacts (spec-seq cons-artifacts '())))
+        (lambda (conf)
+          (make-package
+            label:  "s6-rc-db"
+            src:    artifacts
+            tools:  (list busybox-core execline-tools s6 s6-rc)
+            inputs: '()
+            build:  (make-recipe
+                      script: (execline*
+                                (if ((mkdir -p "/out/etc/s6-rc")))
+                                (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services")))))))))
 
 (define (check-kw yes no lst)
   (for-each
@@ -114,12 +120,12 @@
 
 (: s/packages ((list-of (struct service)) -> procedure))
 (define (s/packages lst)
-  (let ((pkg-seq (lambda (s) (list->seq (service-inputs s))))
-        (outer   (list->seq lst)))
-    (lambda (kons seed)
-      (outer
-       (k/map pkg-seq (k/recur (k/uniq kons)))
-       seed))))
+  (s/bind (list->seq lst)
+          (kompose
+            (k/map service-inputs)
+            (k/map list->seq)
+            k/recur
+            (k/uniq test: eq? hash: eq?-hash))))
 
 (define (named* pat)
   (let ((sre (glob->sre pat)))
@@ -134,36 +140,49 @@
   (let ((after (service-after svc)))
     (if (null? after)
       '()
-      (let ((match? (lambda (svc)
-                      (let loop ((lst after))
-                        (if (null? lst)
-                          #f
-                          (or ((car lst) svc) (loop (cdr lst))))))))
-        (all-seq
-          (k/filter match? (k/map service-name cons))
-          '())))))
+      (let* ((match? (lambda (svc)
+                       (let loop ((lst after))
+                         (if (null? lst)
+                           #f
+                           (or ((car lst) svc) (loop (cdr lst)))))))
+             (seq    (s/bind all-seq (kompose
+                                       (k/filter match?)
+                                       (k/map service-name)))))
+        (seq cons '())))))
 
 (: service->s6-svc ((struct service) procedure -> list))
 (define (service->s6-svc svc svc-seq)
   (let ((depends (service-depends svc svc-seq)))
     (s6-svc
       (service-name svc)
-      (if (null? depends) (service-spec svc)
+      (if (null? depends)
+        (service-spec svc)
         (append (list dependencies: (lines/s (list->seq depends)))
                 (service-spec svc))))))
+
+(define (k/field-list proc)
+  (kompose
+    (k/map proc)
+    (k/map list->seq)
+    k/recur))
 
 ;; services->packages takes a list of services
 ;; and produces a complete list of packages
 ;; that the services depend upon, including
 ;; the necessary init scripts and binaries
-(: services->packages ((list-of (struct service)) -> list))
+(: services->packages ((list-of (struct service)) -> (list-of procedure)))
 (define (services->packages lst)
-  (let* ((tail  ((s/packages lst) cons '()))
-         (all   (list->seq lst))
-         (->svc (cut service->s6-svc <> all))
-         (db    (s6-rc-db (s/map ->svc all))))
+  (let* ((tail     ((s/packages lst) cons '()))
+         (all      (list->seq lst))
+         (k/users  (k/field-list service-users))
+         (k/groups (k/field-list service-groups))
+         (->svc    (cut service->s6-svc <> all))
+         (db       (s6-rc-db (s/map ->svc all)))
+         (users    (all (k/users cons) '()))
+         (groups   (all (k/groups cons) '())))
     (append
       (cons db tail)
+      (groups+users->artifacts groups users)
       (init-artifacts))))
 
 (define *service-dir* "/run/service")

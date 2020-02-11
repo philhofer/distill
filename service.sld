@@ -4,17 +4,20 @@
     s6-rc
     busybox-full
     services->packages
+    named*
     make-service
     update-service
     service-name)
   (import
     scheme
     (srfi 26)
+    (srfi 69)
     (scheme base)
     (distill plan)
     (distill package)
     (distill buildenv)
     (distill base)
+    (distill unix)
     (distill linux)
     (distill sequence)
     (distill filepath)

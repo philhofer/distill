@@ -90,9 +90,17 @@
 
 (: overlay (string -> vector))
 (define (overlay abspath)
-  (file->artifact
-    (filepath-join (current-directory) abspath)
-    abspath))
+  (let* ((p (filepath-join (current-directory) abspath))
+         (h (hash-file p)))
+    (unless h
+      (error "overlay file doesn't exist:" p))
+    (let ((dst (filepath-join (artifact-dir) h)))
+      (unless (file-exists? dst)
+        (copy-file p dst)))
+    (%artifact
+      `#(file ,abspath ,(file-permissions p))
+      h
+      #f)))
 
 ;; by default, dump stuff into these directories
 ;; TODO: inherit these from the environment

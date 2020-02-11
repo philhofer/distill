@@ -56,6 +56,7 @@
     distill.image
     distill.base
     distill.linux
+    distill.sysctl
     distill.service))
 
 (import
