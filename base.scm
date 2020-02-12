@@ -163,10 +163,10 @@ EOF
     (list native-gcc native-binutils musl libssp-nonshared)))
 
 (define libgmp
-  (let* ((version '6.1.2)
+  (let* ((version '6.2.0)
          (leaf    (remote-archive
                     (conc "https://gmplib.org/download/gmp/gmp-" version ".tar.xz")
-                    "bodUs2nnuExA5OmrihkTLOR9P-4cmpWyeyGYiFUPM8s=")))
+                    "YQMYgwK95PJL5gS5-l_Iw59tc1O31Kx3X2XFdWm8t6M=")))
     (lambda (conf)
       (make-package
         label:  (conc "gmp-" version "-" (conf 'arch))

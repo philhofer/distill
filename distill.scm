@@ -56,6 +56,7 @@
     distill.image
     distill.base
     distill.linux
+    distill.unix
     distill.sysctl
     distill.service))
 

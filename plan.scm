@@ -573,67 +573,85 @@
 ;; that can be built in parallel
 (: compute-stages ((list-of (struct plan)) -> vector))
 (define (compute-stages lst)
-  (let* ((stage   (make-hash-table eq? eq?-hash))
+  (let* ((stage   (make-hash-table test: eq? hash: eq?-hash))
          (kstage  ((kompose k/unbuilt (k/hash-ref stage)) max)))
     (define (stage-of p)
       (+ 1 ((input-seq p) kstage -1)))
     (for-each/unbuilt-dfs
       (lambda (p)
         (or (hash-table-ref/default stage p #f)
-            (let ((val (stage-of p)))
-              (hash-table-set! stage p val))))
+            (hash-table-set! stage p (stage-of p))))
       lst)
     (let* ((endstage ((list->seq lst) ((k/map (cut hash-table-ref/default stage <> -1)) max) -1))
            (vec      (make-vector (+ endstage 1) '())))
       (hash-table-for-each
         stage
-        (lambda (p stage)
-          (vector-set! vec stage (cons p (vector-ref vec stage)))))
+        (lambda (p num)
+          (for-each/s
+            ;; sanity check: all inputs must be one of:
+            ;; 1) artifacts,
+            ;; 2) built plans,
+            ;; 3) unbuilt plans with stage less than this plan
+            (lambda (in)
+              (or (artifact? in)
+                  (plan-built? in)
+                  (< (hash-table-ref stage in) num)
+                  (error "bad input:" p)))
+            (input-seq p))
+          (vector-set! vec num (cons p (vector-ref vec num)))))
       vec)))
 
 (: build-graph! ((list-of (struct plan)) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
   (let* ((sema           (make-semaphore maxprocs))
          (stages         (compute-stages lst))
-         (ht             (make-hash-table eq? eq?-hash))
+         (ht             (make-hash-table test: eq? hash: eq?-hash))
          (k/input-status (kompose
                            k/unbuilt
-                           (k/hash-ref ht)
-                           (k/map join/value)))
+                           (k/map (lambda (p)
+                                    (or (hash-table-ref/default ht p #f)
+                                        (begin
+                                          (infoln "input plan" (plan-name p)
+                                                  "has no task?")
+                                          (error "missing input task")))))))
          (err            #f)
          (kinput         (k/input-status
                            (lambda (in out)
-                             (cond
-                               (err err)
-                               ((condition? in) (begin (set! err in) in))
-                               (else out)))))
+                             (if err
+                               #f
+                               (let ((v (join/value in)))
+                                 (if (eq? (proc-status in) 'exn)
+                                   (begin
+                                     (unless err (set! err v))
+                                     (abort v))
+                                   out))))))
          ;; should-build? waits for all of the
          ;; input plans for 'p' to be done building
          ;; and then checks if we should really build
          ;; (i.e. no error has been encountered and
          ;; the plan is actually stale)
          (should-build?  (lambda (p)
-                           (or (condition?
-                                 ((input-seq p) kinput #t))
-                               (not (plan-built? p))))))
+                           (and ((input-seq p) kinput #t)
+                                (not (plan-built? p))))))
     ;; core build procedure:
     ;; first, wait for inputs (dependencies) to complete,
     ;; then either a) return, if there has been an error,
     ;; or b) acquire up to maxjobs jobs from the semaphore
     ;; and then execute with that level of intra-build parallelism
     (define (build-one! p maxjobs)
-      (if (should-build? p)
-        (let ((jobs (semacquire/max sema (if (plan-parallel p) maxjobs 1))))
-          ;; in the time spent waiting to acquire resources,
-          ;; another plan could have encountered an error, so
-          ;; this inner bit should become a no-op in that situation
-          (or err
-              (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
-                (infoln "building")
-                (save-plan-outputs! p (plan->outputs! p jobs))
-                (infoln "completed")))
-          (semrelease/n sema jobs))
-          #t))
+      (parameterize ((info-prefix (plan-name p) " |"))
+        (if (should-build? p)
+          (let ((jobs (semacquire/max sema (if (plan-parallel p) maxjobs 1))))
+            ;; in the time spent waiting to acquire resources,
+            ;; another plan could have encountered an error, so
+            ;; this inner bit should become a no-op in that situation
+            (or err
+                (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
+                  (infoln "building")
+                  (save-plan-outputs! p (plan->outputs! p jobs))
+                  (infoln "completed")))
+            (semrelease/n sema jobs))
+          #t)))
     ;; spawn a builder coroutine for each unbuilt package
     (for-each/s
       (lambda (stage)
