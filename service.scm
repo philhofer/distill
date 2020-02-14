@@ -166,6 +166,13 @@
     (k/map list->seq)
     k/recur))
 
+;; the 'default' runlevel is the one used at boot
+(define (default-runlevel svcs)
+  (make-service
+    name: 'default
+    spec: `(type: bundle
+            contents: ,(lines/s (s/bind svcs (k/map service-name))))))
+
 ;; services->packages takes a list of services
 ;; and produces a complete list of packages
 ;; that the services depend upon, including
@@ -176,8 +183,9 @@
          (all      (list->seq lst))
          (k/users  (k/field-list service-users))
          (k/groups (k/field-list service-groups))
+         (default  (default-runlevel all))
          (->svc    (cut service->s6-svc <> all))
-         (db       (s6-rc-db (s/map ->svc all)))
+         (db       (s6-rc-db (s/map ->svc (s/cons* default all))))
          (users    (all (k/users cons) '()))
          (groups   (all (k/groups cons) '())))
     (append
@@ -262,9 +270,9 @@
 ;; that are the contents of a working s6-rc init system,
 ;; absent the actual compiled service database
 (define (init-artifacts)
-  (let* ((init   (interned "/init" #o700 (with-output-to-string
-                                           (lambda ()
-                                             (write-exexpr (init-script))))))
+  (let* ((init   (interned "/sbin/init" #o700 (with-output-to-string
+                                                (lambda ()
+                                                  (write-exexpr (init-script))))))
          (logger (interned "/etc/early-services/s6-svscan-log/run"
                            #o700
                            (with-output-to-string
