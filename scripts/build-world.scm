@@ -37,56 +37,61 @@
                 (if suf (cons (string->symbol (basename suf)) lst) lst)))
     seed: '()))
 
-;; filter-for-config filters out packages
-;; that are known not to cross-compile
-(define (filter-for-config conf lst)
-  (if (eq? (conf 'arch) *this-machine*)
-    lst
-    (let ((no-cross '(perl)))
-      (filter
-        (lambda (p)
-          (not (memq p no-cross)))
-        lst))))
-
-(define builtin
-  `((musl . ,musl)
-    (libssp-nonshared . ,libssp-nonshared)
-    (libgmp . ,libgmp)
-    (libmpfr . ,libmpfr)
-    (libmpc . ,libmpc)
-    (libisl . ,libisl)
-    (zlib   . ,zlib)
-    (bzip2  . ,bzip2)
-    (gawk   . ,gawk)
-    (byacc  . ,byacc)
-    (reflex . ,reflex)
-    (make   . ,make)
-    (skalibs . ,skalibs)
-    (busybox-core . ,busybox-core)
-    (busybox-full . ,busybox-full)
-    (execline-tools . ,execline-tools)
-    (xz-utils . ,xz-utils)
-    (lz4 . ,lz4)
-    (zstd . ,zstd)
-    (squashfs-tools . ,squashfs-tools)
-    (libarchive . ,libarchive)
-    (libressl . ,libressl)
-    (s6 . ,s6)
-    (s6-rc . ,s6-rc)
-    (linux-headers . ,linux-headers)))
+(define (builtin-for conf)
+  (letrec-syntax ((builtin* (syntax-rules ()
+                              ((_) '())
+                              ((_ (name expr) rest* ...)
+                               (let ((tail (builtin* rest* ...)))
+                                 (if expr
+                                   (cons (cons (quote name) name) tail)
+                                   tail)))
+                              ((_ name rest* ...)
+                               (cons (cons (quote name) name) (builtin* rest* ...))))))
+    (builtin*
+      musl
+      libssp-nonshared
+      libgmp
+      libmpfr
+      libmpc
+      libisl
+      zlib
+      bzip2
+      gawk
+      byacc
+      reflex
+      make
+      skalibs
+      busybox-core
+      busybox-full
+      execline-tools
+      xz-utils
+      lz4
+      zstd
+      squashfs-tools
+      libarchive
+      libressl
+      s6
+      s6-rc
+      linux-headers
+      (perl              (eq? (conf 'arch) *this-machine*))
+      (linux-virt-x86_64 (eq? (conf 'arch) 'x86_64)))))
 
 (let* ((config  (let ((args (command-line-arguments)))
                   (if (null? args)
                     (build-config)
                     (default-config (string->symbol (car args))))))
        (build!  (config->builder config))
-       (names   (filter-for-config config package-names))
-       (handles (append (map cdr builtin) (map package-handle names)))
-       (outputs (apply build! handles)))
+       (loaded  (map (lambda (name)
+                       (cons name (package-handle name)))
+                     package-names))
+       (builtin (builtin-for config))
+       (all     (append loaded builtin))
+       (outputs (apply build! (map cdr all))))
   (for-each
-    (lambda (p)
-      (display (car p))
+    (lambda (name out)
+      (display name)
       (display " ")
-      (display (short-hash (artifact-hash (cdr p))))
+      (display (short-hash (artifact-hash out)))
       (newline))
-    (map cons (append (map car builtin) names) outputs)))
+    (map car all)
+    outputs))

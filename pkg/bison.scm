@@ -7,7 +7,7 @@
   (distill base)
   (distill buildenv)
   (distill execline)
-  (pkg perl))
+  (only (distill linux) perl))
 
 (define bison
   (let* ((version '3.4.2)

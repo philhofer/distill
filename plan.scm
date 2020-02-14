@@ -666,7 +666,7 @@
       (vector->seq stages))
     ;; wait for every coroutine to exit
     (for-each join/value (hash-table-values ht))
-    (if err (abort err) #t)))
+    (if err (error "build error" err) #t)))
 
 ;; build-plan! unconditionally builds a plan
 ;; and produces its output artifact
