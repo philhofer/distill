@@ -73,6 +73,7 @@
       s6
       s6-rc
       linux-headers
+      libelf
       (perl              (eq? (conf 'arch) *this-machine*))
       (linux-virt-x86_64 (eq? (conf 'arch) 'x86_64)))))
 

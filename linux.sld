@@ -1,6 +1,7 @@
 (define-library (distill linux)
   (export
     perl
+    libelf
     linux-headers
     linux/config-static
     linux-virt-x86_64)
@@ -9,6 +10,7 @@
     (scheme base)
     (distill base)
     (distill plan)
+    (only (distill memo) cons*)
     (distill package)
     (distill buildenv)
     (distill execline)

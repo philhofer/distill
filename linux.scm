@@ -23,6 +23,12 @@
     ((armv7)         'arm)
     (else (error "unrecognized arch" arch))))
 
+(define (arch-dir-name arch)
+  (let ((aname (arch-name arch)))
+    (case aname
+      ((i386 x86_64) 'x86)
+      (else aname))))
+
 (define linux-headers
   (let ()
     (lambda (conf)
@@ -96,11 +102,15 @@ EOF
       (make-package
         src:   (append (list install config) *linux-source*)
         label: (conc "linux-" *major* "." *patch* "-" name)
-        tools: (append (list perl xz-utils reflex byacc)
+        tools: (append (list perl xz-utils reflex byacc libelf zlib linux-headers)
                        (native-toolchain-for conf)
                        (cc-for-target conf))
         inputs: '()
-        build: (let ((make-args (map pair->string= (cc-env/kbuild))))
+        build: (let ((make-args (map pair->string=
+                                     (cons*
+                                       (cons 'ARCH (arch-dir-name (conf 'arch)))
+                                       (cons 'HOST_LIBELF_LIBS '(-lelf -lz))
+                                       (cc-env/kbuild)))))
                  (make-recipe
                    script: (execline*
                              (cd ,(conc "linux-" *major*))
@@ -113,6 +123,9 @@ EOF
                              (if ((sed "-i" -e "/cmd_bison/s/--defines=/-H /" scripts/Makefile.host)))
                              ;; byacc: doesn't support %destructor
                              (if ((sed "-i" -e "/^%destructor/,/^}/d" scripts/kconfig/parser.y)))
+                             (if ((find "." -type f -name "Make*"
+                                        -exec sed "-i" -e
+                                        "s/-lelf/-lelf -lz/g" "{}" ";")))
                              (export KCONFIG_NOTIMESTAMP 1)
                              (export KBUILD_BUILD_TIMESTAMP "@0")
                              (export KBUILD_BUILD_USER distill)
@@ -128,6 +141,55 @@ EOF
 
 (define linux-virt-x86_64
   (linux/config-static "virt-x86_64" "FTMQoxE4ClKOWLDdcDVzWt8UuizXfMmR4duX8Z-5qlY="))
+
+;; libelf is just a subset of elfutils (just the bit we need in order to build kbuild's objtool)
+(define libelf
+  (let* ((version '0.178)
+         (leaf    (remote-archive
+                    (conc "https://sourceware.org/elfutils/ftp/" version "/elfutils-" version ".tar.bz2")
+                    "ibDvVn8CMIhlIQAZGAsl7Yf13fm42qO7NJDctqLd2Hc="))
+         (config  (remote-file
+                    #f "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
+    (lambda (conf)
+      (make-package
+        parallel: #f
+        label:  (conc "libelf-" version "-" (conf 'arch))
+        src:    (list leaf config)
+        tools:  (cc-for-target conf)
+        inputs: (list zlib musl libssp-nonshared)
+        build:  (let* ((cenv   (cc-env conf))
+                       (cflags (append (cdr (assq 'CFLAGS cenv))
+                                       '(-D_GNU_SOURCE -DHAVE_CONFIG_H "-I." "-I.." "-I../lib")))
+                       (cc     (cdr (assq 'CC cenv)))
+                       (ar     (cdr (assq 'AR (make-env conf)))))
+                  (make-recipe
+                    ;; ALLLLRIGHTY THEN, here's what happening here...
+                    ;; elfutils depends on a ton of arcane dependencies
+                    ;; that I don't want to pull in just to make linux happy,
+                    ;; so I'm manually building *just* libelf.a and headers
+                    ;; without going through the upstream autoconf nonsense
+                    script: (execline*
+                              (cd ,(conc "elfutils-" version))
+                              (if ((cp /src/config.h config.h)))
+                              (if ((find lib/ libelf/ -type f -name "*.[ch]"
+                                         -exec sed "-i"
+                                         -e "/#include <libintl.h>/d"
+                                         -e "/#include.*cdefs.h>/d"
+                                         "{}" ";")))
+                              (if ((find lib/ -type f -name "*.h"
+                                         -exec sed "-i" -e "s/<error.h>/<err.h>/g" "{}" ";")))
+                              (cd libelf)
+                              (if ((elglob -s csrc "*.c")
+                                   (if ((echo "cflags: " ,@cflags)))
+                                   (if ((echo "source: " $csrc)))
+                                   (,cc ,@cflags -c $csrc)))
+                              (if ((elglob -s objs "*.o")
+                                   (,ar Dcr libelf.a $objs)))
+                              (if ((mkdir -p /out/usr/include /out/usr/lib)))
+                              (if ((cp gelf.h /out/usr/include/gelf.h)))
+                              (if ((cp libelf.h /out/usr/include/libelf.h)))
+                              (cp libelf.a /out/usr/lib/libelf.a))))))))
+
 
 ;; perl packages a statically-linked perl binary
 ;;
