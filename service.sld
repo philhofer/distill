@@ -14,6 +14,7 @@
     (srfi 69)
     (scheme base)
     (distill plan)
+    (distill eprint)
     (distill package)
     (distill buildenv)
     (distill base)

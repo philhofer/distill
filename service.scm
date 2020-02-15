@@ -31,7 +31,33 @@
                            (with-output-to-string
                              (lambda () (if (pair? val)
                                           (write-exexpr val)
-                                          (begin (display val) (newline))))))))))
+                                          (begin (display val) (newline)))))))))
+         (type       (assq type: spec))
+         (check      (lambda (yes no)
+                       (for-each
+                         (lambda (y)
+                           (unless (assq y spec)
+                             (fatal "expected spec" y "in service" dir spec)))
+                         yes)
+                       (for-each
+                         (lambda (n)
+                           (when (assq n spec)
+                             (fatal "unexpected spec" n "in service" dir spec)))
+                         no))))
+      (if type
+        ;; basic sanity check on service specs so that
+        ;; you don't have to go spelunking through logs
+        ;; to figure out why s6-rc-compile failed
+        (case (cdr type)
+          ((oneshot)
+           (check '(up:) '(run: finish:)))
+          ((longrun)
+           (check '(run:) '(up: down:)))
+          ((bundle)
+           (check '(contents:) '(dependencies: up: down: run: finish:)))
+          (else
+            (fatal dir "has an unrecognized service type:" (cdr type))))
+        (fatal dir "does not have 'type:' in spec"))
     (s/map pair->file (list->seq spec))))
 
 ;; s6-rc-db converts a sequence of s6-rc package specifications
@@ -53,18 +79,6 @@
                       script: (execline*
                                 (if ((mkdir -p "/out/etc/s6-rc")))
                                 (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services")))))))))
-
-(define (check-kw yes no lst)
-  (for-each
-    (lambda (kw)
-      (when (memq kw lst)
-        (error "cannot have keyword" kw)))
-    no)
-  (for-each
-    (lambda (kw)
-      (unless (memq kw lst)
-        (error "should have keyword" kw)))
-    yes))
 
 (define s6
   (let* ((version '2.9.0.1)
@@ -144,10 +158,18 @@
                        (let loop ((lst after))
                          (if (null? lst)
                            #f
-                           (or ((car lst) svc) (loop (cdr lst)))))))
-             (seq    (s/bind all-seq (kompose
-                                       (k/filter match?)
-                                       (k/map service-name)))))
+                           (let ((head (car lst))
+                                 (rest (cdr lst)))
+                             (or (cond
+                                   ((string? head)
+                                    (string=? head (symbol->string (service-name svc))))
+                                   ((symbol? head)
+                                    (eq? head (service-name svc)))
+                                   ((procedure? head)
+                                    (head svc))
+                                   (else (fatal "invalid 'service#after' element" head)))
+                                 (loop rest)))))))
+             (seq    (s/bind all-seq (k/filter match?))))
         (seq cons '())))))
 
 (: service->s6-svc ((struct service) procedure -> list))
