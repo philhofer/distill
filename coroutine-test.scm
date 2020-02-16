@@ -25,7 +25,7 @@
 (define (bin/true/abort exn)
   (let-values (((pid ok status) (process-wait/yield (process-run "/bin/true" '()))))
     (if ok
-      (error "got exn:" exn)
+      (abort exn)
       (error "/bin/true exited with" status))))
 
 ;; simple case: no yielding at all
@@ -85,12 +85,16 @@
        (s1  (spawn run 1))
        (s2  (spawn run 2))
        (s3  (spawn run 3))
-       (s4  (spawn bin/true/abort "irritant")))
+       (s4  (spawn bin/true/abort "irritant"))
+       (s5  (spawn bin/true/abort "another irritant")))
   (test* = join/value ((0 s0)
                        (1 s1)
                        (2 s2)
                        (3 s3)))
-  (test #t (condition? (join/value s4))))
+  (test string=? "irritant" (join/value s4))
+  (test 'exn (proc-status s4))
+  (test string=? "another irritant" (join/value s5))
+  (test 'exn (proc-status s5)))
 
 (let* ((sem (make-semaphore 5))
        (s0  (spawn (lambda ()

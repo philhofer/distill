@@ -601,6 +601,18 @@
           (vector-set! vec num (cons p (vector-ref vec num)))))
       vec)))
 
+(define fatal-condition
+  (let ((chain (condition-property-accessor 'exn 'call-chain)))
+    (lambda (c)
+      (print-error-message c)
+      (let ((lst (chain c)))
+        (for-each
+          (lambda (v)
+            (display (vector-ref v 0))
+            (newline))
+          lst))
+      (fatal "exited due to uncaught exception."))))
+
 (: build-graph! ((list-of (struct plan)) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
   (let* ((sema           (make-semaphore maxprocs))
@@ -665,8 +677,14 @@
             stage)))
       (vector->seq stages))
     ;; wait for every coroutine to exit
-    (for-each join/value (hash-table-values ht))
-    (if err (error "build error" err) #t)))
+    (for-each
+      (lambda (p)
+        (let* ((v (join/value p))
+               (s (proc-status p)))
+          (when (and (not err) (eq? s 'exn))
+            (set! err v))))
+      (hash-table-values ht))
+    (if err (fatal-condition err) #t)))
 
 ;; build-plan! unconditionally builds a plan
 ;; and produces its output artifact

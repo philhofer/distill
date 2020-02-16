@@ -219,24 +219,6 @@
 (define *catchall-fifo* "/run/service/s6-svscan-log/fifo")
 (define *uncaught-logs* "/run/uncaught-logs")
 
-#;(define (mount-service #!key type dev mnt (opts '()))
-  (make-service
-    name:   (cat "mount-" mnt)
-    inputs: (list execline-tools util-linux)
-    ;; mounts implicitly depend on block devices,
-    ;; so stuff like dm-crypt services will get
-    ;; picked up automatically
-    after:  (list (named* dev))
-    spec:   (let ((mntstr (join "," opts)))
-              (list
-                type: 'oneshot
-                up:   (execline*
-                        (fdmove -c 2 1)
-                        (mount -t ,type -o ,mntstr ,dev ,mnt))
-                down: (execline*
-                        (fdmove -c 2 1)
-                        (umount ,mnt))))))
-
 ;; init-script is the execline script for /init
 (define (init-script)
   (let* ()

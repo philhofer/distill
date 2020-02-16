@@ -1,6 +1,6 @@
 
 R7RSI:=csi
-CSC_FLAGS:=-O3 -disable-interrupts -d1 -clustering
+CSC_FLAGS:=-O3 -disable-interrupts -clustering
 R7RSC:=csc $(CSC_FLAGS)
 CSC_LIBFLAGS:=-regenerate-import-libraries -setup-mode -D compiling-extension \
 	-D compiling-static-extension -static -J
@@ -19,7 +19,7 @@ UNITS:=distill.hash distill.nproc distill.table \
 	distill.filepath distill.eprint distill.memo \
 	distill.sequence distill.buildenv distill.base \
 	distill.image distill.unix distill.linux \
-	distill.service distill.sysctl
+	distill.service distill.sysctl distill.fs
 
 %.import.scm %.o:
 	$(R7RSC) $(CSC_LIBFLAGS) -unit $* -ot $*.types -c $< -o $*.o

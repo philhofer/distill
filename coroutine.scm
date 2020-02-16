@@ -154,7 +154,6 @@
       (%yield))
     ;; exception handler for dynamic extent of continuation
     (define (on-exception exn)
-      (print-error-message exn)
       (procexit 'exn exn))
     (call/cc
       (lambda (ret)

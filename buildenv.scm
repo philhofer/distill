@@ -192,6 +192,7 @@
                    (pre-configure '())
                    (post-install '())
                    (make-flags '())
+                   (install-flags '(DESTDIR=/out install))
                    (out-of-tree #f) ;; build out of tree
                    (configure #f))  ;; alternate configure flags
   (make-recipe
@@ -214,7 +215,7 @@
                    (make -j $nproc ,@(append
                                       (makeflags target)
                                       make-flags))))
-              (if ((make DESTDIR=/out install)))
+              (if ((make ,@install-flags)))
               ,@post-install
               ;; we don't care if these two succeed
               ;; TODO: perhaps gnu packages should

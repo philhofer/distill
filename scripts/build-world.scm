@@ -8,6 +8,7 @@
   (distill image)
   (distill linux)
   (distill service)
+  (distill fs)
   (chicken file)
   (chicken process-context)
   (only (srfi 1) filter)
@@ -74,6 +75,7 @@
       s6-rc
       linux-headers
       libelf
+      e2fsprogs
       (perl              (eq? (conf 'arch) *this-machine*))
       (linux-virt-x86_64 (eq? (conf 'arch) 'x86_64)))))
 

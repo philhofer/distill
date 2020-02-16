@@ -42,6 +42,7 @@
         (only (chicken base) flatten void)
 	(only (chicken io) read-string write-string)
         (only (chicken process-context) current-directory)
+        (only (chicken condition) print-error-message)
 	(only (chicken process) process-run process-wait)
 	(only (chicken sort) sort)
 	(typed-records))))
@@ -52,7 +53,7 @@
     (scheme read)
     (scheme write)
     (srfi 2) ;; and-let*
-    (only (srfi 12) condition? abort)
+    (only (srfi 12) condition? abort condition-property-accessor)
     (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
     (srfi 26) ;; cut, cute
     (srfi 69) ;; hash tables
