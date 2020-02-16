@@ -12,10 +12,10 @@
   (pkg ncurses))
 
 (define openssh
-  (let* ((version '8.1p1)
+  (let* ((version '8.2p1)
          (src     (remote-archive
                     (conc "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-" version ".tar.gz")
-                    "eoRwre_VyCJpPncjaxdBeTWtne82W01Utnk7Ku9Ey3w="))
+                    "Q1b0Y6r5EMr46lYDaN-BW_WFyVptktRHSdnW9o05z5o="))
          (patch0  (remote-file
                     "https://git.alpinelinux.org/aports/plain/main/openssh/fix-verify-dns-segfault.patch"
                     "Q4tNRrMwqrWYUf4WdcNkZPOmxGBnwQfd2da-34HX9wQ="
