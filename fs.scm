@@ -2,7 +2,7 @@
 (define (swapon dev)
   (make-service
     name:   (string->symbol (string-append "swap." dev))
-    inputs: (list busybox-full)
+    inputs: '()
     after:  (list dev)
     spec:   (list
               type: 'oneshot
@@ -16,6 +16,9 @@
                       (foreground ((swapoff ,dev)))
                       (true)))))
 
+;; logging services will generally depend on var-mounted-rw
+(define var-mounted-rw 'var-mount)
+
 ;; var-mount creates a read-write mount at /var
 ;;
 ;; note that the var-mount service is a requirement
@@ -24,15 +27,18 @@
   (let ((opts   '(rw nosuid nodev noexec noatime data=ordered))
         (mkopts '()))
     (make-service
-      name:   '/var
-      inputs: (list busybox-full e2fsprogs)
+      name:   var-mounted-rw
+      inputs: (list e2fsprogs)
       after:  (list dev)
       spec:   (list
                 type: 'oneshot
                 up:   (execline*
                         (fdmove -c 2 1)
                         (if ((test -b ,dev)))
-                        (if ((if -n ((fsck.ext4 -p ,dev)))
+                        ;; TODO: figure out a better way
+                        ;; to determine if this device has actually
+                        ;; been formatted yet...
+                        (if ((if -t -n ((fsck.ext4 -p ,dev)))
                              (foreground ((echo "fsck didn't work; running mkfs.ext4 on /var ...")))
                              (mkfs.ext4 ,@mkopts ,dev)))
                         (mount -t ext4 -o ,(join/s "," (list->seq opts)) ,dev /var))

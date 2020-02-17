@@ -2,6 +2,7 @@
   (export
     swapon
     var-mount
+    var-mounted-rw
     e2fsprogs)
   (import
     scheme
