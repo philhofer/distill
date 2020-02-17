@@ -6,6 +6,13 @@
     ((_ head next rest* ...)
      (cons head (cons* next rest* ...)))))
 
+(define-syntax as
+  (syntax-rules ()
+    ((_ pred? expr)
+     (let ((v expr))
+       (assert (pred? v))
+       v))))
+
 ;; a sigil used for determining if we're stuck in a loop
 (define *bad* (list 'in-progress))
 

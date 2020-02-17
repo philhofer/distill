@@ -8,6 +8,7 @@
       (import
         (chicken type))))
   (export
+    as
     cons*
     memoize-eq
     memoize-lambda

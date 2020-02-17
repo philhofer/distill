@@ -59,6 +59,7 @@
     distill.unix
     distill.sysctl
     distill.fs
+    distill.net
     distill.service))
 
 (import

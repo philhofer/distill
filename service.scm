@@ -234,6 +234,8 @@
           (echo "init starting")
           (mount -t proc -o "noexec,nosuid,nodev,hidepid=2" proc /proc)
           (mount -t sysfs -o "noexec,nosuid,nodev" sysfs /sys)
+          ;; note: some kernels are configured to automagically mount /dev,
+          ;; so no worries if this doesn't mount on its own
           (mount -t devtmpfs -o "exec,nosuid,mode=0755,size=2M" devtmpfs /dev)
           (mkdir -p /dev/pts)
           (mount -t devpts -o "gid=5,mode=0620,noexec,nosuid" devpts /dev/pts)

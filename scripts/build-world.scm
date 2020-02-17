@@ -9,6 +9,7 @@
   (distill linux)
   (distill service)
   (distill fs)
+  (distill net)
   (chicken file)
   (chicken process-context)
   (only (srfi 1) filter)
@@ -76,6 +77,10 @@
       linux-headers
       libelf
       e2fsprogs
+      libmnl
+      libnftnl
+      iptables
+      iproute2
       (perl              (eq? (conf 'arch) *this-machine*))
       (linux-virt-x86_64 (eq? (conf 'arch) 'x86_64)))))
 
