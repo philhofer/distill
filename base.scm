@@ -506,6 +506,7 @@ EOF
               (patches       (patch*
                                (include-file-text "patches/gcc/pie-gcc.patch"))))
           (make-package
+            parallel: 'very
             prebuilt: (and (eq? host target) (maybe-prebuilt host 'gcc))
             label: (conc "gcc-" (target 'arch) "-"
                          (if (eq? host-arch target-arch)

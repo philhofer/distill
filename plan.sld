@@ -52,8 +52,9 @@
     (scheme base)
     (scheme read)
     (scheme write)
+    (scheme process-context)
     (srfi 2) ;; and-let*
-    (only (srfi 12) condition? abort condition-property-accessor)
+    (srfi 12)
     (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
     (srfi 26) ;; cut, cute
     (srfi 69) ;; hash tables

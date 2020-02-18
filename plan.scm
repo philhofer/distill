@@ -252,6 +252,41 @@
              (plan-saved-hash-set! p h)
              h))))
 
+;; throw an exception wrapped with the plan
+;; that caused the exception
+(define (plan-abort plan suberr)
+  (abort
+    (make-property-condition
+      'plan-failure
+      'plan  plan
+      'child suberr)))
+
+;; handle a fatal plan failure by printing diagnostics
+;; and exiting with a non-zero status
+(define (fatal-plan-failure exn)
+  (let* ((sys?   (condition-predicate 'exn))
+         (eplan? (condition-predicate 'plan-failure)))
+    (cond
+      ((sys? exn)
+       (let ((chain (condition-property-accessor 'exn 'call-chain))
+             (eport (current-error-port)))
+         (print-error-message exn)
+         (let ((lst (chain exn)))
+           (for-each
+             (lambda (v)
+               (display (vector-ref v 0) eport)
+               (newline eport))
+             lst))
+         (fatal "exited due to uncaught exception.")))
+      ((eplan? exn)
+       (let* ((prop  (lambda (sym) (condition-property-accessor 'plan-failure sym)))
+              (plan  ((prop 'plan) exn))
+              (child ((prop 'child) exn)))
+         (info "plan" (plan-name plan) "encountered a fatal error:")
+         (print-error-message child)
+         (exit 1)))
+      (else (abort exn)))))
+
 ;; fork+exec, wait for the process to exit and check
 ;; that it exited successfully
 (: run (string #!rest string -> undefined))
@@ -601,42 +636,26 @@
           (vector-set! vec num (cons p (vector-ref vec num)))))
       vec)))
 
-(define fatal-condition
-  (let ((chain (condition-property-accessor 'exn 'call-chain)))
-    (lambda (c)
-      (print-error-message c)
-      (let ((lst (chain c)))
-        (for-each
-          (lambda (v)
-            (display (vector-ref v 0))
-            (newline))
-          lst))
-      (fatal "exited due to uncaught exception."))))
-
 (: build-graph! ((list-of (struct plan)) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
   (let* ((sema           (make-semaphore maxprocs))
          (stages         (compute-stages lst))
          (ht             (make-hash-table test: eq? hash: eq?-hash))
-         (k/input-status (kompose
-                           k/unbuilt
-                           (k/map (lambda (p)
-                                    (or (hash-table-ref/default ht p #f)
-                                        (begin
-                                          (infoln "input plan" (plan-name p)
-                                                  "has no task?")
-                                          (error "missing input task")))))))
          (err            #f)
-         (kinput         (k/input-status
-                           (lambda (in out)
-                             (if err
-                               #f
-                               (let ((v (join/value in)))
-                                 (if (eq? (proc-status in) 'exn)
-                                   (begin
-                                     (unless err (set! err v))
-                                     (abort v))
-                                   out))))))
+         (kinput         (lambda (in out)
+                           (cond
+                             (err #f)
+                             ((hash-table-ref/default ht in #f)
+                              => (lambda (job)
+                                   (let ((v (join/value job)))
+                                     (if (eq? (proc-status job) 'exn)
+                                       (begin
+                                         (unless err (set! err v))
+                                         #f)
+                                       out))))
+                             ((not (plan-built? in))
+                              (error "input plan unbuilt but not scheduled" (plan-name in)))
+                             (else out))))
          ;; should-build? waits for all of the
          ;; input plans for 'p' to be done building
          ;; and then checks if we should really build
@@ -644,16 +663,29 @@
          ;; the plan is actually stale)
          (should-build?  (lambda (p)
                            (and ((input-seq p) kinput #t)
-                                (not (plan-built? p))))))
+                                (not (plan-built? p)))))
+         (plan-semacquire (lambda (p maxjobs)
+                            (let ((parallel (plan-parallel p)))
+                              (cond
+                                ((not parallel)
+                                 (begin (semacquire sema) 1))
+                                ((eq? parallel 'very)
+                                 (semacquire/n sema maxprocs))
+                                (else
+                                 (semacquire/max sema maxjobs)))))))
     ;; core build procedure:
     ;; first, wait for inputs (dependencies) to complete,
     ;; then either a) return, if there has been an error,
     ;; or b) acquire up to maxjobs jobs from the semaphore
     ;; and then execute with that level of intra-build parallelism
     (define (build-one! p maxjobs)
-      (parameterize ((info-prefix (plan-name p) " |"))
+      ;; if this build encounters an error, catch it and re-throw
+      ;; with associated plan information (should aid debugging)
+      (parameterize ((info-prefix (string-append (plan-name p) " |"))
+                     (current-exception-handler (lambda (exn)
+                                                  (plan-abort p exn))))
         (if (should-build? p)
-          (let ((jobs (semacquire/max sema (if (plan-parallel p) maxjobs 1))))
+          (let ((jobs (plan-semacquire p maxjobs)))
             ;; in the time spent waiting to acquire resources,
             ;; another plan could have encountered an error, so
             ;; this inner bit should become a no-op in that situation
@@ -677,14 +709,14 @@
             stage)))
       (vector->seq stages))
     ;; wait for every coroutine to exit
-    (for-each
-      (lambda (p)
-        (let* ((v (join/value p))
-               (s (proc-status p)))
+    (hash-table-for-each
+      ht
+      (lambda (plan proc)
+        (let* ((v (join/value proc))
+               (s (proc-status proc)))
           (when (and (not err) (eq? s 'exn))
-            (set! err v))))
-      (hash-table-values ht))
-    (if err (fatal-condition err) #t)))
+            (set! err v)))))
+    (if err (fatal-plan-failure err) #t)))
 
 ;; build-plan! unconditionally builds a plan
 ;; and produces its output artifact

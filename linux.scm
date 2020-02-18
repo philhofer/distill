@@ -1,6 +1,6 @@
 
 (define *major* 5.4)
-(define *patch* 19)
+(define *patch* 20)
 
 (define *linux-source*
   (list
@@ -10,7 +10,7 @@
     (remote-file
       (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" *major* "." *patch* ".xz")
 
-      "FU3Y09l8z9uV-SyBgt2mNco0ZeMdWl-adEvRXaWgVko="
+      "4MoCgwsM-L1IljhnJb1_IdPVHWRuEXOYHwupUvPdAaQ="
       "/src/linux.patch"
       #o644)))
 
@@ -100,6 +100,7 @@ EOF
         (install (installkernel* install)))
     (lambda (conf)
       (make-package
+        parallel: 'very
         src:   (append (list install config) *linux-source*)
         label: (conc "linux-" *major* "." *patch* "-" name)
         tools: (append (list perl xz-utils reflex byacc libelf zlib linux-headers)
