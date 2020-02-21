@@ -22,6 +22,9 @@
              (set-cdr! p '()))
            first))))
 
+;; the current procedure
+(define current-proc (make-parameter #f))
+
 ;; runnable continuations
 (: *cont-queue* (pair (list-of procedure) (list-of procedure)))
 (define *cont-queue* '(() . ()))
@@ -135,31 +138,41 @@
 (define (proc-return box)
   (vector-ref box 1))
 
+(define (%procexit box status value)
+  (vector-set! box 0 status)
+  (vector-set! box 1 value)
+  (for-each
+    (lambda (ret)
+      (pushcont! (lambda () (ret value))))
+    (vector-ref box 2))
+  (vector-set! box 2 #f)
+  (%yield))
+
+;; proc-abort aborts a coroutine, or calls (abort exn)
+;; if the current dynamic extent is not associated
+;; with a coroutine
+;;
+;; proc-abort is also the default exception handler
+;; for the dynamic extent of a coroutine
+(define (proc-abort exn)
+  (let ((self (current-proc)))
+    (if self
+      (%procexit self 'exn exn)
+      (abort exn))))
+
 ;; spawn runs (apply thunk args) asynchronously
 ;; and returns an opaque object that can be used
 ;; to query the status of the procedure
 (: spawn (procedure #!rest * -> (vector symbol * list)))
 (define (spawn proc . args)
   (let ((box (vector 'started #f '())))
-    ;; procedure to run when the continuation completes
-    (define (procexit status value)
-      (vector-set! box 0 status)
-      (vector-set! box 1 value)
-      (let loop ((lst (vector-ref box 2)))
-        (or (null? lst)
-            (let ((ret (car lst)))
-              (pushcont! (lambda () (ret value)))
-              (loop (cdr lst)))))
-      (vector-set! box 2 #f)
-      (%yield))
-    ;; exception handler for dynamic extent of continuation
-    (define (on-exception exn)
-      (procexit 'exn exn))
     (call/cc
       (lambda (ret)
         (pushcont! (lambda () (ret box)))
-        (procexit 'done (parameterize ((current-exception-handler on-exception))
-                          (apply proc args)))))))
+        (%procexit box 'done
+                   (parameterize ((current-exception-handler proc-abort)
+                                  (current-proc box))
+                     (apply proc args)))))))
 
 (: %poll (-> undefined))
 (define (%poll)

@@ -255,7 +255,7 @@
 ;; throw an exception wrapped with the plan
 ;; that caused the exception
 (define (plan-abort plan suberr)
-  (abort
+  (proc-abort
     (make-property-condition
       'plan-failure
       'plan  plan
@@ -283,8 +283,7 @@
               (plan  ((prop 'plan) exn))
               (child ((prop 'child) exn)))
          (info "plan" (plan-name plan) "encountered a fatal error:")
-         (print-error-message child)
-         (exit 1)))
+         (fatal-plan-failure child)))
       (else (abort exn)))))
 
 ;; fork+exec, wait for the process to exit and check
@@ -642,35 +641,41 @@
          (stages         (compute-stages lst))
          (ht             (make-hash-table test: eq? hash: eq?-hash))
          (err            #f)
-         (kinput         (lambda (in out)
-                           (cond
-                             (err #f)
-                             ((hash-table-ref/default ht in #f)
-                              => (lambda (job)
-                                   (let ((v (join/value job)))
-                                     (if (eq? (proc-status job) 'exn)
-                                       (begin
-                                         (unless err (set! err v))
-                                         #f)
-                                       out))))
-                             ((not (plan-built? in))
-                              (error "input plan unbuilt but not scheduled" (plan-name in)))
-                             (else out))))
+         (k/jobs         (lambda (kons)
+                           (lambda (in out)
+                             (cond
+                               ((hash-table-ref/default ht in #f)
+                                => (lambda (j)
+                                     (kons j out)))
+                               ((and (plan? in) (not (plan-built? in)))
+                                (error "input plan unbuilt but not scheduled" (plan-name in)))
+                               (else out)))))
+         (k/join-ok      (lambda (in out)
+                           (let ((v (join/value in)))
+                             (cond
+                               (err #f)
+                               ((eq? (proc-status in) 'exn)
+                                (begin
+                                  (unless err
+                                    (set! err v))
+                                  #f))
+                               (else out)))))
          ;; should-build? waits for all of the
          ;; input plans for 'p' to be done building
          ;; and then checks if we should really build
          ;; (i.e. no error has been encountered and
          ;; the plan is actually stale)
          (should-build?  (lambda (p)
-                           (and ((input-seq p) kinput #t)
-                                (not (plan-built? p)))))
+                           (let ((inputs ((input-seq p) (k/jobs cons) '())))
+                             (and ((list->seq inputs) k/join-ok #t)
+                                  (not (plan-built? p))))))
          (plan-semacquire (lambda (p maxjobs)
                             (let ((parallel (plan-parallel p)))
                               (cond
                                 ((not parallel)
                                  (begin (semacquire sema) 1))
                                 ((eq? parallel 'very)
-                                 (semacquire/n sema maxprocs))
+                                 (begin (semacquire/n sema maxprocs) maxprocs))
                                 (else
                                  (semacquire/max sema maxjobs)))))))
     ;; core build procedure:
@@ -709,13 +714,9 @@
             stage)))
       (vector->seq stages))
     ;; wait for every coroutine to exit
-    (hash-table-for-each
-      ht
-      (lambda (plan proc)
-        (let* ((v (join/value proc))
-               (s (proc-status proc)))
-          (when (and (not err) (eq? s 'exn))
-            (set! err v)))))
+    ((list->seq (hash-table-values ht))
+     k/join-ok
+     #t)
     (if err (fatal-plan-failure err) #t)))
 
 ;; build-plan! unconditionally builds a plan

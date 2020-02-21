@@ -10,6 +10,7 @@
     process-wait/yield
     proc-status
     proc-return
+    proc-abort
     spawn
     join/value)
   (import
