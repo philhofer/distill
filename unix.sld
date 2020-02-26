@@ -9,9 +9,11 @@
     (srfi 26)
     (srfi 69)
     (distill plan)
+    (distill kvector)
+    (distill contract)
     (distill sequence))
   (cond-expand
     (chicken (import
                (chicken type)
-               (typed-records))))
+               (only (chicken base) fixnum?))))
   (include "unix.scm"))

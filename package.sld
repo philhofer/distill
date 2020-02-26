@@ -8,11 +8,12 @@
     (distill table)
     (distill eprint)
     (distill execline)
+    (distill contract)
+    (distill kvector)
     (distill plan))
   (cond-expand
     (chicken (import
                (chicken type)
-               typed-records
                (only (chicken port)
                      with-output-to-string
                      call-with-output-string)

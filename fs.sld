@@ -14,9 +14,12 @@
     (distill package)
     (distill service)
     (only (distill linux) linux-headers)
+    (only (distill image) zstd)
+    (distill kvector)
     (distill sequence)
     (distill execline))
   (cond-expand
     (chicken (import
+               (only (chicken base) foldl)
                (only (chicken string) conc))))
   (include "fs.scm"))

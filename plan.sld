@@ -44,8 +44,7 @@
         (only (chicken process-context) current-directory)
         (only (chicken condition) print-error-message)
 	(only (chicken process) process-run process-wait)
-	(only (chicken sort) sort)
-	(typed-records))))
+	(only (chicken sort) sort))))
 
   (import
     scheme
@@ -64,5 +63,7 @@
     (distill sequence)
     (distill eprint)
     (distill coroutine)
+    (distill contract)
+    (distill kvector)
     (distill hash))
   (include "plan.scm"))

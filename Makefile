@@ -20,7 +20,7 @@ UNITS:=distill.hash distill.nproc distill.table \
 	distill.sequence distill.buildenv distill.base \
 	distill.image distill.unix distill.linux \
 	distill.service distill.sysctl distill.fs \
-	distill.net
+	distill.net distill.kvector distill.contract
 
 %.import.scm %.o:
 	$(R7RSC) $(CSC_LIBFLAGS) -unit $* -ot $*.types -c $< -o $*.o

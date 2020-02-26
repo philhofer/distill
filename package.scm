@@ -8,24 +8,99 @@
     ((and ppc64 little-endian) 'ppc64le)
     ((and ppc64 big-endian) 'ppc64)))
 
-(define-type artifact (vector vector string *))
-(define-type conf-lambda (symbol -> *))
-(define-type package-lambda (conf-lambda -> (struct package)))
+(define <recipe>
+  (make-kvector-type
+    env:
+    script:))
 
-;; package: a "portable" intermediate representation of a package
-;; that is converted into a plan by combining it with the configuration
-(defstruct package
-  (label : string)                    ;; human-readable name
-  ((src '()) : (or artifact (list-of artifact))) ;; where to get the package source
-  (tools : (list-of package-lambda))  ;; build tools (built for host)
-  (inputs : (list-of package-lambda)) ;; build dependencies (built for target)
-  (prebuilt : (or artifact false))    ;; bootstrap replacement binary
-  (build : (struct recipe))           ;; build script (see execline*)
-  ((raw-output #f) : (or false string)) ;; see plan#plan-raw-output
-  ((parallel #t) : boolean))
+(define %make-recipe (kvector-constructor <recipe>))
+(: recipe? (* --> boolean))
+(define recipe? (kvector-predicate <recipe>))
+(: recipe-env (vector -> *))
+(define recipe-env (kvector-getter <recipe> env:))
+(: recipe-script (vector -> *))
+(define recipe-script (kvector-getter <recipe> script:))
+
+(: make-recipe (#!rest * -> vector))
+(define make-recipe
+  (let ((default (%make-recipe env: '())))
+    (lambda args
+      (let ((out (apply %make-recipe args)))
+        (conform
+          (kvector/c <recipe>
+                     env: (list-of pair?)
+                     script: list?)
+          (kvector-union! out default))))))
+
+(: update-recipe (vector #!rest * -> vector))
+(define (update-recipe r . args)
+  (kvector-union! (apply %make-recipe args) (conform recipe? r)))
+
+(: <package> vector)
+(define <package> (make-kvector-type
+                    label:
+                    src:
+                    tools:
+                    inputs:
+                    prebuilt:
+                    build:
+                    raw-output:
+                    parallel:))
+
+(: %make-package (#!rest * -> vector))
+(define %make-package (kvector-constructor <package>))
+(: package? (* -> boolean))
+(define package? (kvector-predicate <package>))
+
+(define valid-package?
+  (kvector/c
+    <package>
+    label:      string?
+    src:        (or/c artifact? (list-of artifact?))
+    tools:      (list-of (or/c procedure? artifact?))
+    inputs:     (list-of (or/c procedure? artifact?))
+    prebuilt:   (or/c artifact? false/c)
+    build:      recipe?
+    raw-output: (or/c string? false/c)
+    parallel:   (or/c (eq?/c 'very) boolean?)))
+
+(: make-package (#!rest * -> vector))
+(define make-package
+  (let ((default (%make-package
+                   src:     '()
+                   tools:   '()
+                   inputs:  '()
+                   parallel: #t)))
+    (lambda args
+      (let ((out (apply (kvector-constructor <package>) args)))
+        (conform
+          valid-package?
+          (kvector-union! out default))))))
+
+(: update-package (vector #!rest * -> vector))
+(define (update-package pkg . args)
+  (conform
+    valid-package?
+    (kvector-union! (apply %make-package args) (conform package? pkg))))
+
+(: package-label (vector --> string))
+(define package-label (kvector-getter <package> label:))
+(: package-tools (vector --> (list-of procedure)))
+(define package-tools (kvector-getter <package> tools:))
+(: package-src (vector --> *))
+(define package-src (kvector-getter <package> src:))
+(: package-inputs (vector --> (list-of procedure)))
+(define package-inputs (kvector-getter <package> inputs:))
+(: package-prebuilt (vector --> (or vector false)))
+(define package-prebuilt (kvector-getter <package> prebuilt:))
+(: package-build (vector --> vector))
+(define package-build (kvector-getter <package> build:))
+(: package-raw-output (vector --> (or string false)))
+(define package-raw-output (kvector-getter <package> raw-output:))
+(: package-parallel (vector --> (or symbol boolean)))
+(define package-parallel (kvector-getter <package> parallel:))
 
 ;; XXX this needs to stay in-sync with base
-(: sysroot (conf-lambda --> string))
 (define (sysroot conf)
   (string-append "/sysroot/"
                  (symbol->string (conf 'arch))
@@ -33,7 +108,6 @@
 
 ;; build-config is the configuration
 ;; for artifacts produced for *this* machine (tools, etc)
-(: build-config (-> conf-lambda))
 (define build-config
   (make-parameter
     (table->proc (table `((arch . ,*this-machine*)
@@ -50,7 +124,6 @@
 ;; config->builder takes a configuration (as an alist or conf-lambda)
 ;; and returns a function that builds the package
 ;; and yields its output artifact
-(: config->builder ((or (list-of pair) conf-lambda) -> (#!rest package-lambda -> artifact)))
 (define (config->builder env)
   (let* ((host  (if (pair? env)
                   (table->proc (table env))
@@ -69,7 +142,6 @@
 ;; package->plan is the low-level package expansion code;
 ;; it recursively simplifies packges into plans, taking care
 ;; to only expand packges once for each (build, host) configuration tuple
-(: package->plan (package-lambda conf-lambda conf-lambda -> (struct plan)))
 (define package->plan
   (memoize-lambda
     (pkg-proc build host)
@@ -90,7 +162,6 @@
               raw-output: (package-raw-output pkg)
               parallel: (package-parallel pkg)
               name:   (package-label pkg)
-              recipe: (package-build pkg)
               inputs: (list
                         (cons "/" (flatten
                                     (recipe-envfile recipe)
@@ -99,7 +170,6 @@
                         ;; build headers+libraries live here
                         (cons (sysroot host) (map ->input inputs)))))))))
 
-(: package->stages (conf-lambda package-lambda -> vector))
 (define (package->stages conf root)
   (let ((plan (package->plan root (build-config) conf)))
     (compute-stages plan)))
@@ -110,14 +180,11 @@
     (LC_ALL . "C.UTF-8")
     (SOURCE_DATE_EPOCH . "0")))
 
-(defstruct recipe
-  ((env '()) : (list-of pair))
-  (script : list))
-
-(: real-env ((struct recipe) --> (list-of pair)))
+(: real-env (vector --> (list-of pair)))
 (define (real-env r)
   (append *default-env* (recipe-env r)))
 
+(: recipe-envfile (vector --> vector))
 (define (recipe-envfile r)
   (let ((str (call-with-output-string
                (lambda (oport)
@@ -131,6 +198,7 @@
     (interned
       "/env" #o644 str)))
 
+(: recipe-buildfile (vector -> vector))
 (define (recipe-buildfile r)
   (let ((str (with-output-to-string
                (lambda () (write-exexpr (recipe-script r))))))

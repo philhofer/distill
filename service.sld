@@ -7,13 +7,24 @@
     named*
     make-service
     update-service
-    service-name)
+    longrun*
+    longrun?
+    oneshot*
+    oneshot?
+    bundle*
+    bundle?
+    service-name
+    service-spec
+    service-after
+    service-inputs)
   (import
     scheme
     (srfi 26)
     (srfi 69)
     (scheme base)
     (distill plan)
+    (distill kvector)
+    (distill contract)
     (distill eprint)
     (distill package)
     (distill buildenv)
@@ -29,6 +40,5 @@
                (only (chicken keyword) keyword->string keyword?)
                (only (chicken irregex) glob->sre irregex-match?)
                (only (chicken string) conc)
-               (only (chicken port) with-output-to-string)
-               (typed-records))))
+               (only (chicken port) with-output-to-string))))
   (include "service.scm"))

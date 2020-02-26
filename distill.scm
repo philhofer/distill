@@ -49,6 +49,8 @@
     distill.hash
     distill.filepath
     distill.sequence
+    distill.kvector
+    distill.contract
     distill.eprint
     distill.plan
     distill.package

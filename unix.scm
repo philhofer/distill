@@ -1,17 +1,66 @@
+(define <user>
+  (make-kvector-type
+    name:
+    uid:
+    gid:
+    home:
+    login:))
 
-(defstruct user
-  (name : symbol)
-  (uid : fixnum)
-  (gid : fixnum)
-  (home : string)
-  (login : string))
+(define valid-user?
+  (kvector/c
+    <user>
+    name:  symbol?
+    uid:   fixnum?
+    gid:   fixnum?
+    home:  string?
+    login: string?))
 
-(defstruct group
-  (name : symbol)
-  (gid : fixnum)
-  (users : (list-of symbol)))
+(define make-user
+  (let ((make (kvector-constructor <user>)))
+    (lambda args
+      (conform
+        valid-user?
+        (apply make args)))))
 
-(: base-users (list-of (struct user)))
+(: user-name (vector --> symbol))
+(define user-name  (kvector-getter <user> name:))
+(: user-uid (vector --> fixnum))
+(define user-uid   (kvector-getter <user> uid:))
+(: user-gid (vector -> fixnum))
+(define user-gid   (kvector-getter <user> gid:))
+(: user-homem (vector -> string))
+(define user-home  (kvector-getter <user> home:))
+(: user-login (vector -> string))
+(define user-login (kvector-getter <user> login:))
+
+(define <group>
+  (make-kvector-type
+    name:
+    gid:
+    users:))
+
+(define valid-group?
+  (kvector/c
+    <group>
+    name:  symbol?
+    gid:   fixnum?
+    users: (list-of symbol?)))
+
+(define make-group
+  (let ((make (kvector-constructor <group>)))
+    (lambda args
+      (conform
+        valid-group?
+        (apply make args)))))
+
+(: group-name (vector --> symbol))
+(define group-name  (kvector-getter <group> name:))
+(: group-gid (vector --> fixnum))
+(define group-gid   (kvector-getter <group> gid:))
+(: group-users (vector --> (list-of symbol)))
+(define group-users (kvector-getter <group> users:))
+
+(: base-users (list-of vector))
 (define base-users
   (map
     (cut apply make-user <>)
@@ -19,7 +68,7 @@
       (name: nobody   uid: 65534 gid: 65534 home: "/"     login: "/sbin/nologin")
       (name: catchlog uid: 99    gid: 99    home: "/"     login: "/sbin/nologin"))))
 
-(: base-groups (list-of (struct group)))
+(: base-groups (list-of vector))
 (define base-groups
   (map
     (cut apply make-group <>)
@@ -86,7 +135,7 @@
 
 ;; etc/passwd produces the artifact for /etc/passwd
 ;; given a list of users
-(: etc/passwd ((list-of (struct user)) --> vector))
+(: etc/passwd ((list-of vector) --> vector))
 (define (etc/passwd users)
   (let ((usr->line (lambda (u)
                      (string-append
@@ -103,7 +152,7 @@
               #o644
               (lines/s (s/bind (list->seq users) (k/map usr->line))))))
 
-(: etc/group ((list-of (struct user)) --> vector))
+(: etc/group ((list-of vector) --> vector))
 (define (etc/group groups)
   (let ((grp->line (lambda (g)
                      (string-append

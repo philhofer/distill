@@ -61,8 +61,9 @@
       name:   (string->symbol name)
       inputs: (list sysctl-file)
       after:  after
-      spec:   `(type: oneshot up: ((fdmove -c 2 1)
-                                   (/sbin/sysctl -p ,file))))))
+      spec:   (oneshot*
+                up: `((fdmove -c 2 1)
+                      (/sbin/sysctl -p ,file))))))
 
 (define default-sysctls
   (sysctl-service "sysctl.default" *default-sysctls*))

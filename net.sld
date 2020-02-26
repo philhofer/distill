@@ -22,6 +22,5 @@
     (distill execline))
   (cond-expand
     (chicken (import
-               (only (chicken string) conc)
-               (typed-records))))
+               (only (chicken string) conc))))
   (include "net.scm"))

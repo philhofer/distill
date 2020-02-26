@@ -112,7 +112,7 @@
 ;; inputs plus a recipe for producing the output
 ;;
 ;; essentially, packages are "compiled" as
-;; package-lambda -> struct package -> struct plan
+;; package-lambda -> package -> plan
 ;;
 ;; or, viewed as code:
 ;; (%package->plan host-conf target-conf (package-lambda target-conf))
@@ -125,36 +125,59 @@
 ;; DO NOT USE SETTERS on this structure; you will invalidate
 ;; the saved-* values that are used to reduce the amount
 ;; of dependency graph traversal necessary to produce plan input and output hashes
-(define-type plan-input-type (or (struct plan) artifact))
-(defstruct plan
-  (name : string)
-  ;; inputs are the set of filesystem inputs
-  ;; represented as an alist of root directories
-  ;; and contents to be extracted relative to those roots
-  ;; (see 'unpack')
-  (inputs : (list-of
-              (pair string (list-of plan-input-type))))
-  ;; saved-hash caches the sum of all the inputs
-  ((saved-hash #f) : (or false string))
-  ;; saved-output caches the hash of the output
-  ((saved-output #f) : (or false vector))
-  ;; raw-output indicates a specific file is the output,
-  ;; rather than the entire /out directory
-  ((raw-output #f) : (or false string))
-  ;; parallel indicates if the plan can use
-  ;; more than one processor to execute
-  ((parallel #t) : (or boolean symbol)))
+(define <plan>
+  (make-kvector-type
+    name:         ; just for identification purposes
+    inputs:       ;
+    saved-hash:
+    saved-output:
+    raw-output:
+    parallel:))
 
-(define-syntax require
-  (syntax-rules ()
-    ((_ pred? obj)
-     (if (pred? obj)
-       obj
-       (error "object doesn't satisfy predicate" (quote pred?) obj)))
-    ((_ pred? obj msg rest* ...)
-     (if (pred? obj)
-       obj
-       (error msg rest* ...)))))
+(define plan? (kvector-predicate <plan>))
+(define %make-plan (kvector-constructor <plan>))
+
+(define *plan-defaults*
+  (%make-plan
+    inputs: '()
+    parallel: #t))
+
+(define valid-plan?
+  (kvector/c
+    <plan>
+    name: string?
+    ;; inputs are represented as pairs
+    ;; in which the car is a filesystem path
+    ;; and the cdr is a list of artifacts to unpack
+    ;; at that path
+    inputs: (list-of (pair-of string? (list-of (or/c artifact? plan?))))
+    ;; these are computed after-the-fact
+    saved-hash: false/c
+    saved-output: false/c
+    raw-output: (or/c string? false/c)
+    parallel: (or/c (eq?/c 'very) boolean?)))
+
+(define make-plan
+  (lambda args
+    (conform
+      valid-plan?
+      (kvector-union! (apply %make-plan args) *plan-defaults*))))
+
+(: plan-saved-hash (vector --> (or string false)))
+(define plan-saved-hash (kvector-getter <plan> saved-hash:))
+(: plan-inputs (vector --> (list-of (pair string (list-of vector)))))
+(define plan-inputs (kvector-getter <plan> inputs:))
+(: plan-name (vector --> string))
+(define plan-name (kvector-getter <plan> name:))
+(: plan-saved-output (vector --> (or false vector)))
+(define plan-saved-output (kvector-getter <plan> saved-output:))
+(: plan-raw-output (vector --> (or false string)))
+(define plan-raw-output (kvector-getter <plan> raw-output:))
+(: plan-parallel (vector --> (or boolean symbol)))
+(define plan-parallel (kvector-getter <plan> parallel:))
+
+(define plan-saved-hash-set! (kvector-setter <plan> saved-hash:))
+(define plan-saved-output-set! (kvector-setter <plan> saved-output:))
 
 ;; input-seq generates a sequence from plan inputs
 (define (input-seq pl)
@@ -181,17 +204,13 @@
 ;; plan-resolved? returns whether or not
 ;; all of the inputs to this plan are resolved
 ;; (i.e. artifacts or plans with known outputs)
-(: plan-resolved? ((struct plan) -> boolean))
+(: plan-resolved? (vector -> boolean))
 (define (plan-resolved? p)
   (all/s? (lambda (in)
             (or (artifact? in)
                 (plan-outputs in)))
           (input-seq p)))
 
-(: %write-plan-inputs
-   ((list-of
-      (pair string (list-of plan-input-type)))
-    output-port -> undefined))
 (define (%write-plan-inputs inputs out)
   ;; turn an input into an artifact unconditionally
   (define (->artifact in)
@@ -234,7 +253,7 @@
 
 ;; plan-hash returns the canonical hash of a plan,
 ;; or #f if any of its inputs have unknown outputs
-(: plan-hash ((struct plan) -> (or false string)))
+(: plan-hash (vector -> (or false string)))
 (define (plan-hash p)
   (or (plan-saved-hash p)
       (and (plan-resolved? p)
@@ -338,13 +357,13 @@
 
 ;; plan-outputs-file is the file that stores the serialized
 ;; interned file information for a plan
-(: plan-outputs-file ((struct plan) -> (or string false)))
+(: plan-outputs-file (vector -> (or string false)))
 (define (plan-outputs-file p)
   (and-let* ((h (plan-hash p)))
     (filepath-join (plan-dir) h "outputs.scm")))
 
 ;; write 'lst' as the set of plan outputs associated with 'p'
-(: save-plan-outputs! ((struct plan) artifact -> *))
+(: save-plan-outputs! (vector artifact -> *))
 (define (save-plan-outputs! p ar)
   (let ((outfile (plan-outputs-file p)))
     (unless outfile
@@ -363,7 +382,7 @@
 
 ;; determine the outputs (leaf) of the given plan,
 ;; or #f if the plan has never been built with its inputs
-(: plan-outputs ((struct plan) -> (or artifact false)))
+(: plan-outputs (vector -> (or artifact false)))
 (define (plan-outputs p)
   (or (plan-saved-output p)
       (let ((desc (plan-outputs-file p)))
@@ -505,7 +524,7 @@
 ;; all of the input plan's dependencies must
 ;; have been built (i.e. have plan-outputs)
 ;; in order for this to work
-(: plan->outputs! ((struct plan) fixnum -> artifact))
+(: plan->outputs! (vector fixnum -> artifact))
 (define (plan->outputs! p nproc)
   (with-tmpdir
     (lambda (root)
@@ -562,7 +581,7 @@
           (file->artifact (filepath-join outdir raw) raw)
           (dir->artifact outdir))))))
 
-(: plan-built? ((struct plan) -> boolean))
+(: plan-built? (vector -> boolean))
 (define (plan-built? p)
   (and-let* ((out (plan-outputs p)))
     (file-exists?
@@ -590,7 +609,7 @@
 ;; for-each/unbuilt-dfs walks a list of plans
 ;; in depth-first order and calls (proc p) on
 ;; each plan that is unbuilt
-(: for-each/unbuilt-dfs (((struct plan) -> *) (list-of (struct plan)) -> undefined))
+(: for-each/unbuilt-dfs ((vector -> *) (list-of vector) -> undefined))
 (define (for-each/unbuilt-dfs proc pl)
   ((list->seq pl)
    (k/unbuilt-dfs
@@ -605,7 +624,7 @@
 ;; compute-stages returns a vector of lists where
 ;; each element of the vector is a list of plans
 ;; that can be built in parallel
-(: compute-stages ((list-of (struct plan)) -> vector))
+(: compute-stages ((list-of vector) -> vector))
 (define (compute-stages lst)
   (let* ((stage   (make-hash-table test: eq? hash: eq?-hash))
          (kstage  ((kompose k/unbuilt (k/hash-ref stage)) max)))
@@ -635,7 +654,7 @@
           (vector-set! vec num (cons p (vector-ref vec num)))))
       vec)))
 
-(: build-graph! ((list-of (struct plan)) #!rest * -> *))
+(: build-graph! ((list-of vector) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
   (let* ((sema           (make-semaphore maxprocs))
          (stages         (compute-stages lst))
@@ -722,7 +741,7 @@
 ;; build-plan! unconditionally builds a plan
 ;; and produces its output artifact
 ;; (it does not save the output)
-(: build-plan! ((struct plan) -> artifact))
+(: build-plan! (vector -> artifact))
 (define (build-plan! top)
   (unless (plan-resolved? top)
     (error "called build-plan! on unresolved plan"))
@@ -735,7 +754,7 @@
 ;; (however, re-building a plan without knowing its outputs may
 ;; lead to the outputs being serialized differently than another
 ;; build, which could lead to spurious reproducibility issues)
-(: load-plan (string -> (struct plan)))
+(: load-plan (string -> vector))
 (define (load-plan hash)
   (let* ((label   (with-input-from-file
                     (filepath-join (plan-dir) hash "label")

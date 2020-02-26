@@ -1,17 +1,95 @@
+(define <longrun>
+  (make-kvector-type
+    type:
+    run:
+    finish:
+    dependencies:
+    notification-fd:
+    producer-for:
+    consumer-for:))
 
-(define-type svc-params (list-of (pair keyword *)))
-(define-type s6-svc (pair (or string symbol) (list-of svc-params)))
+(define symbolic? (or/c string? symbol?))
 
-(define (s6-svc name args)
-  (cons name
-        (let loop ((args args))
-          (if (null? args)
-            '()
-            (let ((key (car args))
-                  (val (cadr args)))
-              (unless (keyword? key)
-                (error "expected keyword; found" key))
-              (cons (cons key val) (loop (cddr args))))))))
+(define valid-longrun?
+  (kvector/c
+    <longrun>
+    type:         (eq?/c 'longrun)
+    ;; run is an execline expression
+    run:          list?
+    ;; finish is an optional execline expression
+    finish:       (or/c false/c list?)
+    ;; dependencies is an optional newline-delimited string
+    ;; (this is populated automatically)
+    dependencies: (or/c false/c string?)
+    ;; optional
+    notification-fd: (or/c false/c integer?)
+    ;; optional; populated automatically
+    producer-for: (or/c false/c symbolic?)
+    ;; optional; populated automatically
+    consumer-for: (or/c false/c symbolic?)))
+
+(define longrun*
+  (let ((make (kvector-constructor <longrun>)))
+    (lambda args
+      (conform
+        valid-longrun?
+        (apply
+          make
+          type: 'longrun
+          args)))))
+
+(define longrun? (kvector-predicate <longrun>))
+
+(define <oneshot>
+  (make-kvector-type
+    type:
+    up:
+    down:
+    dependencies:))
+
+(define valid-oneshot?
+  (kvector/c
+    <oneshot>
+    type:         (eq?/c 'oneshot)
+    up:           list?
+    down:         (or/c false/c list?)
+    dependencies: (or/c false/c string?)))
+
+(define oneshot*
+  (let ((make (kvector-constructor <oneshot>)))
+    (lambda args
+      (conform
+        valid-oneshot?
+        (apply
+          make
+          type: 'oneshot
+          args)))))
+
+(define oneshot? (kvector-predicate <oneshot>))
+
+(define <bundle>
+  (make-kvector-type
+    type:
+    contents:))
+
+(define %make-bundle
+  (kvector-constructor <bundle>))
+
+(define bundle? (kvector-predicate <bundle>))
+
+(define valid-bundle?
+  (kvector/c
+    <bundle>
+    type: (eq?/c 'bundle)
+    contents: string?))
+
+(define (bundle* . args)
+  (%make-bundle
+    type: 'bundle
+    contents: (lines/s (s/bind (list->seq args) service-name))))
+
+(define spec?
+  (or/c longrun? oneshot? bundle?))
 
 ;; spec->artifact-seq takes an s6-rc service specification
 ;; and yields a sequence of artifacts that need to be present
@@ -19,66 +97,38 @@
 ;;
 ;; e.g. (spec->artifact-seq (s6-svc "foo" up: ... down: ...))
 ;; produces artifacts for /src/services/foo/up, etc.
-(define (spec->artifact-seq spec)
-  (let* ((dir        (car spec))
-         (spec       (cdr spec))
-         (pair->file (lambda (p)
-                       (let ((file (keyword->string (car p)))
-                             (val  (cdr p)))
-                         (interned
-                           (filepath-join "/src/services" dir file)
-                           #o644
-                           (with-output-to-string
-                             (lambda () (if (pair? val)
-                                          (write-exexpr val)
-                                          (begin (display val) (newline)))))))))
-         (type       (assq type: spec))
-         (check      (lambda (yes no)
-                       (for-each
-                         (lambda (y)
-                           (unless (assq y spec)
-                             (fatal "expected spec" y "in service" dir spec)))
-                         yes)
-                       (for-each
-                         (lambda (n)
-                           (when (assq n spec)
-                             (fatal "unexpected spec" n "in service" dir spec)))
-                         no))))
-      (if type
-        ;; basic sanity check on service specs so that
-        ;; you don't have to go spelunking through logs
-        ;; to figure out why s6-rc-compile failed
-        (case (cdr type)
-          ((oneshot)
-           (check '(up:) '(run: finish:)))
-          ((longrun)
-           (check '(run:) '(up: down:)))
-          ((bundle)
-           (check '(contents:) '(dependencies: up: down: run: finish:)))
-          (else
-            (fatal dir "has an unrecognized service type:" (cdr type))))
-        (fatal dir "does not have 'type:' in spec"))
-    (s/map pair->file (list->seq spec))))
+(define (spec->artifact-seq name spec)
+  (let* ((dir         name)
+         (field->file (lambda (kw val)
+                        (let ((file (keyword->string kw)))
+                          (interned
+                            (filepath-join "/src/services" dir file)
+                            #o644
+                            (with-output-to-string
+                              (lambda () (if (pair? val)
+                                           (write-exexpr val)
+                                           (begin (display val) (newline))))))))))
+    (lambda (kons seed)
+      (kvector-foldl spec
+                     (lambda (kw val lst)
+                       (if val
+                         (kons (field->file kw val) lst)
+                         lst))
+                     seed))))
 
-;; s6-rc-db converts a sequence of s6-rc package specifications
-;; and produces a package-lambda for the compiled service database
 (define s6-rc-db
-  (let* ((k/spec->art    (kompose
-                           (k/map spec->artifact-seq)
-                           k/recur))
-         (cons-artifacts (k/spec->art cons)))
-    (lambda (spec-seq)
-      (let ((artifacts (spec-seq cons-artifacts '())))
-        (lambda (conf)
-          (make-package
-            label:  "s6-rc-db"
-            src:    artifacts
-            tools:  (list busybox-core execline-tools s6 s6-rc)
-            inputs: '()
-            build:  (make-recipe
-                      script: (execline*
-                                (if ((mkdir -p "/out/etc/s6-rc")))
-                                (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services")))))))))
+  (lambda (art-seq)
+    (let ((artifacts (art-seq (k/recur cons) '())))
+      (lambda (conf)
+        (make-package
+          label:  "s6-rc-db"
+          src:    artifacts
+          tools:  (list busybox-core execline-tools s6 s6-rc)
+          inputs: '()
+          build:  (make-recipe
+                    script: (execline*
+                              (if ((mkdir -p "/out/etc/s6-rc")))
+                              (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services"))))))))
 
 (define s6
   (let* ((version '2.9.0.1)
@@ -114,25 +164,63 @@
     "dqQ64qnqMRlFufvFWDpkBeEHAVfmWy_ivBhy6FAP-6Y="
     (list linux-headers)))
 
-;; service represents a system service
-(defstruct service
-  (name : symbol)
-  ;; inputs is a list of artifacts and package-lambdas;
-  ;; these represent filesystem componenents that must
-  ;; be present at runtime
-  ((inputs '()) : list)
-  ;; users that need to exist
-  ((users '()) : list)
-  ;; groups that need to exist
-  ((groups '()) : list)
-  ;; 'after' is a list of functions (predicates)
-  ;; applied to other services to determine
-  ;; if they must be started before this one
-  ((after '()) : (list-of procedure))
-  ;; specification for the s6-rc service
-  (spec : list))
+(define <service>
+  (make-kvector-type
+    name:
+    inputs:
+    users:
+    groups:
+    after:
+    spec:))
 
-(: s/packages ((list-of (struct service)) -> procedure))
+(define %make-service (kvector-constructor <service>))
+(define service? (kvector-predicate <service>))
+
+(: service-inputs (vector --> (list-of (or procedure vector))))
+(define service-inputs (kvector-getter <service> inputs:))
+(: service-name (vector --> symbol))
+(define service-name (kvector-getter <service> name:))
+(: service-users (vector --> list))
+(define service-users (kvector-getter <service> users:))
+(: service-groups (vector --> list))
+(define service-groups (kvector-getter <service> groups:))
+(: service-after (vector --> (list-of procedure)))
+(define service-after (kvector-getter <service> after:))
+(: service-spec (vector --> vector))
+(define service-spec (kvector-getter <service> spec:))
+
+(define *default-service*
+  (%make-service
+    inputs: '()
+    users:  '()
+    groups: '()
+    after:  '()))
+
+(define valid-service?
+  (kvector/c
+    <service>
+    name:   symbol? ;; TODO: check name; can't contain path components...
+    inputs: (list-of (or/c procedure? artifact?))
+    users:  (list-of symbol?)
+    groups: (list-of symbol?)
+    after:  (list-of (or/c procedure? string? symbol?))
+    spec:   spec?))
+
+(define make-service
+  (lambda args
+    (let ((out (apply %make-service args)))
+      (conform
+        valid-service?
+        (kvector-union! out *default-service*)))))
+
+(define update-service
+  (lambda (svc . args)
+    (let ((out (apply %make-service args)))
+      (conform
+        valid-service?
+        (kvector-union! out svc)))))
+
+(: s/packages ((list-of vector) -> procedure))
 (define (s/packages lst)
   (s/bind (list->seq lst)
           (kompose
@@ -141,6 +229,7 @@
             k/recur
             (k/uniq test: eq? hash: eq?-hash))))
 
+(: named* (string -> (vector -> boolean)))
 (define (named* pat)
   (let ((sre (glob->sre pat)))
     (lambda (svc)
@@ -172,15 +261,16 @@
              (seq    (s/bind all-seq (k/filter match?))))
         (seq cons '())))))
 
-(: service->s6-svc ((struct service) procedure -> list))
-(define (service->s6-svc svc svc-seq)
-  (let ((depends (service-depends svc svc-seq)))
-    (s6-svc
+(define (service->artifact-seq svc svc-seq)
+  (let ((depends (service-depends svc svc-seq))
+        (spec    (service-spec svc)))
+    (spec->artifact-seq
       (service-name svc)
       (if (null? depends)
-        (service-spec svc)
-        (append (list dependencies: (lines/s (list->seq depends)))
-                (service-spec svc))))))
+        spec
+        (kupdate
+          spec
+          dependencies: (lines/s (s/map service-name (list->seq depends))))))))
 
 (define (k/field-list proc)
   (kompose
@@ -188,26 +278,23 @@
     (k/map list->seq)
     k/recur))
 
-;; the 'default' runlevel is the one used at boot
-(define (default-runlevel svcs)
-  (make-service
-    name: 'default
-    spec: `(type: bundle
-            contents: ,(lines/s (s/bind svcs (k/map service-name))))))
-
 ;; services->packages takes a list of services
 ;; and produces a complete list of packages
 ;; that the services depend upon, including
 ;; the necessary init scripts and binaries
-(: services->packages ((list-of (struct service)) -> (list-of procedure)))
+(: services->packages ((list-of vector) -> (list-of procedure)))
 (define (services->packages lst)
   (let* ((tail     ((s/packages lst) cons '()))
          (all      (list->seq lst))
          (k/users  (k/field-list service-users))
          (k/groups (k/field-list service-groups))
-         (default  (default-runlevel all))
-         (->svc    (cut service->s6-svc <> all))
-         (db       (s6-rc-db (s/map ->svc (s/cons* default all))))
+         (default  (make-service
+                     name: 'default
+                     spec: (%make-bundle
+                             type: 'bundle
+                             contents: (lines/s (s/map service-name all)))))
+         (->art    (cut service->artifact-seq <> all))
+         (db       (s6-rc-db (s/map ->art (s/cons* default all))))
          (users    (all (k/users cons) '()))
          (groups   (all (k/groups cons) '())))
     (append
@@ -299,7 +386,6 @@
                                    (s6-rc -bad change)
                                    (s6-svc -X -- /run/service/s6-svscan-log)
                                    (reboot))))))))
-
     (list init logger finish
           (interned-dir "/tmp" #o1777)
           (interned-dir "/dev" #o755)

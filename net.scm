@@ -123,8 +123,7 @@
   (make-service
     name:   'net.lo
     inputs: (list iproute2)
-    spec:   (list
-              type: 'oneshot
+    spec:   (oneshot*
               up:   (execline*
                       (fdmove -c 2 1)
                       (ip link set dev lo up))
@@ -152,8 +151,7 @@
     name:   (string->symbol (conc "net." name))
     inputs: (list iproute2)
     after:  (as list? after)
-    spec:   (list
-              type: 'oneshot
+    spec:   (oneshot*
               up:   (execline*
                       (fdmove -c 2 1)
                       ,@(map

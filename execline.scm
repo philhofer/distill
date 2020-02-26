@@ -10,8 +10,7 @@
                 (substring/shared v (- 8 n))))
     (else (string-append "\t" (tabs (- n 1))))))
 
-;; escaper yields the printing procedure for a string
-(: escaper (string --> undefined))
+(: %dsp-string (string --> undefined))
 (define (%dsp-string obj)
   (let ((len (string-length obj)))
     (if (= len 0)
@@ -98,10 +97,16 @@
 
 ;; write-exexpr writes an execline expression
 ;; as a script to current-output-port
-(: write-exexpr (list -> undefined))
-(define (write-exexpr expr)
-  (display execline-shebang)
-  (display "\n")
+;;
+;; the "shebang:" keyword argument may specify
+;; an alternate script invocation; the default
+;; is #!/bin/execlineb -P
+(: write-exexpr (list #!rest * -> undefined))
+(define (write-exexpr expr #!key (shebang execline-shebang))
+  (when shebang
+    (begin
+      (display shebang)
+      (newline)))
   (dsp-execline expr))
 
 ;; execline* is a macro that quasiquotes
