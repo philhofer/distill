@@ -32,7 +32,6 @@
     package-build
     package-prebuilt
     make-recipe
-    update-recipe
     recipe?
     recipe-env
     recipe-script)

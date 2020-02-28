@@ -93,6 +93,12 @@
         (hash-table-set! *canon-kwlists* vec vec)
         vec)))
 
+(: kvector? (* --> boolean))
+(define (kvector? x)
+  (and (vector? x)
+       (fx>= (vector-length x) 1)
+       (hash-table-ref/default *canon-kwlists* (vector-ref x 0) #f)))
+
 ;; list->kvector turns a list of the form (keyword: value ...)
 ;; into a kvector
 (: list->kvector (list -> vector))
@@ -178,20 +184,42 @@
 ;; kvector-constructor takes a kvector type
 ;; (from make-kvector-type) and returns
 ;; the constructor for that type
-(: kvector-constructor (vector --> (#!rest * -> vector)))
-(define (kvector-constructor kt)
+(: kvector-constructor (vector #!rest * --> (#!rest * -> vector)))
+(define (kvector-constructor kt . spec)
+  (let* ((ktlen    (vector-length kt))
+         (template (make-vector (fx+ ktlen 1) #f))
+         (contract (make-vector ktlen #f))
+         (conform? (lambda (out)
+                     (let loop ((i 0))
+                       (or (fx>= i ktlen)
+                           (let ((c (vector-ref contract i))
+                                 (i (fx+ i 1)))
+                             (and (or (not c)
+                                      (c (vector-ref out i)))
+                                  (loop i))))))))
+    (vector-set! template 0 kt)
+    (let loop ((args spec))
+      (or (null? args)
+          (let ((idx (kidx kt (car args)))
+                (val (cadr args))
+                (ok? (caddr args)))
+            (vector-set! template idx val)
+            (vector-set! contract (fx- idx 1) ok?)
+            (loop (cdddr args)))))
   (lambda args
-    (let ((vec (make-vector (+ (vector-length kt) 1) #f)))
-      (vector-set! vec 0 kt)
+    (let ((vec (vector-copy template)))
       (let loop ((args args))
         (if (null? args)
-          vec
+          (begin
+            (unless (conform? vec)
+              (error "kvector doesn't conform to spec" spec))
+            vec)
           (let ((idx (kidx kt (car args))))
             (if idx
               (begin
                 (vector-set! vec idx (cadr args))
                 (loop (cddr args)))
-              (error "keyword not part of kvector:" (car args)))))))))
+              (error "keyword not part of kvector:" (car args))))))))))
 
 ;; kvector/c produces a contract for a kvector
 ;; of the form (kvector/c <type> <key:> <contract> ... )

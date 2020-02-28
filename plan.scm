@@ -127,41 +127,25 @@
 ;; of dependency graph traversal necessary to produce plan input and output hashes
 (define <plan>
   (make-kvector-type
-    name:         ; just for identification purposes
-    inputs:       ;
+    name:
+    inputs:
     saved-hash:
     saved-output:
     raw-output:
     parallel:))
 
 (define plan? (kvector-predicate <plan>))
-(define %make-plan (kvector-constructor <plan>))
-
-(define *plan-defaults*
-  (%make-plan
-    inputs: '()
-    parallel: #t))
-
-(define valid-plan?
-  (kvector/c
-    <plan>
-    name: string?
-    ;; inputs are represented as pairs
-    ;; in which the car is a filesystem path
-    ;; and the cdr is a list of artifacts to unpack
-    ;; at that path
-    inputs: (list-of (pair-of string? (list-of (or/c artifact? plan?))))
-    ;; these are computed after-the-fact
-    saved-hash: false/c
-    saved-output: false/c
-    raw-output: (or/c string? false/c)
-    parallel: (or/c (eq?/c 'very) boolean?)))
 
 (define make-plan
-  (lambda args
-    (conform
-      valid-plan?
-      (kvector-union! (apply %make-plan args) *plan-defaults*))))
+  (kvector-constructor
+    <plan>
+    name:         #f string? ;; TODO: validate name further?
+    inputs:       '() (list-of
+                        (pair-of string? (list-of (or/c artifact? plan?))))
+    saved-hash:   #f false/c
+    saved-output: #f false/c
+    raw-output:   #f (or/c string? false/c)
+    parallel:     #t (or/c (eq?/c 'very) boolean?)))
 
 (: plan-saved-hash (vector --> (or string false)))
 (define plan-saved-hash (kvector-getter <plan> saved-hash:))

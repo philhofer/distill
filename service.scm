@@ -10,33 +10,16 @@
 
 (define symbolic? (or/c string? symbol?))
 
-(define valid-longrun?
-  (kvector/c
-    <longrun>
-    type:         (eq?/c 'longrun)
-    ;; run is an execline expression
-    run:          list?
-    ;; finish is an optional execline expression
-    finish:       (or/c false/c list?)
-    ;; dependencies is an optional newline-delimited string
-    ;; (this is populated automatically)
-    dependencies: (or/c false/c string?)
-    ;; optional
-    notification-fd: (or/c false/c integer?)
-    ;; optional; populated automatically
-    producer-for: (or/c false/c symbolic?)
-    ;; optional; populated automatically
-    consumer-for: (or/c false/c symbolic?)))
-
 (define longrun*
-  (let ((make (kvector-constructor <longrun>)))
-    (lambda args
-      (conform
-        valid-longrun?
-        (apply
-          make
-          type: 'longrun
-          args)))))
+  (kvector-constructor
+    <longrun>
+    type:   'longrun (eq?/c 'longrun)
+    run:    #f       list?
+    finish: #f       (or/c false/c list?)
+    dependencies:    #f (or/c false/c string?)
+    notification-fd: #f (or/c false/c integer?)
+    producer-for:    #f (or/c false/c symbolic?)
+    consumer-for:    #f (or/c false/c symbolic?)))
 
 (define longrun? (kvector-predicate <longrun>))
 
@@ -47,23 +30,13 @@
     down:
     dependencies:))
 
-(define valid-oneshot?
-  (kvector/c
-    <oneshot>
-    type:         (eq?/c 'oneshot)
-    up:           list?
-    down:         (or/c false/c list?)
-    dependencies: (or/c false/c string?)))
-
 (define oneshot*
-  (let ((make (kvector-constructor <oneshot>)))
-    (lambda args
-      (conform
-        valid-oneshot?
-        (apply
-          make
-          type: 'oneshot
-          args)))))
+  (kvector-constructor
+    <oneshot>
+    type: 'oneshot (eq?/c 'oneshot)
+    up:   #f       list?
+    down: #f       (or/c false/c list?)
+    dependencies: #f (or/c false/c string?)))
 
 (define oneshot? (kvector-predicate <oneshot>))
 
@@ -73,19 +46,15 @@
     contents:))
 
 (define %make-bundle
-  (kvector-constructor <bundle>))
+  (kvector-constructor
+    <bundle>
+    type: 'bundle (eq?/c 'bundle)
+    contents: #f string?))
 
 (define bundle? (kvector-predicate <bundle>))
 
-(define valid-bundle?
-  (kvector/c
-    <bundle>
-    type: (eq?/c 'bundle)
-    contents: string?))
-
 (define (bundle* . args)
   (%make-bundle
-    type: 'bundle
     contents: (lines/s (s/bind (list->seq args) service-name))))
 
 (define spec?
@@ -173,7 +142,6 @@
     after:
     spec:))
 
-(define %make-service (kvector-constructor <service>))
 (define service? (kvector-predicate <service>))
 
 (: service-inputs (vector --> (list-of (or procedure vector))))
@@ -189,36 +157,21 @@
 (: service-spec (vector --> vector))
 (define service-spec (kvector-getter <service> spec:))
 
-(define *default-service*
-  (%make-service
-    inputs: '()
-    users:  '()
-    groups: '()
-    after:  '()))
-
-(define valid-service?
-  (kvector/c
-    <service>
-    name:   symbol? ;; TODO: check name; can't contain path components...
-    inputs: (list-of (or/c procedure? artifact?))
-    users:  (list-of symbol?)
-    groups: (list-of symbol?)
-    after:  (list-of (or/c procedure? string? symbol?))
-    spec:   spec?))
-
+(: make-service (#!rest * -> vector))
 (define make-service
-  (lambda args
-    (let ((out (apply %make-service args)))
-      (conform
-        valid-service?
-        (kvector-union! out *default-service*)))))
+  (kvector-constructor
+    <service>
+    name:   #f  symbol?
+    inputs: '() (list-of (or/c procedure? artifact?))
+    users:  '() (list-of procedure?)
+    groups: '() (list-of procedure?)
+    after:  '() (list-of (or/c procedure? string? symbol?))
+    spec:   #f  spec?))
 
-(define update-service
-  (lambda (svc . args)
-    (let ((out (apply %make-service args)))
-      (conform
-        valid-service?
-        (kvector-union! out svc)))))
+(: update-service (vector #!rest * -> vector))
+(define (update-service svc . args)
+  (apply make-service
+         (append (kvector->list svc) args)))
 
 (: s/packages ((list-of vector) -> procedure))
 (define (s/packages lst)

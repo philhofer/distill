@@ -8,80 +8,60 @@
     ((and ppc64 little-endian) 'ppc64le)
     ((and ppc64 big-endian) 'ppc64)))
 
+(: <recipe> vector)
 (define <recipe>
   (make-kvector-type
     env:
     script:))
 
-(define %make-recipe (kvector-constructor <recipe>))
-(: recipe? (* --> boolean))
-(define recipe? (kvector-predicate <recipe>))
-(: recipe-env (vector -> *))
-(define recipe-env (kvector-getter <recipe> env:))
-(: recipe-script (vector -> *))
-(define recipe-script (kvector-getter <recipe> script:))
-
 (: make-recipe (#!rest * -> vector))
 (define make-recipe
-  (let ((default (%make-recipe env: '())))
-    (lambda args
-      (let ((out (apply %make-recipe args)))
-        (conform
-          (kvector/c <recipe>
-                     env: (list-of pair?)
-                     script: list?)
-          (kvector-union! out default))))))
+  (kvector-constructor
+    <recipe>
+    env:    '() (list-of pair?)
+    script: #f  list?))
 
-(: update-recipe (vector #!rest * -> vector))
-(define (update-recipe r . args)
-  (kvector-union! (apply %make-recipe args) (conform recipe? r)))
+(: recipe? (* --> boolean))
+(define recipe? (kvector-predicate <recipe>))
+(: recipe-env (vector -> list))
+(define recipe-env (kvector-getter <recipe> env:))
+(: recipe-script (vector -> list))
+(define recipe-script (kvector-getter <recipe> script:))
 
 (: <package> vector)
-(define <package> (make-kvector-type
-                    label:
-                    src:
-                    tools:
-                    inputs:
-                    prebuilt:
-                    build:
-                    raw-output:
-                    parallel:))
+(define <package>
+  (make-kvector-type
+    label:
+    src:
+    tools:
+    inputs:
+    prebuilt:
+    build:
+    raw-output:
+    parallel:))
 
-(: %make-package (#!rest * -> vector))
-(define %make-package (kvector-constructor <package>))
 (: package? (* -> boolean))
 (define package? (kvector-predicate <package>))
 
-(define valid-package?
-  (kvector/c
-    <package>
-    label:      string?
-    src:        (or/c artifact? (list-of artifact?))
-    tools:      (list-of (or/c procedure? artifact?))
-    inputs:     (list-of (or/c procedure? artifact?))
-    prebuilt:   (or/c artifact? false/c)
-    build:      recipe?
-    raw-output: (or/c string? false/c)
-    parallel:   (or/c (eq?/c 'very) boolean?)))
-
 (: make-package (#!rest * -> vector))
 (define make-package
-  (let ((default (%make-package
-                   src:     '()
-                   tools:   '()
-                   inputs:  '()
-                   parallel: #t)))
-    (lambda args
-      (let ((out (apply (kvector-constructor <package>) args)))
-        (conform
-          valid-package?
-          (kvector-union! out default))))))
+  (kvector-constructor
+    <package>
+    label:    #f  string?
+    src:      '() (or/c artifact? (list-of artifact?))
+    tools:    '() (list-of (or/c procedure? artifact?))
+    inputs:   '() (list-of (or/c procedure? artifact?))
+    prebuilt: #f  (or/c false/c artifact?)
+    build:    #f  recipe?
+    raw-output: #f (or/c false/c string?)
+    parallel:   #t (or/c (eq?/c 'very) boolean?)))
 
 (: update-package (vector #!rest * -> vector))
 (define (update-package pkg . args)
-  (conform
-    valid-package?
-    (kvector-union! (apply %make-package args) (conform package? pkg))))
+  (apply make-package
+         (append
+           (kvector->list pkg)
+           args)))
 
 (: package-label (vector --> string))
 (define package-label (kvector-getter <package> label:))

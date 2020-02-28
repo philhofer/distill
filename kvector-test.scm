@@ -59,17 +59,26 @@
         (thunk)
         #f))))
 
-(define make-kv2 (kvector-contract-constructor
+(define make-kv2 (kvector-constructor
                    ktd2
-                   string: string?
-                   symbol: symbol?
-                   list:   list?))
+                   string: #f  string?
+                   symbol: #f  symbol?
+                   list:   '() list?))
 
 (test eq? #t ((kvector-predicate ktd2)
               (make-kv2
                 string: "yes"
                 symbol: 'yes
                 list:   '(x y))))
+
+(test equal?
+      (make-kv2
+        string: "yes"
+        symbol: 'yes)
+      (make-kv2
+        string: "yes"
+        symbol: 'yes
+        list:   '()))
 
 (test eq? #t (throws?
                (lambda ()

@@ -15,7 +15,6 @@
     keys/c
     kvector-union!
     kvector-constructor
-    kvector-contract-constructor
     kvector-predicate
     kvector-getter
     kvector-setter)
