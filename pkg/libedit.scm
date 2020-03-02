@@ -2,7 +2,6 @@
   scheme
   (distill plan)
   (distill package)
-  (distill buildenv)
   (distill base)
   (only (chicken string) conc)
   (pkg ncurses))
@@ -14,8 +13,8 @@
                     "x0NyCF6katZwtz3Wpc8fVKjK8nawKLWVgsdZ2eTgFsU=")))
     (lambda (conf)
       (make-package
-        label:  (conc "libedit-" (conf 'arch))
+        label:  (conc "libedit-" ($arch conf))
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list ncurses musl libssp-nonshared)
-        build:  (gnu-build (conc "libedit-" version) conf)))))
+        build:  (gnu-recipe (conc "libedit-" version) ($gnu-build conf))))))

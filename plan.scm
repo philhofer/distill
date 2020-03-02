@@ -255,39 +255,45 @@
              (plan-saved-hash-set! p h)
              h))))
 
-;; throw an exception wrapped with the plan
-;; that caused the exception
-(define (plan-abort plan suberr)
-  (proc-abort
-    (make-property-condition
-      'plan-failure
-      'plan  plan
-      'child suberr)))
+;; plan-exn wraps a srfi-12 condition
+;; with another srfi-12 condition that is tagged
+;; with 'plan
+(define (plan-exn plan suberr)
+  (make-property-condition
+    'plan-failure
+    'plan  plan
+    'child suberr))
 
 ;; handle a fatal plan failure by printing diagnostics
 ;; and exiting with a non-zero status
 (define (fatal-plan-failure exn)
-  (let* ((sys?   (condition-predicate 'exn))
-         (eplan? (condition-predicate 'plan-failure)))
-    (cond
-      ((sys? exn)
-       (let ((chain (condition-property-accessor 'exn 'call-chain))
-             (eport (current-error-port)))
-         (print-error-message exn)
-         (let ((lst (chain exn)))
-           (for-each
-             (lambda (v)
-               (display (vector-ref v 0) eport)
-               (newline eport))
-             lst))
-         (fatal "exited due to uncaught exception.")))
-      ((eplan? exn)
-       (let* ((prop  (lambda (sym) (condition-property-accessor 'plan-failure sym)))
-              (plan  ((prop 'plan) exn))
-              (child ((prop 'child) exn)))
-         (info "plan" (plan-name plan) "encountered a fatal error:")
-         (fatal-plan-failure child)))
-      (else (abort exn)))))
+  ;; if this function throws for some reason, don't get caught in a loop
+  (parameterize ((current-exception-handler
+                   (lambda (exn)
+                     (display "exception in exception handler!\n" (current-error-port))
+                     (display exn (current-error-port))
+                     (exit 1))))
+    (let* ((sys?   (condition-predicate 'exn))
+           (eplan? (condition-predicate 'plan-failure)))
+      (cond
+        ((sys? exn)
+         (let ((chain (condition-property-accessor 'exn 'call-chain))
+               (eport (current-error-port)))
+           (print-error-message exn)
+           (let ((lst (chain exn)))
+             (for-each
+               (lambda (v)
+                 (display (vector-ref v 0) eport)
+                 (newline eport))
+               lst))
+           (fatal "exited due to uncaught exception.")))
+        ((eplan? exn)
+         (let* ((prop  (lambda (sym) (condition-property-accessor 'plan-failure sym)))
+                (plan  ((prop 'plan) exn))
+                (child ((prop 'child) exn)))
+           (info "plan" (plan-name plan) "encountered a fatal error:")
+           (fatal-plan-failure child)))
+        (else (abort exn))))))
 
 ;; fork+exec, wait for the process to exit and check
 ;; that it exited successfully
@@ -687,23 +693,25 @@
     ;; or b) acquire up to maxjobs jobs from the semaphore
     ;; and then execute with that level of intra-build parallelism
     (define (build-one! p maxjobs)
-      ;; if this build encounters an error, catch it and re-throw
-      ;; with associated plan information (should aid debugging)
-      (parameterize ((info-prefix (string-append (plan-name p) " |"))
-                     (current-exception-handler (lambda (exn)
-                                                  (plan-abort p exn))))
-        (if (should-build? p)
-          (let ((jobs (plan-semacquire p maxjobs)))
-            ;; in the time spent waiting to acquire resources,
-            ;; another plan could have encountered an error, so
-            ;; this inner bit should become a no-op in that situation
-            (or err
-                (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
-                  (infoln "building")
-                  (save-plan-outputs! p (plan->outputs! p jobs))
-                  (infoln "completed")))
-            (semrelease/n sema jobs))
-          #t)))
+      (let ((rethrow (current-exception-handler)))
+        ;; if this build encounters an error, catch it and re-throw
+        ;; with associated plan information (should aid debugging)
+        (parameterize ((info-prefix (string-append (plan-name p) " |"))
+                       (current-exception-handler (lambda (exn)
+                                                    (rethrow
+                                                      (plan-exn p exn)))))
+          (if (should-build? p)
+            (let ((jobs (plan-semacquire p maxjobs)))
+              ;; in the time spent waiting to acquire resources,
+              ;; another plan could have encountered an error, so
+              ;; this inner bit should become a no-op in that situation
+              (or err
+                  (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
+                    (infoln "building")
+                    (save-plan-outputs! p (plan->outputs! p jobs))
+                    (infoln "completed")))
+              (semrelease/n sema jobs))
+            #t))))
     ;; spawn a builder coroutine for each unbuilt package
     (for-each/s
       (lambda (stage)

@@ -5,13 +5,13 @@
                     "kUOLXuIdscWD_5WHBvAIuytyuy-gGm_LXen3TWodgNs=")))
     (lambda (conf)
       (make-package
-        label:   (conc "libmnl-" version "-" (conf 'arch))
+        label:   (conc "libmnl-" version "-" ($arch conf))
         src:     src
         tools:   (cc-for-target conf)
         inputs:  (list linux-headers musl libssp-nonshared)
-        build:   (gnu-build
+        build:   (gnu-recipe
                    (conc "libmnl-" version)
-                   conf)))))
+                   ($gnu-build conf))))))
 
 (define libnftnl
   (let* ((version '1.1.5)
@@ -21,20 +21,21 @@
     (lambda (conf)
       (let ()
         (make-package
-          label:  (conc "libnftnl-" version "-" (conf 'arch))
+          label:  (conc "libnftnl-" version "-" ($arch conf))
           src:    src
           tools:  (cc-for-target conf)
           inputs: (list linux-headers libmnl musl libssp-nonshared)
-          build:  (gnu-build
+          build:  (gnu-recipe
                     (conc "libnftnl-" version)
-                    (config-prepend conf 'configure-flags
-                                    ;; LIBMNL_CFLAGS needs to be set
-                                    ;; to make the configure script happy,
-                                    ;; but there isn't actually a value
-                                    ;; we'd like to set...
-                                    '(LIBMNL_CFLAGS=-lmnl
-                                      LIBMNL_LIBS=-lmnl))
-                    make-flags: '(V=1)))))))
+                    (kwith
+                      ($gnu-build conf)
+                      ;; LIBMNL_CFLAGS needs to be set
+                      ;; to make the configure script happy,
+                      ;; but there isn't actually a value
+                      ;; we'd like to set...
+                      configure-args: (+= '(LIBMNL_CFLAGS=-lmnl
+                                              LIBMNL_LIBS=-lmnl))
+                      make-flags: (+= '(V=1)))))))))
 
 (define iptables
   (let* ((version '1.8.4)
@@ -42,21 +43,20 @@
                     (conc "https://netfilter.org/projects/iptables/files/iptables-" version ".tar.bz2")
                     "hBWYiIU2PYebYoMF6_n_anAFXGfruGBmAXU94ge9DQo=")))
     (lambda (conf)
-      (let ()
+      (let ((conf (kwith conf CFLAGS: (+= '(-D_GNU_SOURCE)))))
         (make-package
-          label:  (conc "iptables-" version "-" (conf 'arch))
+          label:  (conc "iptables-" version "-" ($arch conf))
           src:    src
           tools:  (append (list byacc reflex) (cc-for-target conf))
           inputs: (list linux-headers libnftnl libmnl musl libssp-nonshared)
-          build:  (gnu-build
+          build:  (gnu-recipe
                     (conc "iptables-" version)
-                    (config-prepend (config-prepend conf 'configure-flags
-                                                    '(libmnl_CFLAGS=-lmnl
-                                                       libmnl_LIBS=-lmnl
-                                                       libnftnl_CFLAGS=-lnftnl
-                                                       libnftnl_LIBS=-lnftnl))
-
-                                    'cflags '(-D_GNU_SOURCE))))))))
+                    (kwith
+                      ($gnu-build conf)
+                      configure-args: (+= '(libmnl_CFLAGS=-lmnl
+                                              libmnl_LIBS=-lmnl
+                                              libnftnl_CFLAGS=-lnftnl
+                                              libnftnl_LIBS=-lnftnl)))))))))
 
 (define iproute2
   (let* ((version '5.5.0)
@@ -74,30 +74,29 @@
                     "/src/fix-install-errors.patch"
                     #o644)))
     (lambda (conf)
-      (let* ((mkflags   (make-env conf))
-             (cenv      (cc-env conf))
-             (config.mk (interned
-                          "/src/config.mk"
-                          #o644
-                          (lines/s
-                            (list->seq
-                              (append
-                                (map
-                                  pair->string=
-                                   `((YACC . yacc)
-                                     ,(assq 'CC cenv)
-                                     ,(assq 'LDFLAGS cenv)
-                                     ,(assq 'AR mkflags)))
-                                (list
-                                  "TC_CONFIG_IPSET:=y"
-                                  "TC_CONFIG_NO_XT:=y"
-                                  "HAVE_MNL:=y"
-                                  "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
-                                  "LDLIBS += -lelf -lmnl -lz"
-                                  "%.o: %.c"
-                                  "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
+      ;; the configure script isn't autoconf and
+      ;; doesn't work without pkgconfig, but luckily
+      ;; all it does is generate config.mk, so just do that directly...
+      (let ((config.mk (interned
+                         "/src/config.mk"
+                         #o644
+                         (lines/s
+                           (list->seq
+                             (append
+                               '("YACC=yacc")
+                               (splat
+                                 conf
+                                 CC: LDFLAGS: AR:)
+                               (list
+                                 "TC_CONFIG_IPSET:=y"
+                                 "TC_CONFIG_NO_XT:=y"
+                                 "HAVE_MNL:=y"
+                                 "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
+                                 "LDLIBS += -lelf -lmnl -lz"
+                                 "%.o: %.c"
+                                 "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
         (make-package
-          label: (conc "iproute2-" version "-" (conf 'arch))
+          label: (conc "iproute2-" version "-" ($arch conf))
           src:   (list src patch0 patch1 config.mk)
           tools: (append (list byacc reflex)
                          (cc-for-target conf))
@@ -107,17 +106,15 @@
                               (cd ,(conc "iproute2-" version))
                               (if ((cp /src/config.mk config.mk)))
                               ,@(script-apply-patches (list patch0 patch1))
-                              ;(if ((sed "-i" -e "/^TARGETS=/s: arpd ::" misc/Makefile)))
-                              ;(if ((sed "-i" -e "s:/usr/local:/usr:" tc/m_ipt.c include/iptables.h)))
                               (if ((sed "-i" -e "/^SUBDIRS/s: netem::" Makefile)))
                               (if ((importas "-i" -u nproc nproc)
-                                   (make -j $nproc
-                                         ,(pair->string= (cons 'CCOPTS (cdr (assq 'CFLAGS cenv))))
+                                   (make -j $nproc ,@(k=v* CCOPTS: ($CFLAGS conf))
                                          SHARED_LIBS=n PREFIX=/usr all)))
                               (if ((make SHARED_LIBS=n DESTDIR=/out PREFIX=/usr install)))
                               (if ((rm -rf /out/usr/share/bash-completion)))
                               (if ((rm -rf /out/var)))
-                              (rm -rf /out/usr/share/man))))))))
+                              (if ((rm -rf /out/usr/share/man)))
+                              ,@(strip-binaries-script ($triple conf)))))))))
 
 (define netif-loopback
   (make-service

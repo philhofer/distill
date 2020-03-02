@@ -5,14 +5,21 @@
     kref/default
     kupdate
     ktype
+    kvector?
     kvector*
     kvector->list
     kvector-foldl
+    kvector-map
     list->kvector
     make-kvector-type
     recast
     kvector/c
     keys/c
+    subvector-constructor
+    kwith
+    :=
+    +=
+    ?=
     kvector-union!
     kvector-constructor
     kvector-predicate

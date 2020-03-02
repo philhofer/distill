@@ -11,6 +11,7 @@
     as
     cons*
     memoize-eq
+    memoize-one-eq
     memoize-lambda
     define-memoized)
   (include "memo.scm"))

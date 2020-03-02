@@ -8,10 +8,10 @@
     (distill table)
     (distill eprint)
     (distill filepath)
+    (distill kvector)
     (distill memo)
     (distill plan)
     (distill package)
-    (distill buildenv)
     (distill execline))
   (cond-expand
     (chicken

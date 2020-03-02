@@ -15,7 +15,7 @@
     (distill memo)
     (distill base)
     (distill package)
-    (distill buildenv)
+    (distill kvector)
     (distill service)
     (distill sequence)
     (distill linux)

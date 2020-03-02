@@ -36,11 +36,11 @@
 (: kref* (vector keyword --> *))
 (define (kref* vec kw) (kref/default vec kw #f))
 
-(: kset! (vector keyword * -> undefined))
+(: kset! (vector keyword * -> vector))
 (define (kset! vec kw arg)
   (let ((idx (kidx (vector-ref vec 0) kw)))
     (if idx
-      (vector-set! vec idx arg)
+      (begin (vector-set! vec idx arg) vec)
       (error "kvector doesn't use keyword" kw))))
 
 ;; kupdate performs a functional update of 'vec'
@@ -59,6 +59,35 @@
               (loop (cddr args)))
             (error "kvector doesn't use keyword" (car args))))))))
 
+(define (+= . args)
+  (lambda (prev)
+    (cond
+      ((list? prev)
+       (apply append prev args))
+      ((not prev)
+       (apply append args))
+      (else
+        (cons prev (apply append args))))))
+
+(define (:= x)
+  (lambda (arg) x))
+
+(define (?= x)
+  (lambda (arg) (or arg x)))
+
+(define (kwith vec . args)
+  (let ((cp (vector-copy vec))
+        (kt (vector-ref vec 0)))
+    (let loop ((args args))
+      (if (null? args)
+        cp
+        (let ((idx (kidx kt (car args))))
+          (if idx
+            (begin
+              (vector-set! cp idx ((cadr args) (vector-ref vec idx)))
+              (loop (cddr args)))
+            (error "kwith: kvector doesn't use keyword" (car args) kt)))))))
+
 ;; kvector-foldl folds (proc key value seed)
 ;; over each field in the kvector
 (: kvector-foldl (vector (keyword * 'a -> 'a) 'a -> 'a))
@@ -73,6 +102,21 @@
               (j  (fx+ j 1)))
           (loop j (proc kw (vector-ref kv j) val)))))))
 
+;; kvector-map creates a list from a kvector
+;; by applying (proc key value) to each kvector key-value pair
+(: kvector-map (vector (keyword * -> 'a) -> (list-of 'a)))
+(define (kvector-map kv proc)
+  (kvector-foldl
+    kv
+    (lambda (kw val lst)
+      (cons (proc kw val) lst))
+    '()))
+
+;; kvector->list converts a kvector into a list
+;; in which the even elements are keywords and
+;; the odd elements are values
+;;
+;; (this is the reverse operation of list->kvector)
 (: kvector->list (vector --> list))
 (define (kvector->list kv)
   (kvector-foldl kv (lambda (k v lst)
@@ -80,8 +124,7 @@
 
 (: kvector->alist (vector --> (list-of (pair keyword *))))
 (define (kvector->alist kv)
-  (kvector-foldl kv (lambda (k v lst)
-                      (cons (cons k v) lst)) '()))
+  (kvector-map kv cons))
 
 ;; interned list of kvector types
 (define *canon-kwlists* (make-hash-table))
@@ -93,6 +136,9 @@
         (hash-table-set! *canon-kwlists* vec vec)
         vec)))
 
+;; kvector? determines whether or not an object
+;; was created with kvector*, list->kvector, or
+;; a procedure returned by kvector-constructor
 (: kvector? (* --> boolean))
 (define (kvector? x)
   (and (vector? x)
@@ -221,6 +267,29 @@
                 (loop (cddr args)))
               (error "keyword not part of kvector:" (car args))))))))))
 
+;; subvector-constructor takes a kvector type
+;; and a list of keywords and produces a function
+;; that efficiently extracts the list of keywords
+;; from kvectors of the given type
+(define (subvector-constructor kt . kws)
+  (let* ((subv (apply make-kvector-type kws))
+         (lidx (vector-map
+                 (lambda (kw)
+                   (kidx kt kw))
+                 subv))
+         (len  (vector-length subv)))
+    (lambda (kv)
+      (let* ((len+1 (fx+ len 1))
+             (vec   (make-vector len+1 #f)))
+        (vector-set! vec 0 subv)
+        (let loop ((i 0))
+          (if (fx>= i len)
+            vec
+            (let ((e (vector-ref lidx i))
+                  (i (fx+ i 1)))
+              (vector-set! vec i (vector-ref kv e))
+              (loop i))))))))
+
 ;; kvector/c produces a contract for a kvector
 ;; of the form (kvector/c <type> <key:> <contract> ... )
 ;; where the type and key contracts are checked against the input
@@ -263,33 +332,51 @@
                             (loop i (fx+ j 1)))
                            (else #f)))))))))))
 
-(define (kvector-contract-constructor kt . args)
-  (let* ((make      (kvector-constructor kt))
-         (contracts (apply make args)))
-    (lambda args
-      (let ((out (apply make args))
-            (len (vector-length contracts)))
-        (let loop ((i 1))
-          (if (fx>= i len)
-            out
-            (let ((check (vector-ref contracts i)))
-              (when check
-                (unless (check (vector-ref out i))
-                  (error "predicate failed on field:" (vector-ref kt (fx- i 1)) (vector-ref out i))))
-              (loop (fx+ i 1)))))))))
-
+;; kvector-getter takes a kvector type (from make-kvector-type)
+;; and a keyword and returns a function that takes a kvector of
+;; the given type and returns its corresponding entry for that keyword
+(: kvector-getter (vector keyword -> (vector -> *)))
 (define (kvector-getter kt kw)
   (let ((idx (kidx kt kw)))
     (if idx
       (lambda (v)
-        (vector-ref v idx))
+        (if (eq? (vector-ref v 0) kt)
+          (vector-ref v idx)
+          (error "kvector-getter: bad input type" v)))
       (error "kvector type does not respond to keyword:" kw))))
 
+;; kvector-setter takes a kvector type (from make-kvector-type)
+;; and a keyword and returns a function that takes a kvector
+;; of the given type and a value and sets the corresponding
+;; entry in the vector to the value
 (: kvector-setter (vector keyword --> (vector * -> undefined)))
 (define (kvector-setter kt kw)
   (let ((idx (kidx kt kw)))
     (if idx
       (lambda (v e)
-        (vector-set! v idx e))
+        (if (eq? (vector-ref v 0) kt)
+          (vector-set! v idx e)
+          (error "kvector-setter: bad input type" v)))
       (error "kvector type does not respond to keyword:" kw))))
+
+(define-syntax kreconf
+  (syntax-rules (+= := ?= =>)
+    ((_ "parse" (conf formals* ...))
+     (kupdate conf formals* ...))
+    ((_ "parse" (conf formals* ...) (kw += lst ...) rest* ...)
+     (kreconf "parse" (conf formals* ... kw (append (kref/default conf kw '())
+                                                    lst ...))
+              rest* ...))
+    ((_ "parse" (conf formals* ...) (kw := val) rest* ...)
+     (kreconf "parse" (conf formals* ... kw val)
+              rest* ...))
+    ((_ "parse" (conf formals* ...) (kw ?= val) rest* ...)
+     (kreconf "parse" (conf formals* ...
+                            kw (or (kref* conf kw) val))
+              rest* ...))
+    ((_ "parse" conf (conf formals* ...) (kw => proc) rest* ...)
+     (kreconf "parse" (conf formals* ... kw (proc (kref* old kw)))
+              rest* ...))
+    ((_ conf (kw op arg) ...)
+     (kreconf "parse" (conf) (kw op arg) ...))))
 

@@ -27,7 +27,6 @@
     (distill contract)
     (distill eprint)
     (distill package)
-    (distill buildenv)
     (distill base)
     (distill unix)
     (distill linux)

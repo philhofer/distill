@@ -2,7 +2,7 @@
   scheme
   (distill plan)
   (distill package)
-  (distill buildenv)
+  (distill kvector)
   (distill base)
   (distill execline)
   (only (distill linux) linux-headers)
@@ -23,30 +23,31 @@
                     #o644)))
     (lambda (conf)
       (make-package
-        label:  (conc "openssh-" (conf 'arch))
+        label:  (conc "openssh-" ($arch conf))
         src:    (list src patch0)
         tools:  (cc-for-target conf)
         inputs: (list linux-headers libedit ncurses zlib libressl musl libssp-nonshared)
-        build:  (gnu-build
+        build:  (gnu-recipe
                   (conc "openssh-" version)
-                  (config-prepend conf 'configure-flags
-                                  '(--with-pid-dir=/run
-                                     --disable-lastlog
-                                     --disable-strip
-                                     --disable-wtmp
-                                     --disable-pkcs11 ;; requires dlopen()
-                                     --disable-sk
-                                     --with-pie=no ;; don't pass -pie; use CFLAGS!
-                                     --with-sandbox=seccomp_filter ;; fail configure if we can't use seccomp
-                                     --with-privsep-path=/var/empty
-                                     --with-xauth=/usr/bin/xauth
-                                     --with-privsep-user=sshd
-                                     --with-md5-passwords
-                                     --with-libedit))
-                  pre-configure: (script-apply-patches (list patch0))
-                  post-install:  (execline*
-                                   ;; do NOT keep config files;
-                                   ;; those are inserted via overlay
-                                   (if ((rm -rf /out/var)))
-                                   (if ((rm -rf /out/etc)))))))))
+                  (kwith
+                    ($gnu-build conf)
+                    configure-args: (+= '(--with-pid-dir=/run
+                                           --disable-lastlog
+                                           --disable-strip
+                                           --disable-wtmp
+                                           --disable-pkcs11 ;; requires dlopen()
+                                           --disable-sk
+                                           --with-pie=no ;; don't pass -pie; use CFLAGS!
+                                           --with-sandbox=seccomp_filter ;; fail configure if we can't use seccomp
+                                           --with-privsep-path=/var/empty
+                                           --with-xauth=/usr/bin/xauth
+                                           --with-privsep-user=sshd
+                                           --with-md5-passwords
+                                           --with-libedit))
+                    pre-configure: (+= (script-apply-patches (list patch0)))
+                    post-install:  (+= (execline*
+                                         ;; do NOT keep config files;
+                                         ;; those are inserted via overlay
+                                         (if ((rm -rf /out/var)))
+                                         (if ((rm -rf /out/etc)))))))))))
 

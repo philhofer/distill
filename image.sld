@@ -13,7 +13,7 @@
     scheme
     (scheme base)
     (scheme cxr)
-    (distill buildenv)
+    (distill kvector)
     (distill base)
     (distill execline)
     (distill plan)

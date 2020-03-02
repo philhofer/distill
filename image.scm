@@ -41,7 +41,7 @@
                  (make-recipe
                    script: (execline*
                              (importas -u "-i" nproc nproc)
-                             (mksquashfs ,(sysroot conf) ,(conc "/out/" out-img) ,@opts))))))))
+                             (mksquashfs ,($sysroot conf) ,(conc "/out/" out-img) ,@opts))))))))
 
 (define (initramfs inputs #!key (chown '()) (compress 'zstd))
   (unless (null? chown)
@@ -59,7 +59,7 @@
                                   (else (error "unrecognized compressor" compress)))))
                 (make-recipe
                   script: (execline*
-                            (cd ,(sysroot conf))
+                            (cd ,($sysroot conf))
                             ;; set mtime to 0, since bsdtar(1)
                             ;; does not have an option to override it
                             (if ((find "." -mindepth 1
@@ -88,29 +88,23 @@
                      #o644)))
     (lambda (conf)
       (make-package
-        label:  (conc "squashfs-tools-" (conf 'arch))
+        label:  (conc "squashfs-tools-" ($arch conf))
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list zstd lz4 xz-utils zlib musl libssp-nonshared)
-        build:  (let ((args (map
-                              pair->string=
-                              (append '((XZ_SUPPORT . 1)
-                                        (LZO_SUPPORT . 0)
-                                        (LZ4_SUPPORT . 1)
-                                        (ZSTD_SUPPORT . 1)
-                                        (XATTR_SUPPORT . 0))
-                                      (make-env conf)))))
-                  (make-recipe
-                    script: (execline*
-                              (cd ,(conc "squashfs-tools-" version "/squashfs-tools"))
-                              (importas -u "-i" nproc nproc)
-                              ;; can't set CFLAGS= in the make invocation
-                              ;; because the Makefile is clever and toggles
-                              ;; a bunch of additional -DXXX flags based on configuration
-                              ,@(export* (cc-env conf))
-                              (if ((make -j $nproc ,@args)))
-                              (if ((mkdir -p /out/usr/bin)))
-                              (cp mksquashfs unsquashfs /out/usr/bin))))))))
+        build:  (make-recipe
+                  script: (execline*
+                            (cd ,(conc "squashfs-tools-" version "/squashfs-tools"))
+                            (importas -u "-i" nproc nproc)
+                            ;; can't set CFLAGS= in the make invocation
+                            ;; because the Makefile is clever and toggles
+                            ;; a bunch of additional -DXXX flags based on configuration
+                            ,@(kvexport ($cc-env conf))
+                            (if ((make -j $nproc XZ_SUPPORT=1 LZO_SUPPORT=0
+                                       LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0
+                                       ,@(kvargs ($make-overrides conf)))))
+                            (if ((mkdir -p /out/usr/bin)))
+                            (cp mksquashfs unsquashfs /out/usr/bin)))))))
 
 (define lz4
   (let* ((version '1.9.2)
@@ -119,19 +113,19 @@
                     "uwHhgT74Tk7ds0TQeFZTodoI1_5IZsRnVRNNHi7ywlc=")))
     (lambda (conf)
       (make-package
-        label:  (conc "lz4-" (conf 'arch))
+        label:  (conc "lz4-" ($arch conf))
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
-        build:  (let ((makeflags (map
-                                   pair->string=
-                                   (append (cc-env conf) (make-env conf)))))
-                  (make-recipe
-                    script: (execline*
-                              (cd ,(conc "lz4-" version))
-                              (importas -u "-i" nproc nproc)
-                              (if ((make -j $nproc DESTDIR=/out PREFIX=/usr ,@makeflags install)))
-                              ,@(strip-binaries-script conf))))))))
+        build:  (make-recipe
+                  script: (execline*
+                            (cd ,(conc "lz4-" version))
+                            (importas -u "-i" nproc nproc)
+                            (if ((make -j $nproc DESTDIR=/out PREFIX=/usr
+                                       ,@(kvargs ($cc-env conf))
+                                       ,@(kvargs ($make-overrides conf))
+                                       install)))
+                            ,@(strip-binaries-script ($triple conf))))))))
 
 (define zstd
   (let* ((version '1.4.4)
@@ -142,29 +136,29 @@
                     "PKNr93GxvtI1hA4Oia-Ut7HNNGjAcxlvfSr3TYdpdX4=")))
     (lambda (conf)
       (make-package
-        label:  (conc "zstd-" (conf 'arch))
+        label:  (conc "zstd-" ($arch conf))
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
         build:
         ;; just a raw Makefile
-        (let* ((cenv  (cc-env conf))
-               (menv  (make-env conf))
-               (extra '((HAVE_PTHREAD . 1)
-                        (HAVE_ZLIB . 0)
-                        (HAVE_LZMA . 0)
-                        (HAVE_LZ4 . 0)
-                        (ZSTD_LEGACY_SUPPORT . 0)
-                        (ZSTD_LIB_DEPRECATED . 0)))
-               (makeflags (map pair->string=
-                               (append cenv menv extra))))
+        (let ((makeflags (append
+                           (kvargs ($cc-env conf))
+                           (kvargs ($make-overrides conf))
+                           (k=v*
+                             HAVE_PTHREAD: 1
+                             HAVE_ZLIB: 0
+                             HAVE_LZMA: 0
+                             HAVE_LZ4:  0
+                             ZSTD_LEGACY_SUPPORT: 0
+                             ZSTD_LIB_DEPRECATED: 0))))
           (make-recipe
             script: (execline*
                       (cd ,(conc "zstd-" version))
                       (importas -u "-i" nproc nproc)
                       (if ((cd lib/)
-                           (make -j $nproc PREFIX=/usr
-                                 DESTDIR=/out ,@makeflags install-static install-includes)))
+                           (make -j $nproc PREFIX=/usr DESTDIR=/out
+                                 ,@makeflags install-static install-includes)))
                       (if ((cd programs/)
                            (make -j $nproc ,@makeflags zstd)))
                       (install -D -m "755"
@@ -177,14 +171,15 @@
                     "dfot337ydQKCCABhpdrALARa6QFrjqzYxFSAPSiflFk=")))
     (lambda (conf)
       (make-package
-        label:  (conc "libarchive-" (conf 'arch))
+        label:  (conc "libarchive-" ($arch conf))
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list bzip2 zlib xz-utils lz4 libressl zstd musl libssp-nonshared)
-        build:  (gnu-build
+        build:  (gnu-recipe
                   (conc "libarchive-" version)
-                  (config-prepend conf 'configure-flags
-                                  '(--without-xml2 --without-acl --without-attr --without-expat)))))))
+                  (kwith
+                    ($gnu-build conf)
+                    configure-args: (+= '(--without-xml2 --without-acl --without-attr --without-expat))))))))
 
 (define libressl
   (let* ((version '3.0.2)
@@ -193,15 +188,16 @@
                     "klypcg5zlwvSTOzTQZ7M-tBZgcb3tPe72gtWn6iMTR8=")))
     (lambda (conf)
       (make-package
-        label:  (conc "libressl-" version "-" (conf 'arch))
+        label:  (conc "libressl-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
-        build:  (gnu-build
+        build:  (gnu-recipe
                   (conc "libressl-" version)
-                  conf
-                  post-install: (execline*
-                                  (if ((ln -s openssl /out/usr/bin/libressl)))))))))
+                  (kwith
+                    ($gnu-build conf)
+                    post-install: (+= (execline*
+                                        (if ((ln -s openssl /out/usr/bin/libressl)))))))))))
 
 (define xz-utils
   (let* ((version '5.2.4)
@@ -210,9 +206,10 @@
                     "xbmRDrGbBvg_6BxpAPsQGBrFFAgpb0FrU3Yu1zOf4k8=")))
     (lambda (conf)
       (make-package
-        label:  (conc "xz-utils-" (conf 'arch))
+        label:  (conc "xz-utils-" ($arch conf))
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
-        build:  (gnu-build
-                  (conc "xz-" version) conf)))))
+        build:  (gnu-recipe
+                  (conc "xz-" version)
+                  ($gnu-build conf))))))

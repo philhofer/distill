@@ -22,9 +22,6 @@
              (set-cdr! p '()))
            first))))
 
-;; the current procedure
-(define current-proc (make-parameter #f))
-
 ;; runnable continuations
 (: *cont-queue* (pair (list-of procedure) (list-of procedure)))
 (define *cont-queue* '(() . ()))
@@ -148,18 +145,6 @@
   (vector-set! box 2 #f)
   (%yield))
 
-;; proc-abort aborts a coroutine, or calls (abort exn)
-;; if the current dynamic extent is not associated
-;; with a coroutine
-;;
-;; proc-abort is also the default exception handler
-;; for the dynamic extent of a coroutine
-(define (proc-abort exn)
-  (let ((self (current-proc)))
-    (if self
-      (%procexit self 'exn exn)
-      (abort exn))))
-
 ;; spawn runs (apply thunk args) asynchronously
 ;; and returns an opaque object that can be used
 ;; to query the status of the procedure
@@ -170,8 +155,9 @@
       (lambda (ret)
         (pushcont! (lambda () (ret box)))
         (%procexit box 'done
-                   (parameterize ((current-exception-handler proc-abort)
-                                  (current-proc box))
+                   (parameterize ((current-exception-handler
+                                    (lambda (exn)
+                                      (%procexit box 'exn exn))))
                      (apply proc args)))))))
 
 (: %poll (-> undefined))

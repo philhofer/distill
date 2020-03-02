@@ -19,6 +19,11 @@
 (define third (kvector-getter ktd third:))
 (define third-set! (kvector-setter ktd third:))
 
+(define ->odd
+  (subvector-constructor
+    ktd
+    first: third: fifth:))
+
 (let* ((args '(first:  0
                second: 1
                third:  "hello"
@@ -44,7 +49,16 @@
                  ("world" kv fourth:)
                  (#f kv fifth:)))
   (third-set! kv "HELLO")
-  (test string=? "HELLO" (third kv)))
+  (test string=? "HELLO" (third kv))
+  (test equal?
+        (->odd kv)
+        (list->kvector
+          (list first: (kref kv first:)
+                third: (kref kv third:)
+                fifth: (kref kv fifth:))))
+  (test equal?
+        (kvector* first: 0 third: "HELLO" fifth: #f)
+        (->odd kv)))
 
 (define ktd2 (make-kvector-type
                string:
@@ -117,3 +131,19 @@
           symbol: 'foo
           list:   '())
         (kvector-union! value default)))
+
+(let* ((first  (make-kv2
+                string: "foo"
+                symbol: 'foo
+                list:   '(a b c)))
+       (second (kwith
+                 first
+                 string: (:= "bar")
+                 symbol: (?= 'no)
+                 list:   (+= '(d)))))
+  (test equal?
+        (make-kv2
+          string: "bar"
+          symbol: 'foo
+          list:   '(a b c d))
+        second))

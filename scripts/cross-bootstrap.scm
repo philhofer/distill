@@ -14,9 +14,7 @@
       (fatal "usage:" (program-name) "<arch>")
       (string->symbol (car args)))))
 
-(define build!
-  (config->builder `((arch . ,arch)
-                     (CFLAGS . (-pipe -fstack-protector-strong -Os)))))
+(define build! (config->builder (default-config arch)))
 
 (let ((alist (map cons
                   '(make execline busybox binutils gcc)

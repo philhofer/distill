@@ -45,19 +45,15 @@
                         (foreground ((umount /var)))
                         (true))))))
 
+;; e2fsprogs is weird and uses BUILD_CC, BUILD_CFLAGS, etc.
+;; in order to indicate which CC to use for building tools
 (define buildcc-env
-  (let ((env   cc-env/build)
-        (chomp (string-length "_FOR_BUILD"))
-        (pre   "BUILD_"))
-    (map
-      (lambda (p)
-        (let* ((lhs (symbol->string (car p)))
-               (rhs (cdr p))
-               (sub (substring/shared lhs 0 (- (string-length lhs) chomp))))
-          (cons
-            (string->symbol (string-append pre sub))
-            rhs)))
-      env)))
+  (cc-env/build
+    (lambda (kw)
+      (string->keyword
+        (string-append
+          "BUILD_"
+          (keyword->string kw))))))
 
 (define e2fsprogs
   (let* ((version '1.45.5)
@@ -66,21 +62,23 @@
                     "w7R6x_QX6QpTEtnNihjwlHLBBtfo-r9RrWVjt9Nc818=")))
     (lambda (conf)
       (make-package
-        label:  (conc "e2fsprogs-" version "-" (conf 'arch))
+        label:  (conc "e2fsprogs-" version "-" ($arch conf))
         src:    src
         tools:  (append (cc-for-target conf)
                         (native-toolchain-for conf))
         inputs: (list linux-headers musl libssp-nonshared)
-        build:  (gnu-build
+        build:  (gnu-recipe
                   (conc "e2fsprogs-" version)
-                  (config-prepend conf 'configure-flags
-                                  `(--enable-symlink-install
-                                     --enable-libuuid
-                                     --enable-libblkid
-                                     --disable-uuidd
-                                     --disable-fsck
-                                     ,@(map pair->string= buildcc-env)))
-                  install-flags: '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))))
+                  (kwith
+                    ($gnu-build conf)
+                    configure-args: (+=
+                                      `(--enable-symlink-install
+                                         --enable-libuuid
+                                         --enable-libblkid
+                                         --disable-uuidd
+                                         --disable-fsck
+                                         ,@(kvargs buildcc-env)))
+                    install-flags: (:= '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))))))
 
 ;; kmsg is a super lightweight syslogd-style service
 ;; that reads logs from /dev/kmsg and stores them in

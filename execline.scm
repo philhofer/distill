@@ -78,6 +78,8 @@
   (define (join-cmds lst indent)
     (for-each
       (lambda (cmd)
+        (unless (pair? cmd)
+          (error "bad command list:" lst))
         (display (tabs indent))
         (join-arg (car cmd) (cdr cmd) indent)
         (newline))

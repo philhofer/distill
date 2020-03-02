@@ -35,7 +35,7 @@
       (make-package
         parallel: #f
         src:    *linux-source*
-        label:  (conc "linux-headers-" *major* "." *patch* "-" (conf 'arch))
+        label:  (conc "linux-headers-" *major* "." *patch* "-" ($arch conf))
         tools:  (append (list execline-tools busybox-core make xz-utils)
                         (native-toolchain))
         inputs: '()
@@ -44,8 +44,8 @@
                             (cd ,(conc "linux-" *major*))
                             (if ((pipeline ((xzcat /src/linux.patch)))
                                  (patch -p1)))
-                            (if ((make ,(conc 'ARCH= (arch-name (conf 'arch)))
-                                  ,@(map pair->string= (cc-env/kbuild))
+                            (if ((make ,(conc 'ARCH= (arch-name ($arch conf)))
+                                  ,@(kvargs cc-env/for-kbuild)
                                   headers)))
                             ;; headers_install uses rsync, which is a
                             ;; silly large dependency to pull in
@@ -107,11 +107,11 @@ EOF
                        (native-toolchain-for conf)
                        (cc-for-target conf))
         inputs: '()
-        build: (let ((make-args (map pair->string=
-                                     (cons*
-                                       (cons 'ARCH (arch-dir-name (conf 'arch)))
-                                       (cons 'HOST_LIBELF_LIBS '(-lelf -lz))
-                                       (cc-env/kbuild)))))
+        build: (let ((make-args (append
+                                  (kvargs cc-env/for-kbuild)
+                                  (k=v*
+                                    ARCH: (arch-dir-name ($arch conf))
+                                    HOST_LIBELF_LIBS: '(-lelf -lz)))))
                  (make-recipe
                    script: (execline*
                              (cd ,(conc "linux-" *major*))
@@ -131,7 +131,7 @@ EOF
                              (export KBUILD_BUILD_TIMESTAMP "@0")
                              (export KBUILD_BUILD_USER distill)
                              (export KBUILD_BUILD_HOST distill)
-                             (export CROSS_COMPILE ,(conc (triple conf) "-"))
+                             (export CROSS_COMPILE ,(conc ($triple conf) "-"))
                              (if ((make
                                     V=1 YACC=yacc
                                     KCONFIG_ALLCONFIG=/src/config
@@ -154,15 +154,13 @@ EOF
     (lambda (conf)
       (make-package
         parallel: #f
-        label:  (conc "libelf-" version "-" (conf 'arch))
+        label:  (conc "libelf-" version "-" ($arch conf))
         src:    (list leaf config)
         tools:  (cc-for-target conf)
         inputs: (list zlib musl libssp-nonshared)
-        build:  (let* ((cenv   (cc-env conf))
-                       (cflags (append (cdr (assq 'CFLAGS cenv))
-                                       '(-D_GNU_SOURCE -DHAVE_CONFIG_H "-I." "-I.." "-I../lib")))
-                       (cc     (cdr (assq 'CC cenv)))
-                       (ar     (cdr (assq 'AR (make-env conf)))))
+        build:  (let ((cflags (append ($CFLAGS conf)
+                                      '(-D_GNU_SOURCE -DHAVE_CONFIG_H -I. -I.. -I../lib)))
+                      (cc     ($CC conf)))
                   (make-recipe
                     ;; ALLLLRIGHTY THEN, here's what happening here...
                     ;; elfutils depends on a ton of arcane dependencies
@@ -183,14 +181,13 @@ EOF
                               (if ((elglob -s csrc "*.c")
                                    (if ((echo "cflags: " ,@cflags)))
                                    (if ((echo "source: " $csrc)))
-                                   (,cc ,@cflags -c $csrc)))
+                                   (,@cc ,@cflags -c $csrc)))
                               (if ((elglob -s objs "*.o")
-                                   (,ar Dcr libelf.a $objs)))
+                                   (,($AR conf) Dcr libelf.a $objs)))
                               (if ((mkdir -p /out/usr/include /out/usr/lib)))
                               (if ((cp gelf.h /out/usr/include/gelf.h)))
                               (if ((cp libelf.h /out/usr/include/libelf.h)))
                               (cp libelf.a /out/usr/lib/libelf.a))))))))
-
 
 ;; perl packages a statically-linked perl binary
 ;;
@@ -205,57 +202,48 @@ EOF
                     (conc "https://www.cpan.org/src/5.0/perl-" version ".tar.gz")
                     "EBvfwKXjX_aaet0AXxwJKJGpGy4RnUrrYjh-qLeZ8ts=")))
     (lambda (conf)
-      (unless (eq? (conf 'arch) *this-machine*)
+      ;; TODO: really, this test should be even tighter:
+      ;; you can't build perl on a machine that can't run
+      ;; the perl executable produced using $CC
+      (unless (eq? ($arch conf) *this-machine*)
         (fatal "one does not simply cross-compile perl; please read the comment(s) in perl.scm"))
       (make-package
-        label:  (conc "perl-" version "-" (conf 'arch))
+        label:  (conc "perl-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: (list zlib bzip2 musl libssp-nonshared)
         build:
-        (let* ((cenv            (cc-env conf))
-               (menv            (make-env conf))
-               (toolpre         (conc (triple conf) "-"))
-               (CC              (assq 'CC cenv))
-               (LD              (assq 'LD cenv))
-               (CFLAGS          (assq 'CFLAGS cenv))
-               (LDFLAGS         (assq 'LDFLAGS cenv))
-               (NM              (assq 'NM menv))
-               (RANLIB          (assq 'RANLIB menv))
-               (AR              (assq 'AR menv))
-               (ARFLAGS         (assq 'ARFLAGS menv))
-               (-Dflags         (map pair->string=
-                                     `((-Dccflags .  ,(cdr CFLAGS))
-                                       (-Darflags .  ,(cdr ARFLAGS))
-                                       (-Dldflags .  ,(cdr LDFLAGS))
-                                       (-Dcc .       ,(cdr CC))
-                                       (-Dld .       ,(cdr LD))
-                                       (-Doptimize . ,(or (conf 'CFLAGS) '-Os))
-                                       (-Dnm       . ,(conc (triple conf) "-nm"))
-                                       (-Dranlib   . ,(cdr RANLIB))
-                                       (-Dar       . ,(cdr AR))
-                                       (-Dsysroot  . ,(sysroot conf)))))
-               ;; yes, this is gross
-               ;; but not as gross as perl's 'Configure' script
-               (configure-flags `(,@-Dflags
-                                   -Dprefix=/usr -Dprivlib=/usr/share/perl5/core_perl
-                                   -Darchlib=/usr/lib/perl5/core_perl -Dvendorprefix=/usr
-                                   -Dvendorlib=/usr/share/perl5/vendor_perl -Dvendorarch=/usr/lib/perl5/vendor_perl
-                                   -Duselargefiles -Dusethreads -Duseshrplib=false -Dd_semctl_semun
-                                   -Dman1dir=/usr/share/man/man1 -Dman3dir=/usr/share/man/man3
-                                   -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
-                                   -Dman1ext=1 -Dman3ext=3pm -Dcf_by=sysplan -Ud_csh -Uusedl -Dusenm
-                                   -Dusemallocwrap)))
+        ;; yes, this is gross
+        ;; but not as gross as perl's 'Configure' script
+        (let ((configure-flags `(,@(k=v*
+                                     -Dcc:       ($CC conf)
+                                     -Dccflags:  ($CFLAGS conf)
+                                     -Dar:       ($AR conf)
+                                     -Darflags:  ($ARFLAGS conf)
+                                     -Dld:       ($LD conf)
+                                     -Dldflags:  ($LDFLAGS conf)
+                                     -Doptimize: '-Os ;; TODO: figure out how to pull this out of $CFLAGS
+                                     -Dnm:       ($NM conf)
+                                     -Dranlib:   ($RANLIB conf)
+                                     -Dsysroot:  ($sysroot conf))
+                                  -Dprefix=/usr -Dprivlib=/usr/share/perl5/core_perl
+                                  -Darchlib=/usr/lib/perl5/core_perl -Dvendorprefix=/usr
+                                  -Dvendorlib=/usr/share/perl5/vendor_perl -Dvendorarch=/usr/lib/perl5/vendor_perl
+                                  -Duselargefiles -Dusethreads -Duseshrplib=false -Dd_semctl_semun
+                                  -Dman1dir=/usr/share/man/man1 -Dman3dir=/usr/share/man/man3
+                                  -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
+                                  -Dman1ext=1 -Dman3ext=3pm -Dcf_by=sysplan -Ud_csh -Uusedl -Dusenm
+                                  -Dusemallocwrap)))
           (make-recipe
             env:   `((BUILD_ZLIB . 0)
                      (BUILD_BZIP2 . 0)
-                     (BZIP2_LIB . ,(filepath-join (sysroot conf) "/usr/lib"))
-                     (BZIP2_INCLUDE . ,(filepath-join (sysroot conf) "/usr/include")))
+                     (BZIP2_LIB . ,(filepath-join ($sysroot conf) "/usr/lib"))
+                     (BZIP2_INCLUDE . ,(filepath-join ($sysroot conf) "/usr/include")))
             script: (execline*
                       (cd ,(conc "perl-" version))
                       (if ((./Configure -des ,@configure-flags)))
                       (if ((importas -u nproc nproc)
-                           (make -j $nproc ,@(makeflags conf))))
+                           (make -j $nproc ,@(kvargs ($make-overrides conf)))))
                       (if ((make DESTDIR=/out install)))
                       (if ((rm -rf /out/usr/share/man)))
                       (find /out -name ".*" -delete))))))))

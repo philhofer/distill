@@ -25,7 +25,7 @@
 (define (bin/true/abort exn)
   (let-values (((pid ok status) (process-wait/yield (process-run "/bin/true" '()))))
     (if ok
-      (proc-abort exn)
+      (abort exn)
       (error "/bin/true exited with" status))))
 
 ;; simple case: no yielding at all

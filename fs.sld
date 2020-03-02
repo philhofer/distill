@@ -10,7 +10,6 @@
     (scheme base)
     (distill plan)
     (distill base)
-    (distill buildenv)
     (distill package)
     (distill service)
     (only (distill linux) linux-headers)
@@ -20,6 +19,7 @@
     (distill execline))
   (cond-expand
     (chicken (import
+               (chicken keyword)
                (only (chicken base) foldl)
                (only (chicken string) conc))))
   (include "fs.scm"))

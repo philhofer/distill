@@ -17,7 +17,7 @@ include Makefile.dep
 UNITS:=distill.hash distill.nproc distill.table \
 	distill.plan distill.package distill.execline \
 	distill.filepath distill.eprint distill.memo \
-	distill.sequence distill.buildenv distill.base \
+	distill.sequence distill.base \
 	distill.image distill.unix distill.linux \
 	distill.service distill.sysctl distill.fs \
 	distill.net distill.kvector distill.contract

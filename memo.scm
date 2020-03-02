@@ -34,6 +34,20 @@
           (error "cannot perform recursive memoization")
           res)))))
 
+;; memoize-one-eq is like memoize-eq, but
+;; it only caches the latest result
+(: memoize-one-eq (forall (a b) ((a -> b) -> (a -> b))))
+(define (memoize-one-eq proc)
+  (let ((last-in  (list 'no))
+        (last-out #f))
+    (lambda (arg)
+      (if (eq? arg last-in)
+        last-out
+        (let ((res (proc arg)))
+          (set! last-in arg)
+          (set! last-out res)
+          res)))))
+
 ;; memoize-lambda takes an expression of the form
 ;;   (memoize-lambda (arg0 arg1 ...) body ...)
 ;; and yields a lambda that only evaluates its body

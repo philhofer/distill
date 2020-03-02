@@ -72,14 +72,14 @@
       (lambda (host)
         (make-package
           parallel: #f
-          label: (conc "musl-headers-" *musl-version* "-" (target 'arch))
+          label: (conc "musl-headers-" *musl-version* "-" ($arch target))
           src:   *musl-src*
           tools: (list make execline-tools busybox-core)
           inputs: '()
           build: (make-recipe
                     script: (execline*
                                (cd ,(conc "musl-" *musl-version*))
-                               (make ,(conc "DESTDIR=/out/" (sysroot target)) ,(conc "ARCH=" (target 'arch)) "prefix=/usr" install-headers))))))))
+                               (make ,(conc "DESTDIR=/out/" ($sysroot target)) ,(conc "ARCH=" ($arch target)) "prefix=/usr" install-headers))))))))
 
 (define musl
   (lambda (conf)
@@ -87,30 +87,26 @@
     ;; the gcc that builds it does *not* need to know
     ;; how to find a libc.a or crt*.o, and so forth
     (make-package
-      label:  (conc "musl-" *musl-version* "-" (conf 'arch))
+      label:  (conc "musl-" *musl-version* "-" ($arch conf))
       src:    *musl-src*
       tools:  (cc-for-target conf)
       inputs: '()
       build: (make-recipe
-                ;; ./configure, but not autotools
-                script: (let* ((cenv   (cc-env conf))
-                                (CC     (assq 'CC cenv))
-                                (CFLAGS (assq 'CFLAGS cenv)))
-                           (execline*
-                             (cd ,(conc "musl-" *musl-version*))
-                             (if ((./configure --disable-shared --enable-static
-                                               --prefix=/usr ,(pair->string= CC)
-                                               ,(pair->string= CFLAGS)
-                                               --target ,(conf 'arch))))
-                             (if ((importas -u "-i" nproc nproc)
-                                  (make -j $nproc ,@(makeflags conf))))
-                             (make DESTDIR=/out install)))))))
+               ;; ./configure, but not autotools
+               script: (execline*
+                         (cd ,(conc "musl-" *musl-version*))
+                         (if ((./configure --disable-shared --enable-static
+                                           --prefix=/usr ,@(splat conf CC: CFLAGS:)
+                                           --target ,($arch conf))))
+                         (if ((importas -u "-i" nproc nproc)
+                              (make -j $nproc ,@(kvargs ($make-overrides conf)))))
+                         (make DESTDIR=/out install))))))
 
 (define libssp-nonshared
   (lambda (conf)
     (make-package
       parallel: #f
-      label:   (conc "libssp-nonshared-" (conf 'arch))
+      label:   (conc "libssp-nonshared-" ($arch conf))
       tools:   (cc-for-target conf)
       inputs:  '()
       src:     (interned "/src/ssp-nonshared.c" #o644 #<<EOF
@@ -119,15 +115,12 @@
 EOF
                          )
       build: (make-recipe
-               script: (let* ((cenv (cc-env conf))
-                              (CC   (cdr (assq 'CC cenv)))
-                              (AR   (cdr (assq 'AR cenv))))
-                         (execline*
-                           (cd ./src)
-                           (if ((,CC -c -fPIE -Os ssp-nonshared.c -o __stack_chk_fail_local.o)))
-                           (if ((,AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
-                           (if ((mkdir -p /out/usr/lib)))
-                           (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))))
+               script: (execline*
+                         (cd ./src)
+                         (if ((,@($CC conf) ,@($CFLAGS conf) -c ssp-nonshared.c -o __stack_chk_fail_local.o)))
+                         (if ((,($AR conf) -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
+                         (if ((mkdir -p /out/usr/lib)))
+                         (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))))
 
 ;; dependencies necessary to statically link an ordinary C executable
 (define libc (list musl libssp-nonshared))
@@ -139,17 +132,17 @@ EOF
                     "R3Oyp6YDumBd6v06rLYd5U5vEOpnq0Ie1MjwINSmX-4=")))
     (lambda (conf)
       (make-package
-        label:  (conc "gawk-" version "-" (conf 'arch))
+        label:  (conc "gawk-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: libc
-        build:  (gnu-build (conc "gawk-" version)
-                           conf
-                           post-install:
-                           ;; we don't want the awk symlink;
-                           ;; it conflicts with busybox
-                           (execline*
-                             (foreground ((rm -f /out/usr/bin/awk)))))))))
+        build:  (gnu-recipe
+                  (conc "gawk-" version)
+                  (kwith
+                    ($gnu-build conf)
+                    ;; we don't want the awk symlink;
+                    ;; it conflicts with busybox
+                    post-install: (+= '((foreground ((rm -f /out/usr/bin/awk)))))))))))
 
 (define (native-toolchain)
   (list libssp-nonshared
@@ -158,7 +151,7 @@ EOF
         native-binutils))
 
 (define (native-toolchain-for conf)
-  (if (eq? (conf 'arch) *this-machine*)
+  (if (eq? ($arch conf) *this-machine*)
     (list musl libssp-nonshared)
     (list native-gcc native-binutils musl libssp-nonshared)))
 
@@ -169,23 +162,25 @@ EOF
                     "YQMYgwK95PJL5gS5-l_Iw59tc1O31Kx3X2XFdWm8t6M=")))
     (lambda (conf)
       (make-package
-        label:  (conc "gmp-" version "-" (conf 'arch))
+        label:  (conc "gmp-" version "-" ($arch conf))
         src:    leaf
         tools:  (append
                   (cons m4 (cc-for-target conf))
                   (native-toolchain-for conf))
         inputs: libc
-        build:  (gnu-build (conc "gmp-" version) conf
-                           pre-configure:
-                           (+cross conf
-                                   '()
-                                   ;; gmp's configure script is silly and
-                                   ;; only looks at CC_FOR_BUILD, but doesn't
-                                   ;; know anything about CFLAGS_FOR_BUILD, etc
-                                   (let ((CC     (cdr (assq 'CC_FOR_BUILD cc-env/build)))
-                                         (CFLAGS (cdr (assq 'CFLAGS_FOR_BUILD cc-env/build))))
-                                     (export*
-                                       `((CC_FOR_BUILD . ,(append CC CFLAGS)))))))))))
+        build:  (gnu-recipe
+                  (conc "gmp-" version)
+                  ;; gmp's configure script is silly and
+                  ;; only looks at CC_FOR_BUILD, but doesn't
+                  ;; know anything about CFLAGS_FOR_BUILD, etc
+                  (let ((cc-for-build (spaced
+                                        (list (kref cc-env/for-build
+                                                    CC_FOR_BUILD:)
+                                              (kref cc-env/for-build
+                                                    CFLAGS_FOR_BUILD:)))))
+                    (kwith
+                      ($gnu-build conf)
+                      exports: (+= (list (cons 'CC_FOR_BUILD cc-for-build))))))))))
 
 (define libmpfr
   (let* ((version '4.0.2)
@@ -194,11 +189,11 @@ EOF
                     "wKuAJV_JEeh560Jgqo8Iub6opUuqOKFfQATGEJ2F3ek=")))
     (lambda (conf)
       (make-package
-        label:  (conc "mpfr-" version "-" (conf 'arch))
+        label:  (conc "mpfr-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: (cons libgmp libc)
-        build:  (gnu-build (conc "mpfr-" version) conf)))))
+        build:  (gnu-recipe (conc "mpfr-" version) ($gnu-build conf))))))
 
 (define libmpc
   (let* ((version '1.1.0)
@@ -207,11 +202,11 @@ EOF
                     "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc=")))
     (lambda (conf)
       (make-package
-        label:  (conc "mpc-" version "-" (conf 'arch))
+        label:  (conc "mpc-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: (cons* libgmp libmpfr libc)
-        build:  (gnu-build (conc "mpc-" version) conf)))))
+        build:  (gnu-recipe (conc "mpc-" version) ($gnu-build conf))))))
 
 (define m4
   (let* ((version '1.4.18)
@@ -220,14 +215,16 @@ EOF
                     "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0=")))
     (lambda (conf)
       (make-package
-        label:  (conc "m4-" version "-" (conf 'arch))
+        label:  (conc "m4-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: libc
-        build:  (gnu-build (conc "m4-" version) conf
-                           ;; m4 sticks a file in /usr/lib/charset.alias
-                           post-install: (execline*
-                                           (if ((rm -rf /out/usr/lib)))))))))
+        build:  (gnu-recipe
+                  (conc "m4-" version)
+                  (kwith
+                    ($gnu-build conf)
+                    ;; m4 sticks a file in /usr/lib/charset.alias
+                    post-install: (+= '((if ((rm -rf /out/usr/lib)))))))))))
 
 (define bzip2
   (let* ((version '1.0.8)
@@ -236,7 +233,7 @@ EOF
                     "pZGXjBOF4VYQnwdDp2UYObANElrjShQaRbMDj5yef1A=")))
     (lambda (conf)
       (make-package
-        label:  (conc "bzip2-" version "-" (conf 'arch))
+        label:  (conc "bzip2-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: libc
@@ -246,8 +243,10 @@ EOF
                             (importas -u "-i" nproc nproc)
                             (make -j $nproc
                                   PREFIX=/out/usr ;; no DESTDIR supported
-                                  ,@(map pair->string= (cc-env conf))
-                                  ,@(makeflags conf) install)))))))
+                                  ,@(kvargs ($cc-env conf))
+                                  ,@(kvargs ($make-overrides conf))
+                                  install)))))))
+
 (define skalibs
   (let* ((version '2.9.1.0)
          (leaf    (remote-archive
@@ -255,12 +254,15 @@ EOF
                     "FlrvgEOHU_UzTJDBjUrQ0HHLijHeqstC_QgCK-NE2yo=")))
     (lambda (conf)
       (make-package
-        label:  (conc "skalibs-" version "-" (conf 'arch))
+        label:  (conc "skalibs-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: libc
-        build:  (ska-build (conc "skalibs-" version) conf
-                           extra-configure: '(--with-sysdep-devurandom=yes))))))
+        build:  (ska-recipe
+                  (conc "skalibs-" version)
+                  (kwith
+                    ($ska-build conf)
+                    configure-args: (+= '(--with-sysdep-devurandom=yes))))))))
 
 (define execline-tools
   (let* ((version '2.5.3.0)
@@ -270,12 +272,15 @@ EOF
     (lambda (conf)
       (make-package
         prebuilt: (maybe-prebuilt conf 'execline)
-        label:    (conc "execline-" version "-" (conf 'arch))
+        label:    (conc "execline-" version "-" ($arch conf))
         src:      leaf
         tools:    (cc-for-target conf)
         inputs:   (cons skalibs libc)
-        build:    (ska-build (conc "execline-" version) conf
-                             extra-configure: `(,(conc "--with-sysdeps=" (sysroot conf) "/lib/skalibs/sysdeps") --enable-static-libc))))))
+        build:    (ska-recipe
+                    (conc "execline-" version)
+                    (kwith
+                      ($ska-build conf)
+                      configure-args: (+= `(,(conc "--with-sysdeps=" ($sysroot conf) "/lib/skalibs/sysdeps") --enable-static-libc))))))))
 
 
 (define byacc
@@ -287,11 +292,13 @@ EOF
                     "2r0VA-wLi8PcDpjnyON2pyyzqY7a7tdfApRBa-HfYbg=")))
     (lambda (conf)
       (make-package
-        label:  (conc "byacc-" version "-" (conf 'arch))
+        label:  (conc "byacc-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: libc
-        build:  (gnu-build (conc "byacc-" version) conf)))))
+        build:  (gnu-recipe
+                  (conc "byacc-" version)
+                  ($gnu-build conf))))))
 
 (define reflex
   (let* ((version '20191123)
@@ -300,17 +307,22 @@ EOF
                     "SsgYKYUlYwedhJWxTvBAO2hdfrAMJ8mNpFjuIveGpSo=")))
     (lambda (conf)
       (make-package
-        label:   (conc "reflex-" version "-" (conf 'arch))
+        label:   (conc "reflex-" version "-" ($arch conf))
         src:     leaf
         tools:   (cons byacc (cc-for-target conf))
         inputs:  libc
-        build:   (gnu-build (conc "reflex-" version) conf
-                            post-install: ;; install the lex(1)+flex(1) symlinks
-                            (execline*
-                              (if ((ln -s reflex /out/usr/bin/lex)))
-                              (if ((ln -s reflex++ /out/usr/bin/lex++)))
-                              (if ((ln -s reflex /out/usr/bin/flex)))
-                              (if ((ln -s reflex++ /out/usr/bin/flex++)))))))))
+        build:   (gnu-recipe
+                   (conc "reflex-" version)
+                   (kwith
+                     ($gnu-build conf)
+                     ;; install the lex(1)+flex(1) symlinks
+                     post-install:
+                     (+=
+                       (execline*
+                         (if ((ln -s reflex /out/usr/bin/lex)))
+                         (if ((ln -s reflex++ /out/usr/bin/lex++)))
+                         (if ((ln -s reflex /out/usr/bin/flex)))
+                         (if ((ln -s reflex++ /out/usr/bin/flex++)))))))))))
 
 (define zlib
   (let* ((version '1.2.11)
@@ -319,14 +331,16 @@ EOF
                     "K3Q8ig9qMtClPdpflHwS8OkSMrLVItBzEu5beP_szJA=")))
     (lambda (conf)
       (make-package
-        label:  (conc "zlib-" version "-" (conf 'arch))
+        label:  (conc "zlib-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: libc
-        build:  (gnu-build
-                  ;; not autoconf
-                  (conc "zlib-" version) conf
-                  configure: '(--static --prefix=/usr --libdir=/lib))))))
+        ;; not autoconf, but this works fine
+        build:  (gnu-recipe
+                  (conc "zlib-" version)
+                  (kwith
+                    ($gnu-build conf)
+                    configure-args: (:= '(--static --prefix=/usr --libdir=/lib))))))))
 
 (define libisl
   (let* ((version '0.18)
@@ -335,11 +349,13 @@ EOF
                     "bFSNjbp4fE4N5xcaqSGTnNfLPVv7QhnEb2IByFGBZUY=")))
     (lambda (conf)
       (make-package
-        label:  (conc "isl-" version "-" (conf 'arch))
+        label:  (conc "isl-" version "-" ($arch conf))
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: (cons libgmp libc)
-        build:  (gnu-build (conc "isl-" version) conf)))))
+        build:  (gnu-recipe
+                  (conc "isl-" version)
+                  ($gnu-build conf))))))
 
 ;; include a file as literal text at compile time
 (define-syntax include-file-text
@@ -363,12 +379,15 @@ EOF
     (lambda (conf)
       (make-package
         prebuilt: (maybe-prebuilt conf 'make)
-        label:    (conc "make-" version "-" (conf 'arch))
+        label:    (conc "make-" version "-" ($arch conf))
         src:      (cons leaf patches)
         tools:    (cc-for-target conf)
         inputs:   libc
-        build:    (gnu-build (conc "make-" version) conf
-                             pre-configure: (script-apply-patches patches))))))
+        build:    (gnu-recipe
+                    (conc "make-" version)
+                    (kwith
+                      ($gnu-build conf)
+                      pre-configure: (+= (script-apply-patches patches))))))))
 
 (define *binutils-version* '2.33.1)
 (define *gcc-version* '9.2.0)
@@ -384,7 +403,7 @@ EOF
     "nzv8PqT49a1fkkQtn60mgKbxtcTl8Mazq0swhypLLRo="))
 
 (define (gcc-target-flags conf)
-  (case (conf 'arch)
+  (case ($arch conf)
     ((aarch64) '(--with-arch=armv8 --with-abi=lp64))
     ((ppc64 ppc64le) '(--with-abi=elfv2 --enable-secureplt
                                         --enable-decimal-float=no
@@ -406,59 +425,56 @@ EOF
     (+foreign
       (+cross all))))
 
-
 (define binutils-for-target
   (memoize-eq
     (lambda (target)
       (lambda (host)
-        (let ((host-arch     (host 'arch))
-              (target-arch   (target 'arch))
-              (target-triple (triple target))
-              (host-triple   (triple host))
-              (target-sysrt  (sysroot target)))
+        (let ((host-arch     ($arch host))
+              (target-arch   ($arch target))
+              (target-triple ($triple target))
+              (host-triple   ($triple host)))
           (make-package
             prebuilt: (and (eq? host target) (maybe-prebuilt host 'binutils))
-            label: (conc "binutils-" (target 'arch) "-"
-                         (if (eq? host-arch target-arch)
-                           "native"
-                           host-arch))
-            src: *binutils-src*
-            tools: (triplet-depends host-arch target-arch
-                                    ;; always depends on:
-                                    (cons* byacc reflex (cc-for-target host))
-                                    ;; when host != build:
-                                    (native-toolchain)
-                                    ;; when target != host:
-                                    (list (musl-headers-for-target target)))
-            inputs: (cons zlib libc)
-            build:
-            (let ()
-              (gnu-build
-                (conc "binutils-" *binutils-version*)
-                host
-                pre-configure: (if (eq? *this-machine* host-arch)
-                                 '()
-                                 (export* cc-env/build))
-                configure: `(--disable-nls --disable-shared --enable-static
-                                           --disable-multilib --enable-gold=yes --with-ppl=no
-                                           --disable-install-libiberty --enable-relro
-                                           --disable-plugins --enable-deterministic-archives
-                                           --with-pic --with-mmap --enable-ld=default
-                                           --with-system-zlib --enable-64-bit-bfd
-                                           --disable-install-libbfd
-                                           --prefix=/usr
-                                           ;; no libdir, etc. because we discard any
-                                           ;; libraries and headers produced
-                                           ,(conc "--program-prefix=" target-triple "-")
-                                           ,(conc "--build=" build-triple)
-                                           ,(conc "--target=" target-triple)
-                                           ,(conc "--host=" host-triple)
-                                           ,(conc "--with-sysroot=" target-sysrt))
-                post-install: (execline*
+            label:    (conc "binutils-" *binutils-version* "-" ($arch target) "-"
+                            (if (eq? host-arch target-arch)
+                              "native"
+                              host-arch))
+            src:      *binutils-src*
+            tools:    (triplet-depends host-arch target-arch
+                                       ;; always depends on:
+                                       (cons* byacc reflex (cc-for-target host))
+                                       ;; when host != build:
+                                       (native-toolchain)
+                                       ;; when target != host:
+                                       (list (musl-headers-for-target target)))
+            inputs:   (cons zlib libc)
+            build:    (gnu-recipe
+                        (conc "binutils-" *binutils-version*)
+                        (kwith
+                          ($gnu-build host)
+                          exports: (+= (list cc-env/for-build))
+                          configure-args:
+                          (:= `(--disable-nls --disable-shared --enable-static
+                                              --disable-multilib --enable-gold=yes --with-ppl=no
+                                              --disable-install-libiberty --enable-relro
+                                              --disable-plugins --enable-deterministic-archives
+                                              --with-pic --with-mmap --enable-ld=default
+                                              --with-system-zlib --enable-64-bit-bfd
+                                              --disable-install-libbfd
+                                              --prefix=/usr
+                                              ;; no libdir, etc. because we discard any
+                                              ;; libraries and headers produced
+                                              ,(conc "--program-prefix=" target-triple "-")
+                                              ,(conc "--build=" build-triple)
+                                              ,(conc "--target=" target-triple)
+                                              ,(conc "--host=" host-triple)
+                                              ,(conc "--with-sysroot=" ($sysroot target))))
+                          post-install:
+                          (+= (execline*
                                 (if ((rm -rf /out/usr/include)))
                                 (if ((rm -rf /out/include)))
                                 (if ((rm -rf /out/usr/lib)))
-                                (if ((rm -rf /out/lib))))))))))))
+                                (if ((rm -rf /out/lib)))))))))))))
 
 ;; this is a hack that allows us to build a cross-gcc
 ;; without circular dependencies: install a fake set of
@@ -473,24 +489,20 @@ EOF
                        hash kind: 'tar.zst))
                (version '0.1))
           (make-package
-            label: (conc "fakemusl-" version "-" (host 'arch) "-" (target 'arch))
+            label: (conc "fakemusl-" version "-" ($arch host) "-" ($arch target))
             src:   leaf
             tools: (list (binutils-for-target target)
                          make
                          execline-tools
                          busybox-core)
             inputs: '()
-            build: (let* ((tool      (triple target))
-                          (target-as (conc tool "-as"))
-                          (target-ar (conc tool "-ar"))
-                          (outdir    (filepath-join "/out" (sysroot target))))
+            build: (let* ((outdir (filepath-join "/out" ($sysroot target))))
                      (make-recipe
                        script: (execline*
                                  (cd ,(conc "fakemusl-" version))
                                  (if ((importas -u "-i" nproc nproc)
                                       (make -j $nproc
-                                            ,(conc "AS=" target-as)
-                                            ,(conc "AR=" target-ar)
+                                            ,@(splat target AS: AR:)
                                             all)))
                                  (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install))))))))))
 
@@ -498,17 +510,16 @@ EOF
   (memoize-eq
     (lambda (target)
       (lambda (host)
-        (let ((target-arch   (target 'arch))
-              (host-arch     (host 'arch))
-              (target-triple (triple target))
-              (host-triple   (triple host))
-              (target-sysrt  (sysroot target))
+        (let ((target-arch   ($arch target))
+              (host-arch     ($arch host))
+              (target-triple ($triple target))
+              (host-triple   ($triple host))
               (patches       (patch*
                                (include-file-text "patches/gcc/pie-gcc.patch"))))
           (make-package
             parallel: 'very
             prebuilt: (and (eq? host target) (maybe-prebuilt host 'gcc))
-            label: (conc "gcc-" (target 'arch) "-"
+            label: (conc "gcc-" *gcc-version* "-" ($arch target) "-"
                          (if (eq? host-arch target-arch)
                            "native"
                            host-arch))
@@ -526,67 +537,68 @@ EOF
                                           (musl-headers-for-target target)))
             inputs: (cons* libgmp libmpfr libmpc libisl zlib libc)
             build:
-            (let ()
-              (gnu-build
+            (let ((conf (kwith
+                          host
+                          ;; CROSS_DIRECTORY_STRUCTURE ensures that even a "native" gcc
+                          ;; will compile as if it is a cross-compiler
+                          CFLAGS: (+= '(-DCROSS_DIRECTORY_STRUCTURE)))))
+              (gnu-recipe
                 (conc "gcc-" *gcc-version*)
-                ;; this is a hack to ensure that
-                ;; the gcc driver program always behaves like a cross-compiler
-                (config-prepend host 'CFLAGS '(-DCROSS_DIRECTORY_STRUCTURE))
-                out-of-tree: (or (not (eq? host-arch target-arch))
-                                 (not (eq? *this-machine* host-arch)))
-                pre-configure: (append
-                                 (script-apply-patches patches)
-                                 (execline*
-                                   ;; some makefile templates don't set AR+ARFLAGS correctly;
-                                   ;; just let them take the values from the environment
-                                   (if ((find "." -name Makefile.in -exec sed "-i"
-                                              -e "/^AR = ar/d"
-                                              -e "/^ARFLAGS = cru/d"
-                                              "{}" ";")))
-                                   ;; don't pull in GNU tar just to install headers;
-                                   ;; force the makefile to use busybox cpio instead
-                                   (if ((sed "-i"
-                                             -e "s/=install-headers-tar/=install-headers-cpio/g"
-                                             gcc/config.build))))
-                                 (export* (cons*
-                                            ;; hacks because gcc doesn't respect
-                                            ;; pie-by-default builds
-                                            '(gcc_cv_no_pie . no)
-                                            '(gcc_cv_c_no_pie . no)
-                                            '(gcc_cv_c_no_fpie . no)
-                                            (append
-                                              (if (eq? *this-machine* host-arch)
-                                                '()
-                                                cc-env/build)
-                                              (make-env host)))))
-                configure: `(--prefix=/usr --exec-prefix=/usr --disable-lto
-                                           --disable-nls --disable-shared --enable-static
-                                           --disable-host-shared --enable-host-static
-                                           --disable-multilib --enable-default-ssp
-                                           --disable-bootstrap --disable-libssp
-                                           --enable-default-pie --with-cloog=no
-                                           --with-ppl=no --disable-libquadmath
-                                           --disable-libgomp --disable-fixed-point
-                                           --enable-__cxa_atexit --disable-libstdcxx-pch
-                                           --disable-libmpx --disable-libsanitizer
-                                           --enable-libstdcxx-time --disable-libitm
-                                           --enable-threads --enable-tls
-                                           --disable-install-libiberty
-                                           --enable-relro --disable-plugins
-                                           --with-pic --with-mmap --disable-symvers
-                                           --enable-version-specific-runtime-libs
-                                           --with-system-zlib
-                                           "--enable-languages=c,c++"
-                                           ,(conc "--with-sysroot=" (sysroot target))
-                                           ,(conc "--build=" build-triple)
-                                           ,(conc "--target=" target-triple)
-                                           ,(conc "--host=" host-triple))
-                ;; installing compilers for different targets will
-                ;; conflict unless we limit the python gdb stuff
-                ;; to just "native" (host=target) gcc builds
-                post-install: (if (eq? host-arch target-arch)
-                                '()
-                                `((if ((rm -rf ,(conc "/out/usr/share/gcc-" *gcc-version* "/python"))))))))))))))
+                (kwith
+                  ($gnu-build conf)
+                  out-of-tree: (:= #t)
+                  exports: (+= (list
+                                 ($make-overrides host)
+                                 cc-env/for-build
+                                 ;; ordinarily gcc refuses to build as PIE
+                                 ;; because that breaks pre-compiled headers (?),
+                                 ;; but we don't care because we disable those anyway
+                                 '(gcc_cv_no_pie . no)
+                                 '(gcc_cv_c_no_pie . no)
+                                 '(gcc_cv_c_no_fpie . no)))
+                  pre-configure: (+=
+                                   (script-apply-patches patches)
+                                   (execline*
+                                     ;; some makefile templates don't set AR+ARFLAGS correctly;
+                                     ;; just let them take the values from the environment
+                                     (if ((find "." -name Makefile.in -exec sed "-i"
+                                                -e "/^AR = ar/d"
+                                                -e "/^ARFLAGS = cru/d"
+                                                "{}" ";")))
+                                     ;; don't pull in GNU tar just to install headers;
+                                     ;; force the makefile to use busybox cpio instead
+                                     (if ((sed "-i"
+                                               -e "s/=install-headers-tar/=install-headers-cpio/g"
+                                               gcc/config.build)))))
+                  configure-args:
+                  (:= `(--prefix=/usr --exec-prefix=/usr --disable-lto
+                                      --disable-nls --disable-shared --enable-static
+                                      --disable-host-shared --enable-host-static
+                                      --disable-multilib --enable-default-ssp
+                                      --disable-bootstrap --disable-libssp
+                                      --enable-default-pie --with-cloog=no
+                                      --with-ppl=no --disable-libquadmath
+                                      --disable-libgomp --disable-fixed-point
+                                      --enable-__cxa_atexit --disable-libstdcxx-pch
+                                      --disable-libmpx --disable-libsanitizer
+                                      --enable-libstdcxx-time --disable-libitm
+                                      --enable-threads --enable-tls
+                                      --disable-install-libiberty
+                                      --enable-relro --disable-plugins
+                                      --with-pic --with-mmap --disable-symvers
+                                      --enable-version-specific-runtime-libs
+                                      --with-system-zlib
+                                      "--enable-languages=c,c++"
+                                      ,(conc "--with-sysroot=" ($sysroot target))
+                                      ,(conc "--build=" build-triple)
+                                      ,(conc "--target=" target-triple)
+                                      ,(conc "--host=" host-triple)))
+                  ;; installing compilers for different targets will
+                  ;; conflict unless we limit the python gdb stuff
+                  ;; to just "native" (host=target) gcc builds
+                  post-install: (+= (if (eq? host-arch target-arch)
+                                      '()
+                                      `((if ((rm -rf ,(conc "/out/usr/share/gcc-" *gcc-version* "/python"))))))))))))))))
 
 (define native-gcc
   (lambda (build)
@@ -602,24 +614,12 @@ EOF
                     (conc "https://busybox.net/downloads/busybox-" version ".tar.bz2")
                     "JqkfZAknGWBuXj1sPLwftVaH05I5Hb2WusYrYuO-sJk=")))
     (lambda (conf)
-      ;; NOTE: the busybox config we've selected here is carefully
-      ;; chosen so as not to require any linux headers; otherwise
-      ;; we'd have to bring in a kernel source tree and perl (shudders)
       (let* ((config       (remote-file
                              #f config-hash "/src/config.head" #o644))
-             (cenv         (cc-env conf))
              (patches      (patch*
-                             (include-file-text "patches/busybox/busybox-bc.patch")))
-             (make-flags   (map
-                             pair->string=
-                             `((CROSS_COMPILE . ,(conc (triple conf) "-"))
-                               (CONFIG_SYSROOT . ,(sysroot conf))
-                               (CONFIG_EXTRA_CFLAGS . ,(cdr (assq 'CFLAGS cenv)))
-                               (HOSTCC    . gcc)
-                               (HOSTCFLAGS  --sysroot=/ -fPIE -static-pie)
-                               (HOSTLDFLAGS --sysroot=/ -static-pie)))))
+                             (include-file-text "patches/busybox/busybox-bc.patch"))))
         (make-package
-          label:  (conc "busybox-" version "-" (conf 'arch))
+          label:  (conc "busybox-" version "-" ($arch conf))
           src:    (cons* config leaf patches)
           tools:  (append
                     (cons bzip2 (cc-for-target conf))
@@ -632,7 +632,11 @@ EOF
                               ,@(script-apply-patches patches)
                               (if ((mv /src/config.head .config)))
                               (if ((importas -u "-i" nproc nproc)
-                                   (make V=1 -j $nproc ,@make-flags busybox)))
+                                   (make V=1 -j $nproc
+                                         ,(conc "CROSS_COMPILE=" ($triple conf) "-")
+                                         ,(conc "CONFIG_SYSROOT=" ($sysroot conf))
+                                         ,(conc "CONFIG_EXTRA_CFLAGS=" (spaced ($CFLAGS conf)))
+                                         ,@(kvargs cc-env/for-kbuild) busybox)))
                               (if ((make V=1 busybox.links)))
                               (if ((install -D -m "755" busybox /out/bin/busybox)))
                               (if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))

@@ -106,13 +106,16 @@
                     "uwnwdcxfc7i3LTjeNPcnouhShXzpMPIG0I2AbQfjL_I=")))
     (lambda (conf)
       (make-package
-        label:  (conc "s6-" (conf 'arch))
+        label:  (conc "s6-" ($arch conf))
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list skalibs execline-tools musl libssp-nonshared)
-        build:  (ska-build (conc "s6-" version) conf
-                           extra-configure: `(,(conc '--with-sysdeps= (sysroot conf) "/lib/skalibs/sysdeps")
-                                               --enable-static-libc))))))
+        build:  (ska-recipe
+                  (conc "s6-" version)
+                  (kwith
+                    ($ska-build conf)
+                    configure-args: (+= `(,(conc '--with-sysdeps= ($sysroot conf) "/lib/skalibs/sysdeps")
+                                           --enable-static-libc))))))))
 (define s6-rc
   (let* ((version '0.5.1.1)
          (src     (remote-archive
@@ -120,13 +123,16 @@
                     "KCvqdFSKEUNPkHQuCBfs86zE9JvLrNHU2ZhEzLYY5RY=")))
     (lambda (conf)
       (make-package
-        label:  (conc "s6-rc-" (conf 'arch))
+        label:  (conc "s6-rc-" ($arch conf))
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list s6 skalibs execline-tools musl libssp-nonshared)
-        build:  (ska-build (conc "s6-rc-" version) conf
-                           extra-configure: `(,(conc '--with-sysdeps= (sysroot conf) "/lib/skalibs/sysdeps")
-                                               --enable-static-libc))))))
+        build:  (ska-recipe
+                  (conc "s6-rc-" version)
+                  (kwith
+                    ($ska-build conf)
+                    configure-args: (+= `(,(conc '--with-sysdeps= ($sysroot conf) "/lib/skalibs/sysdeps")
+                                           --enable-static-libc))))))))
 
 (define busybox-full
   (busybox/config

@@ -54,7 +54,6 @@
     distill.eprint
     distill.plan
     distill.package
-    distill.buildenv
     distill.image
     distill.base
     distill.linux

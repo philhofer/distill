@@ -3,7 +3,6 @@
   (distill plan)
   (distill package)
   (distill filepath)
-  (distill buildenv)
   (distill base)
   (distill image)
   (distill linux)
@@ -81,8 +80,8 @@
       libnftnl
       iptables
       iproute2
-      (perl              (eq? (conf 'arch) *this-machine*))
-      (linux-virt-x86_64 (eq? (conf 'arch) 'x86_64)))))
+      (perl              (eq? ($arch conf) *this-machine*))
+      (linux-virt-x86_64 (eq? ($arch conf) 'x86_64)))))
 
 (let* ((config  (let ((args (command-line-arguments)))
                   (if (null? args)
