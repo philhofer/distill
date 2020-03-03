@@ -1,9 +1,8 @@
-(cond-expand
-  (csi (import r7rs)
-       (load "execline.sld"))
-  (else (begin)))
+(include "execline.mod.scm")
+(include "test-helpers.scm")
 
 (import
+  scheme
   (chicken port)
   (distill execline))
 

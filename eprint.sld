@@ -5,10 +5,10 @@
     info
     fatal)
   (import
-    (scheme base))
+    scheme
+    (srfi 39))
   (cond-expand
     (chicken
       (import
-        (only (chicken base) exit current-error-port)
-	fmt)))
+        (only (chicken base) include exit current-error-port when))))
   (include "eprint.scm"))

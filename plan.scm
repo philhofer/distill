@@ -250,7 +250,7 @@
                   (lfd (string-append dir "/label")))
              (unless (file-exists? ofd)
                (create-directory dir #t)
-               (call-with-output-file ofd (cut write-string str <>))
+               (call-with-output-file ofd (cut write-string str #f <>))
                (call-with-output-file lfd (cute display (plan-name p) <>)))
              (plan-saved-hash-set! p h)
              h))))

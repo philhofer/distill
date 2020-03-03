@@ -1,3 +1,26 @@
+;; sysctls have the following grammar:
+;;
+;;  teriminal = number | symbol | string | boolean
+;;  component = (symbol+ terminal) | (symbol component-list+)
+;;  component-list = (component)+
+;;
+;; component-lists are used as a short-hand for sysctls
+;; that share prefixes; every component-list within
+;; a component is implicitly prefixed by every symbol
+;; that appears before it
+;;
+;; for example:
+;;  (net core bpf_jit_harden 2)
+;;  (net ipv4 tcp_syncookies 1)
+;;  (net ipv4 tcp_rfc1337 1)
+;; is equivalent to:
+;;  (net (core bpf_harden 2)
+;;       (ipv4 (tcp_syncookies 1)
+;;             (tcp_rfc1337    1)))
+;;
+;; sysctl->text takes a lisit of sysctls and yields
+;; a sequence of strings of the form "foo.bar.baz = value"
+;; for each sysctl value implied by the list
 (define (sysctl->text lst)
   (lambda (kons seed)
     (let loop ((out seed)
@@ -29,8 +52,10 @@
                      (string-append str "." (symbol->string head)))))
             (else (error "malformed sysctl" lst))))))))
 
+;; a guess at some conservative sysctl defaults for headless systems
 (define *default-sysctls*
   '((net (core bpf_jit_harden 2)
+         ;; note: these tcp sysctls apply to ipv6 as well
          (ipv4 (tcp_syncookies 1)
                (tcp_rfc1337 1)
                (conf (default rp_filter 1)

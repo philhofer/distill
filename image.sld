@@ -11,8 +11,6 @@
     libressl)
   (import
     scheme
-    (scheme base)
-    (scheme cxr)
     (distill kvector)
     (distill base)
     (distill execline)
@@ -20,6 +18,7 @@
     (distill package))
   (cond-expand
     (chicken (import
+               (only (chicken base) include error unless)
                (only (chicken string) conc)
                (only (chicken port) with-output-to-string))))
   (include "image.scm"))

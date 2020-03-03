@@ -21,7 +21,7 @@
     scheme
     (srfi 26)
     (srfi 69)
-    (scheme base)
+    (srfi 88)
     (distill plan)
     (distill kvector)
     (distill contract)
@@ -36,7 +36,7 @@
   (cond-expand
     (chicken (import
                (chicken type)
-               (only (chicken keyword) keyword->string keyword?)
+               (only (chicken base) include error)
                (only (chicken irregex) glob->sre irregex-match?)
                (only (chicken string) conc)
                (only (chicken port) with-output-to-string))))

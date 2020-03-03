@@ -5,11 +5,12 @@
     hash-string
     hash-file)
   (import
-    (scheme base)
+    scheme
     (srfi 4))
   (cond-expand
     (chicken
       (import
+        (only (chicken base) include error)
 	(only (chicken blob) blob->string string->blob)
 	(chicken foreign)
 	(chicken type))))

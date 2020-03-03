@@ -1,11 +1,12 @@
 (define-library (distill memo)
   (import
-    (scheme base)
+    scheme
     (srfi 2)
     (srfi 69))
   (cond-expand
     (chicken
       (import
+        (only (chicken base) include error)
         (chicken type))))
   (export
     as

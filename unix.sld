@@ -5,7 +5,6 @@
     groups+users->artifacts)
   (import
     scheme
-    (scheme base)
     (srfi 26)
     (srfi 69)
     (distill plan)
@@ -15,5 +14,5 @@
   (cond-expand
     (chicken (import
                (chicken type)
-               (only (chicken base) fixnum?))))
+               (only (chicken base) include error fixnum?))))
   (include "unix.scm"))

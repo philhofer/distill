@@ -7,7 +7,7 @@
   (import
     scheme
     (only (srfi 13) substring/shared)
-    (scheme base)
+    (srfi 88)
     (distill plan)
     (distill base)
     (distill package)
@@ -19,7 +19,6 @@
     (distill execline))
   (cond-expand
     (chicken (import
-               (chicken keyword)
-               (only (chicken base) foldl)
+               (only (chicken base) include error foldl)
                (only (chicken string) conc))))
   (include "fs.scm"))

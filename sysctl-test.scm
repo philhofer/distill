@@ -1,10 +1,9 @@
-(include "sequence.mod.scm")
+(include "sysctl.mod.scm")
+(include "test-helpers.scm")
+
 (import
   scheme
-  (distill sequence))
-
-(include "test-helpers.scm")
-(include "sysctl.scm")
+  (distill sysctl))
 
 (define *sysctls*
   '((net (ipv4 (tcp_syncookies 1)

@@ -4,6 +4,23 @@
   (string<? (##sys#symbol->string a)
             (##sys#symbol->string b)))
 
+(: vector-map (('a -> 'b) (vector-of 'a) -> (vector-of 'b)))
+(define (vector-map proc vec)
+  (let* ((len (vector-length vec))
+         (out (make-vector len)))
+    (let loop ((i 0))
+      (if (fx>= i len)
+        out
+        (begin
+          (vector-set! out i (proc (vector-ref vec i)))
+          (loop (fx+ i 1)))))))
+
+(: vector-copy (vector -> vector))
+(define (vector-copy vec)
+  (let ((out (make-vector (vector-length vec))))
+    (vector-copy! vec out)
+    out))
+
 (: kidx ((vector-of keyword) keyword --> (or false fixnum)))
 (define (kidx vec kw)
   (unless (keyword? kw)

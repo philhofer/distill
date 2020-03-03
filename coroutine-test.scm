@@ -1,19 +1,14 @@
-(import
-  r7rs)
-
-(include "eprint.sld")
-(include "coroutine.sld")
+(include "eprint.mod.scm")
+(include "coroutine.mod.scm")
+(include "test-helpers.scm")
 
 (import
   scheme
-  (scheme base)
-  (chicken process)
-  (chicken condition)
+  (srfi 12)
   (srfi 69)
-  (distill coroutine)
-  (distill eprint))
-
-(include "test-helpers.scm")
+  (chicken process)
+  (distill eprint)
+  (distill coroutine))
 
 (define (bin/true arg)
   (let-values (((pid ok status) (process-wait/yield (process-run "/bin/true" '()))))

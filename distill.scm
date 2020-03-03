@@ -1,7 +1,5 @@
 (import
   scheme
-  (scheme read)
-  (scheme load)
   (chicken eval)
   (chicken process-context)
   (chicken repl)
@@ -12,56 +10,7 @@
   (only (chicken base) vector-resize))
 
 (import-for-syntax
-  (scheme read)
   (only (chicken string) conc))
-
-;; this registers the following units as compiled modules
-;; (and declares that they should be linked in) without
-;; pulling them into the top-level environment
-(let-syntax ((include-imports
-               (er-macro-transformer
-                 (lambda (expr rename cmp)
-                   (cons 'begin
-                         (cons
-                           `(declare (uses ,@(cdr expr)))
-                           (map
-                             ;; the 'foo.import.scm' files generally contain two expressions;
-                             ;; the first is (eval '(import-syntax ...)) in case syntax definitions
-                             ;; reference imported symbols, and the second is (##sys#register-compiled-module ...);
-                             ;; we're only interested in the second one because we can just import-syntax here
-                             (lambda (sym)
-                               (with-input-from-file
-                                 (conc sym ".import.scm")
-                                 (lambda ()
-                                   (let loop ((expr (read)))
-                                     (cond
-                                       ((eof-object? expr)
-                                        (error "didn't find import module for" sym))
-                                       ((eq? (car expr) '##sys#register-compiled-module)
-                                        expr)
-                                       (else
-                                         (loop (read))))))))
-                             (cdr expr))))))))
-  (include-imports
-    distill.memo
-    distill.nproc
-    distill.execline
-    distill.hash
-    distill.filepath
-    distill.sequence
-    distill.kvector
-    distill.contract
-    distill.eprint
-    distill.plan
-    distill.package
-    distill.image
-    distill.base
-    distill.linux
-    distill.unix
-    distill.sysctl
-    distill.fs
-    distill.net
-    distill.service))
 
 (import
   (distill filepath)

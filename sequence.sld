@@ -28,13 +28,12 @@
     for-each/s)
   (import
     scheme
-    (scheme base)
     (srfi 69)
     (only (srfi 13) substring/shared))
   (cond-expand
     (chicken (import
                (chicken type)
                (only (chicken port) call-with-output-string)
-               (only (chicken base) void))))
+               (only (chicken base) void include error))))
   (include "sequence.scm"))
 

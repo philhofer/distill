@@ -6,7 +6,6 @@
     abspath)
   (import
     scheme
-    (scheme base)
     (srfi 2)
     (srfi 13)
     (srfi 26) ;; cut
@@ -14,6 +13,7 @@
   (cond-expand
     (chicken
       (import
+        (only (chicken base) include error)
         (only (chicken process-context) current-directory)
         (chicken type))))
   (include "filepath.scm"))

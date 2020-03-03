@@ -1,5 +1,5 @@
 (import
-  (scheme base)
+  scheme
   (distill hash)
   (chicken base)
   (chicken io))

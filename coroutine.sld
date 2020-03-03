@@ -14,13 +14,15 @@
     join/value)
   (import
     scheme
-    (scheme base)
+    (srfi 11)
     (srfi 12)
+    (srfi 39)
     (srfi 69)
     (distill eprint))
   (cond-expand
     (chicken (import
                (chicken type)
                (chicken condition)
+               (only (chicken base) include error when call/cc)
                (only (chicken process) process-wait))))
   (include "coroutine.scm"))

@@ -15,10 +15,10 @@
     vector/c
     list/c)
   (import
-    scheme
-    (scheme base))
+    scheme)
   (cond-expand
     (chicken (import
+               (only (chicken base) include error)
                (chicken type)
                (chicken fixnum))))
   (include "contract.scm"))

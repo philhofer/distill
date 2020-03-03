@@ -1,10 +1,9 @@
-(cond-expand
-  (csi (import r7rs)
-       (load "memo.sld"))
-  (else (begin)))
-
-(import (distill memo))
+(include "memo.mod.scm")
 (include "test-helpers.scm")
+
+(import
+  scheme
+  (distill memo))
 
 (define-memoized (foo x y) (cons x y))
 

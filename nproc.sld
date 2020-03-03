@@ -2,8 +2,9 @@
   (export
     nproc)
   (import
-    scheme
-    (scheme base))
+    scheme)
   (cond-expand
-    (chicken (import (chicken foreign))))
+    (chicken (import
+               (only (chicken base) include error)
+               (chicken foreign))))
   (include "nproc.scm"))

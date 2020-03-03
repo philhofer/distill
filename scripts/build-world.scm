@@ -11,8 +11,17 @@
   (distill net)
   (chicken file)
   (chicken process-context)
-  (only (srfi 1) filter)
   (only (srfi 13) substring/shared))
+
+(define (filter pred? lst)
+  (if (null? lst)
+    '()
+    (let* ((head (car lst))
+           (rest (cdr lst))
+           (tail (filter pred? rest)))
+      (if (pred? head)
+        (cons head tail)
+        tail))))
 
 ;; this script builds every package in pkg/*.scm
 ;; (if it is out-of-date)

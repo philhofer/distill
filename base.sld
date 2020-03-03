@@ -1,11 +1,8 @@
 (define-library (distill base)
   (import
-    (scheme base)
-    (scheme write)
-    (scheme file)
+    scheme
     (srfi 2)
     (srfi 69)
-    (distill table)
     (distill eprint)
     (distill filepath)
     (distill kvector)
@@ -17,7 +14,7 @@
     (chicken
       (import
         (only (chicken syntax) er-macro-transformer)
-        (only (chicken base) flatten foldl)
+        (only (chicken base) include error flatten foldl unless)
         (only (chicken string) conc))
       (import-for-syntax
         (only (chicken io) read-string))))

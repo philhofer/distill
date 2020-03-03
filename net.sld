@@ -10,7 +10,6 @@
     iproute2)
   (import
     scheme
-    (scheme base)
     (distill plan)
     (distill memo)
     (distill base)
@@ -22,5 +21,6 @@
     (distill execline))
   (cond-expand
     (chicken (import
+               (only (chicken base) include)
                (only (chicken string) conc))))
   (include "net.scm"))

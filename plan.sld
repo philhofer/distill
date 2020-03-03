@@ -39,7 +39,7 @@
         (chicken type) ;; type hints can be replaced with a no-op
 	(only (chicken file) file-exists? directory-exists? move-file copy-file create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
 	(only (chicken file posix) file-permissions set-file-permissions! create-symbolic-link file-size)
-        (only (chicken base) flatten void)
+        (only (chicken base) include error unless when flatten void current-error-port exit)
 	(only (chicken io) read-string write-string)
         (only (chicken process-context) current-directory)
         (only (chicken condition) print-error-message)
@@ -48,14 +48,13 @@
 
   (import
     scheme
-    (scheme base)
-    (scheme read)
-    (scheme write)
-    (scheme process-context)
-    (srfi 2) ;; and-let*
+    (srfi 2)  ;; and-let*
+    (srfi 6)  ;; string ports
+    (srfi 11) ;; let-values
     (srfi 12)
     (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
     (srfi 26) ;; cut, cute
+    (srfi 39) ;; parameters
     (srfi 69) ;; hash tables
     (distill memo)
     (distill nproc)

@@ -27,12 +27,12 @@
     kvector-setter)
   (import
     scheme
-    (scheme base)
-    (srfi 69))
+    (srfi 69)
+    (srfi 88))
   (cond-expand
     (chicken (import
+               (only (chicken base) include error unless vector-copy!)
                (chicken fixnum)
-               (only (chicken keyword) keyword?)
                (chicken sort)
                (chicken type))))
   (include "kvector.scm"))

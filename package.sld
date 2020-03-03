@@ -1,11 +1,11 @@
 (define-library (distill package)
   (import
-    (scheme base)
-    (scheme write)
+    scheme
+    (srfi 6)  ;; string ports
     (srfi 26) ;; cut
+    (srfi 39) ;; parameters
     (srfi 69) ;; make-hash-table, etc
     (distill memo)
-    (distill table)
     (distill eprint)
     (distill execline)
     (distill contract)
@@ -20,7 +20,7 @@
                (only (chicken port)
                      with-output-to-string
                      call-with-output-string)
-               (only (chicken base) flatten))))
+               (only (chicken base) include error flatten unless))))
   (export
     *this-machine*
     patch*

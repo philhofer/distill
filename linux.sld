@@ -7,7 +7,6 @@
     linux-virt-x86_64)
   (import
     scheme
-    (scheme base)
     (distill base)
     (distill plan)
     (only (distill memo) cons*)
@@ -19,6 +18,7 @@
     (only (distill image) xz-utils))
   (cond-expand
     (chicken (import
+               (only (chicken base) include error unless)
                (only (chicken string) conc)
                (only (chicken port) with-output-to-string))))
   (include "linux.scm"))

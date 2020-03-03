@@ -1,18 +1,20 @@
 (define trace-log (make-parameter #f))
 
-(define-syntax trace
-  (syntax-rules ()
-    ((_ args* ...)
-     (when (trace-log)
-       (info args* ...)))))
+(define (trace . body)
+  (when (trace-log)
+    (apply info body)))
 
-(define-syntax fatal
-  (syntax-rules ()
-    ((_ args* ...)
-     (begin
-       (info args* ...)
-       (exit 1)))))
+(define (fatal . args)
+  (apply info args)
+  (exit 1))
 
-(define (info . args)
-  (fmt (current-error-port) (cat (fmt-join dsp args " ") fl)))
-
+(define (info head . rest)
+  (let ((stderr (current-error-port)))
+    (let loop ((head head)
+               (rest rest))
+      (display head stderr)
+      (if (null? rest)
+        (newline stderr)
+          (begin
+            (display " " stderr)
+            (loop (car rest) (cdr rest)))))))

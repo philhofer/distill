@@ -1,20 +1,16 @@
 
-R7RSI:=csi
-CSC_FLAGS:=-O3 -disable-interrupts -clustering
-R7RSC:=csc $(CSC_FLAGS)
-CSC_LIBFLAGS:=-regenerate-import-libraries -setup-mode -D compiling-extension \
-	-D compiling-static-extension -static -J
+# NOTE: you need at least chicken-5.2 to build this code;
+# earlier chickens do not know about the -M flag
 
-SLDS=$(wildcard *.sld)
-MODS=$(SLDS:%.sld=%.mod.scm)
+CSI:=csi-5.2
+CSC_FLAGS:=-O3 -disable-interrupts -clustering -d1
+CSC:=csc-5.2
+CSC_LIBFLAGS:=-setup-mode -D compiling-static-extension -static -J -M
+CHICKEN_DO:=chicken-do-5.2
 
-Makefile.dep: $(wildcard *.sld) autodep.scm
-	$(R7RSI) -s autodep.scm > Makefile.dep
-
-include Makefile.dep
-
-# these are the translation units that make up the final binary
-UNITS:=distill.hash distill.nproc distill.table \
+SLDS:=$(wildcard *.sld)
+MODS:=$(SLDS:%.sld=%.mod.scm)
+UNITS:=distill.hash distill.nproc \
 	distill.plan distill.package distill.execline \
 	distill.filepath distill.eprint distill.memo \
 	distill.sequence distill.base \
@@ -22,19 +18,32 @@ UNITS:=distill.hash distill.nproc distill.table \
 	distill.service distill.sysctl distill.fs \
 	distill.net distill.kvector distill.contract
 
-%.import.scm %.o:
-	$(R7RSC) $(CSC_LIBFLAGS) -unit $* -ot $*.types -c $< -o $*.o
 
-distill: distill.scm ${UNITS:%=%.o} ${UNITS:%=%.import.scm}
-	$(R7RSC) -setup-mode -m main -static -L -static-pie $< ${UNITS:%=%.o} -o $@
+.PHONY: test all
+all: distill ${UNITS:%=%.o}
+
+Makefile.dep: $(wildcard *.sld) autodep.scm
+	$(CSI) -s autodep.scm > Makefile.dep
+
+include Makefile.dep
+
+# since chicken won't touch %.import.scm
+# unless a module's exports (or syntax) have changed,
+# we can avoid unnecessary recompilation
+# HOWEVER, Make doesn't like seeing %.import.scm older than %.o,
+# which means this rule may match spuriously during incremental
+# compiles, so we use chicken-do to avoid actually doing real work
+%.import.scm %.o:
+	@echo "csc $*"
+	@$(CHICKEN_DO) $*.o : $^ : $(CSC) $(CSC_FLAGS) $(CSC_LIBFLAGS) -unit $* -ot $*.types -c $< -o $*.o
+
+distill: distill.scm ${UNITS:%=%.o}
+	@echo "link $@"
+	@$(CSC) $(CSC_FLAGS) -setup-mode ${UNITS:%=-uses %} -m main -static -L -static-pie $< ${UNITS:%=%.o} -o $@
 
 TESTS:=$(wildcard *-test.scm)
-.PHONY: test all
-
 test: distill $(TESTS)
-	./sysplan $(TESTS)
-
-all: distill ${UNITS:%=%.o}
+	./distill $(TESTS)
 
 clean:
 	$(RM) distill Makefile.dep *.types *.import.scm *.mod.scm *.so *.o *.link
