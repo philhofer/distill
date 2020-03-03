@@ -56,10 +56,10 @@
         execline-tools
         busybox-core))
 
-(define *musl-version* '1.1.24)
+(define *musl-version* '1.2.0)
 (define *musl-src*    (remote-archive
                         (conc "https://www.musl-libc.org/releases/musl-" *musl-version* ".tar.gz")
-                        "hC6Gf8nyJQAZVYJ-tNG0iU0dRjES721p0x1cqBp2Ge8="))
+                        "-DtKaw1hxYkV_hURoMR-00bA9TPByU0RITAnt9ELLls="))
 
 ;; when building a cross-compiler,
 ;; we need headers for the target system
@@ -343,6 +343,9 @@ EOF
                     configure-args: (:= '(--static --prefix=/usr --libdir=/lib))))))))
 
 (define libisl
+  ;; NOTE: the latest version of isl is 0.22.1, but
+  ;; it is not available through any HTTPS mirror that I have found...
+  ;; the gcc infrastructure mirror only includes up to 0.18
   (let* ((version '0.18)
          (leaf    (remote-archive
                     (conc "https://gcc.gnu.org/pub/gcc/infrastructure/isl-" version ".tar.bz2")
@@ -367,35 +370,32 @@ EOF
         (with-input-from-file arg read-string)))))
 
 (define make
-  (let* ((version '4.2.1)
+  (let* ((version '4.3)
          (leaf    (remote-archive
-                    (conc "https://ftp.gnu.org/gnu/make/make-" version ".tar.bz2")
-                    "BNFWkQKgF9Vt6NUbdway0KbpUiZJ6PFQDLG4L29xjlg="))
-         (patches (patch*
-                    ;; patches are the same ones that Alpine uses
-                    ;; in order to fix musl compatibility
-                    (include-file-text "patches/make/fix-atexit-exit.patch")
-                    (include-file-text "patches/make/fix-glob-dtype.patch"))))
+                    (conc "https://ftp.gnu.org/gnu/make/make-" version ".tar.gz")
+                    "HaL2VGA5mzktijZa2L_IyOv2OTKTGkf8D-AVI_wvARc=")))
     (lambda (conf)
       (make-package
         prebuilt: (maybe-prebuilt conf 'make)
         label:    (conc "make-" version "-" ($arch conf))
-        src:      (cons leaf patches)
+        src:      leaf
         tools:    (cc-for-target conf)
         inputs:   libc
         build:    (gnu-recipe
                     (conc "make-" version)
                     (kwith
                       ($gnu-build conf)
-                      pre-configure: (+= (script-apply-patches patches))))))))
+                      ;; can't call exit(3) inside a procedure registered with atexit(3);
+                      ;; just exit promptly
+                      pre-configure: (+= '((if ((sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c)))))))))))
 
-(define *binutils-version* '2.33.1)
+(define *binutils-version* '2.34)
 (define *gcc-version* '9.2.0)
 
 (define *binutils-src*
   (remote-archive
-    (conc "https://ftp.gnu.org/gnu/binutils/binutils-" *binutils-version* ".tar.bz2")
-    "wuwvGNrMYaSLio4yHUAS8qM3-ugn1kqrqEn2M6LcNT0="))
+    (conc "https://ftp.gnu.org/gnu/binutils/binutils-" *binutils-version* ".tar.gz")
+    "laZMIwGW3GAXUFMyvWCaHwBwgnojWVXGE94gWH164A4="))
 
 (define *gcc-src*
   (remote-archive
@@ -453,6 +453,9 @@ EOF
                         (kwith
                           ($gnu-build host)
                           exports: (+= (list cc-env/for-build))
+                          ;; 2.34: even with MAKEINFO=/bin/true, binutils refuses to build without makeinfo,
+                          ;; so remove 'doc' and 'po' from subdirs
+                          pre-configure: (+= '((if ((sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in)))))
                           configure-args:
                           (:= `(--disable-nls --disable-shared --enable-static
                                               --disable-multilib --enable-gold=yes --with-ppl=no
