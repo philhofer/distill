@@ -1,8 +1,73 @@
+(foreign-declare #<<EOF
+#define _GNU_SOURCE
+#include <signal.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <err.h>
+static int wchldpipe;
+static void handle_sigchld(int sig)
+{
+    char buf[1];
+
+    buf[0] = 'a';
+    write(wchldpipe, buf, 1);
+}
+static int sigchld_handler(void)
+{
+    struct sigaction act;
+    int pipefd[2];
+
+    if (pipe2(pipefd, O_NONBLOCK|O_CLOEXEC) < 0) return -errno;
+
+    act = (struct sigaction){
+        .sa_handler = handle_sigchld,
+        .sa_flags = SA_NOCLDSTOP,
+    };
+    if (sigaction(SIGCHLD, &act, NULL) < 0) return -errno;
+    wchldpipe = pipefd[1];
+    return pipefd[0];
+}
+static int do_poll(int32_t *rfd, int nrfd, int32_t *wfd, int nwfd)
+{
+    struct pollfd *pfd;
+    int ret, i;
+
+    pfd = calloc(nrfd+nwfd, sizeof(struct pollfd));
+    if (!pfd) err(1, "out of memory");
+
+    for (i=0; i<nrfd; i++) {
+        pfd[i].fd = rfd[i];
+        pfd[i].events = POLLIN|POLLERR|POLLHUP;
+    }
+    for (i=nrfd; i<nrfd+nwfd; i++) {
+        pfd[i].fd = wfd[i-nrfd];
+        pfd[i].events = POLLOUT|POLLERR|POLLHUP;
+    }
+again:
+    ret = poll(pfd, nrfd+nwfd, -1);
+    if (ret < 0) {
+        if (errno == EAGAIN || errno == EINTR) goto again;
+        ret = -errno;
+        goto done;
+    }
+    for (i=0; i<nrfd; i++) {
+        if (!pfd[i].revents) rfd[i]=-1;
+    }
+    for (i=nrfd; i<nrfd+nwfd; i++) {
+        if (!pfd[i].revents) wfd[i]=-1;
+    }
+done:
+    free(pfd);
+    return ret;
+}
+EOF
+)
 
 ;; push 'val' to the end of the queue represented by 'p'
 ;; (where 'p' is a pair and (car p) is the head of a
 ;; list and (cdr p) is the end of it)
-(: queue-push ((pair (list-of procedure) (list-of procedure)) procedure -> undefined))
+(: queue-push! ((pair (list-of procedure) (list-of procedure)) procedure -> undefined))
 (define (queue-push! p val)
   (let ((tail (cdr p))
         (end  (cons val '())))
@@ -24,10 +89,107 @@
 
 ;; runnable continuations
 (: *cont-queue* (pair (list-of procedure) (list-of procedure)))
-(define *cont-queue* '(() . ()))
+(define *cont-queue* (cons '() '()))
 
 ;; continuations parked on wait(2)
 (define *wait-tab* (make-hash-table test: = hash: number-hash))
+(define *readfd-tab* (make-hash-table test: = hash: number-hash))
+(define *writefd-tab* (make-hash-table test: = hash: number-hash))
+
+(define-constant eintr 4)
+(define-constant eagain 11)
+
+(: fdclose (fixnum -> fixnum))
+(define (fdclose fd)
+  ((foreign-lambda int close int) fd))
+
+(: fdpipe (-> (list fixnum fixnum)))
+(define (fdpipe)
+  (let* ((vect (make-s32vector 2 -1))
+         (ret  ((foreign-lambda* int ((s32vector pfd))
+                  "C_return(pipe2(pfd, O_NONBLOCK));")
+                vect)))
+    (if (fx= ret 0)
+      (list (s32vector-ref vect 0) (s32vector-ref vect 1))
+      (error "pipe2() failed"))))
+
+(: fdwrite (fixnum (or string u8vector) #!rest * -> integer))
+(define (fdwrite fd buf #!optional size)
+  (let* ((%raw-write (foreign-lambda* long ((int fd) (scheme-pointer mem) (size_t sz))
+                       "long out; out=write(fd,mem,sz); C_return(out>0?out:-errno);"))
+         (buflen (cond
+                   ((string? buf) (string-length buf))
+                   ((u8vector? buf) (u8vector-length buf))
+                   (else (error "bad buf argument to fdwrite:" buf))))
+         (size   (or size buflen)))
+    (let loop ((ret (%raw-write fd buf size)))
+      (cond
+        ((>= ret 0) ret)
+        ((= ret (- eintr))
+         (loop (%raw-write fd buf size)))
+        ((= ret (- eagain))
+         (begin
+           (queue-wait!
+             (hash-table-update!/default
+               *writefd-tab*
+               fd
+               identity
+               (cons '() '())))
+           (loop (%raw-write fd buf size))))
+        (else (error "fdwrite: errno:" (- ret)))))))
+
+(: fdread (fixnum (or string u8vector) #!rest * -> integer))
+(define (fdread fd buf #!optional size)
+  (let* ((%raw-read  (foreign-lambda* long ((int fd) (scheme-pointer mem) (size_t sz))
+                       "long out; out=read(fd,mem,sz); C_return(out>=0?out:-errno);"))
+         (buflen (cond
+                   ((string? buf) (string-length buf))
+                   ((u8vector? buf) (u8vector-length buf))
+                   (else (error "bad buf argument to fdread:" buf))))
+         (size   (or size buflen)))
+    (let loop ((ret (%raw-read fd buf size)))
+      (cond
+        ((>= ret 0) ret)
+        ((= ret (- eintr))
+         (loop (%raw-read fd buf size)))
+        ((= ret (- eagain))
+         (begin
+           (queue-wait!
+             (hash-table-update!/default
+               *readfd-tab*
+               fd
+               identity
+               (cons '() '())))
+           (loop (%raw-read fd buf size))))
+        (else (error "fdread: errno:" (- ret)))))))
+
+(define (%poll-fds)
+  (let ((%raw-poll (foreign-lambda int do_poll s32vector int s32vector int))
+        (rfds      (list->s32vector (hash-table-keys *readfd-tab*)))
+        (wfds      (list->s32vector (hash-table-keys *writefd-tab*))))
+    (when (= 0 (+ (s32vector-length rfds) (s32vector-length wfds)))
+      (fatal "deadlock"))
+    (let ((ret (%raw-poll rfds (s32vector-length rfds)
+                          wfds (s32vector-length wfds))))
+      (define (flush vec ht)
+        (let ((len (s32vector-length vec)))
+          (let loop ((i 0))
+            (or (fx>= i len)
+                (let ((fd (s32vector-ref vec i)))
+                  (if (fx= fd -1)
+                    (loop (fx+ i 1))
+                    (let ((q  (hash-table-ref ht fd)))
+                      (hash-table-delete! ht fd)
+                      (let inner ((cont (queue-pop! q)))
+                        (and cont (begin (pushcont! cont) (inner (queue-pop! q)))))
+                      (loop (fx+ i 1)))))))))
+      (cond
+        ((fx= 0 ret) (%poll-fds))
+        ((fx> 0 ret) (error "poll error:" (- ret)))
+        (else
+          (begin
+            (flush rfds *readfd-tab*)
+            (flush wfds *writefd-tab*)))))))
 
 ;; push a continuation onto the tail of the cont-queue
 (: pushcont! (procedure -> undefined))
@@ -52,66 +214,6 @@
     (lambda (ret)
       (queue-push! p (lambda () (ret #t)))
       (%yield))))
-
-;; make-semaphore makes a semaphore with value 'n'
-(: make-semaphore (fixnum -> (vector fixnum pair)))
-(define (make-semaphore n)
-  (vector n '(() . ())))
-
-;; semacquire decreases the semaphore value by 1
-(: semacquire ((vector fixnum pair) -> undefined))
-(define (semacquire s)
-  (let ((v (vector-ref s 0)))
-    (if (<= v 0)
-      (queue-wait! (vector-ref s 1))
-      (vector-set! s 0 (- v 1)))))
-
-;; semacquire/n decreases the semaphore value by 'n'
-(: semacquire/n ((vector fixnum pair) fixnum -> undefined))
-(define (semacquire/n s n)
-  (or (<= n 0)
-      (begin (semacquire s) (semacquire/n s (- n 1)))))
-
-;; semacquire/max decreases the semaphore value by
-;; 1 <= value <= num
-;; and returns the amount decreased
-(: semacquire/max ((vector fixnum pair) fixnum -> fixnum))
-(define (semacquire/max s num)
-  (let ((v (vector-ref s 0)))
-    (if (<= v 0)
-      (begin
-        ;; waiting implies we took 1;
-        ;; try to take some more on wakeup
-        (queue-wait! (vector-ref s 1))
-        (let* ((left (vector-ref s 0))
-               (take (min left (- num 1)))
-               (got  (+ 1 take)))
-          (vector-set! s 0 (- left take))
-          got))
-      (let ((take (min num v)))
-        (vector-set! s 0 (- v take))
-        take))))
-
-;; semrelease increases the semaphore value by 1
-(: semrelease ((vector fixnum pair) -> undefined))
-(define (semrelease s)
-  (let ((q (vector-ref s 1)))
-    (if (null? (car q))
-      (vector-set! s 0 (+ (vector-ref s 0) 1))
-      (pushcont! (queue-pop! q)))))
-
-;; semrelease/n increases the semaphore value by 'n'
-(: semrelease/n ((vector fixnum pair) fixnum -> undefined))
-(define (semrelease/n s n)
-  (or (<= n 0)
-      (begin (semrelease s) (semrelease/n s (- n 1)))))
-
-(: with-semaphore ((vector fixnum pair) (-> 'a) -> 'a))
-(define (with-semaphore s thunk)
-  (semacquire s)
-  (let ((v (thunk)))
-    (semrelease s)
-    v))
 
 ;; process-wait/yield is the semantically the same
 ;; as chicken.process#process-wait, except that it
@@ -160,19 +262,41 @@
                                       (%procexit box 'exn exn))))
                      (apply proc args)))))))
 
+;; %pid-poll reads a single byte from the pipe 'fd'
+;; and then calls wait() repeatedly until there are no
+;; child processes outstanding
+(define (%pid-poll fd)
+  ;; process-wait throws when wnohang is set
+  ;; and no processes are available; just continue looping
+  (define (wait-all otherwise)
+    (parameterize ((current-exception-handler
+                     (lambda (exn)
+                       (otherwise))))
+      (process-wait -1 #t)))
+  (let ((buf "a"))
+    (let loop ()
+      (begin
+        (fdread fd buf 1)
+        (let inner ()
+          (let-values (((pid ok status) (wait-all loop)))
+            (cond
+              ((= pid 0) (loop))
+              ((hash-table-ref/default *wait-tab* pid #f)
+               => (lambda (cont)
+                    (hash-table-delete! *wait-tab* pid)
+                    (pushcont! (lambda () (cont pid ok status)))
+                    (inner)))
+              (else
+                (info "warning: pid not registered?" pid)
+                (inner)))))))))
+
 (: %poll (-> undefined))
 (define (%poll)
-  (when (= 0 (hash-table-size *wait-tab*))
-    (error "poll but no procs to wait on?")) ;; implies deadlock
-  (let-values (((pid ok status) (process-wait)))
-    (let ((target (hash-table-ref/default *wait-tab* pid #f)))
-      (if target
-        (begin
-          (hash-table-delete! *wait-tab* pid)
-          (pushcont! (lambda () (target pid ok status))))
-        (begin
-          (info "warning: pid not registered?" pid)
-          (%poll))))))
+  (if (eq? (proc-status pid-poller-proc) 'exn)
+    (begin
+      (print-error-message (proc-return pid-poller-proc))
+      (fatal "pid poller exited"))
+    (%poll-fds)))
 
 ;; join/value waits for a coroutine to exit,
 ;; then yields its return value
@@ -187,3 +311,11 @@
         (vector-set! proc 2 (cons ret (vector-ref proc 2)))
         (%yield)))
     (proc-return proc)))
+
+;; XXX maybe we should be doing this lazily?
+(define pid-poller-proc
+  (let* ((handle (foreign-lambda int sigchld_handler))
+         (err    (handle)))
+    (if (<= err 0)
+      (error "error registering SIGCHLD handler:" (- err))
+      (spawn %pid-poll err))))

@@ -24,9 +24,7 @@
     artifact?
     artifact-hash
     artifact-format
-    artifact-extra
-
-    compute-stages)
+    artifact-extra)
 
   ;; for non-r7rs imports, please try to keep
   ;; the requisite imported functions explicit
@@ -36,6 +34,7 @@
     (chicken
       (import
         matchable
+        (chicken fixnum)
         (chicken type) ;; type hints can be replaced with a no-op
 	(only (chicken file) file-exists? directory-exists? move-file copy-file create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
 	(only (chicken file posix) file-permissions set-file-permissions! create-symbolic-link file-size)
@@ -43,7 +42,7 @@
 	(only (chicken io) read-string write-string)
         (only (chicken process-context) current-directory)
         (only (chicken condition) print-error-message)
-	(only (chicken process) process-run process-wait)
+	(only (chicken process) process-run)
 	(only (chicken sort) sort))))
 
   (import

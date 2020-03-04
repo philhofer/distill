@@ -37,8 +37,7 @@
     inputs:
     prebuilt:
     build:
-    raw-output:
-    parallel:))
+    raw-output:))
 
 (: package? (* -> boolean))
 (define package? (kvector-predicate <package>))
@@ -53,8 +52,7 @@
     inputs:   '() (list-of (or/c procedure? artifact?))
     prebuilt: #f  (or/c false/c artifact?)
     build:    #f  recipe?
-    raw-output: #f (or/c false/c string?)
-    parallel:   #t (or/c (eq?/c 'very) boolean?)))
+    raw-output: #f (or/c false/c string?)))
 
 (: update-package (vector #!rest * -> vector))
 (define (update-package pkg . args)
@@ -77,8 +75,6 @@
 (define package-build (kvector-getter <package> build:))
 (: package-raw-output (vector --> (or string false)))
 (define package-raw-output (kvector-getter <package> raw-output:))
-(: package-parallel (vector --> (or symbol boolean)))
-(define package-parallel (kvector-getter <package> parallel:))
 
 (: <config> vector)
 (define <config>
@@ -384,7 +380,6 @@
                  (recipe (package-build pkg)))
             (make-plan
               raw-output: (package-raw-output pkg)
-              parallel: (package-parallel pkg)
               name:   (package-label pkg)
               inputs: (list
                         (cons "/" (flatten
@@ -393,10 +388,6 @@
                                     (package-src pkg) (map ->tool tools)))
                         ;; build headers+libraries live here
                         (cons ($sysroot host) (map ->input inputs)))))))))
-
-(define (package->stages conf root)
-  (let ((plan (package->plan root (build-config) conf)))
-    (compute-stages plan)))
 
 ;; default environment for recipes
 (define *default-env*
@@ -533,8 +524,7 @@
                         (if ((,(conc "/" dir "/configure")
                                ,@($configure-args v)))))
                       `((if ((./configure ,@($configure-args v))))))
-                  (if ((importas -u "-i" nproc nproc)
-                       (make -j $nproc ,@($make-flags v))))
+                  (if ((make ,@($make-flags v))))
                   (if ((make ,@($install-flags v))))
                   ,@($post-install v)
                   (foreground ((rm -rf /out/usr/share/man)))
@@ -585,8 +575,7 @@
           ;; don't let the configure script override our CFLAGS selections
           (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
           (if ((./configure ,@($configure-args bld))))
-          (if ((importas -u "-i" nproc nproc)
-               (make -j $nproc ,@($make-args bld))))
+          (if ((make ,@($make-args bld))))
           (if ((make DESTDIR=/out install)))
           ,@(strip-binaries-script ($triple bld)))))))
 

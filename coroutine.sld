@@ -1,19 +1,17 @@
 (define-library (distill coroutine)
   (export
-    make-semaphore
-    semacquire
-    semacquire/n
-    semacquire/max
-    semrelease
-    semrelease/n
-    with-semaphore
     process-wait/yield
     proc-status
     proc-return
     spawn
+    fdwrite
+    fdread
+    fdpipe
+    fdclose
     join/value)
   (import
     scheme
+    (srfi 4)
     (srfi 11)
     (srfi 12)
     (srfi 39)
@@ -23,6 +21,9 @@
     (chicken (import
                (chicken type)
                (chicken condition)
-               (only (chicken base) include error when call/cc)
+               (chicken foreign)
+               (chicken fixnum)
+               (only (chicken base) include error when call/cc identity
+                     define-constant)
                (only (chicken process) process-wait))))
   (include "coroutine.scm"))

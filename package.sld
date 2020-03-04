@@ -29,7 +29,6 @@
     build-config
     default-config
     config->builder
-    package->stages
     
     package?
     make-package

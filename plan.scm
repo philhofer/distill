@@ -131,8 +131,7 @@
     inputs:
     saved-hash:
     saved-output:
-    raw-output:
-    parallel:))
+    raw-output:))
 
 (define plan? (kvector-predicate <plan>))
 
@@ -144,8 +143,7 @@
                         (pair-of string? (list-of (or/c artifact? plan?))))
     saved-hash:   #f false/c
     saved-output: #f false/c
-    raw-output:   #f (or/c string? false/c)
-    parallel:     #t (or/c (eq?/c 'very) boolean?)))
+    raw-output:   #f (or/c string? false/c)))
 
 (: plan-saved-hash (vector --> (or string false)))
 (define plan-saved-hash (kvector-getter <plan> saved-hash:))
@@ -157,8 +155,6 @@
 (define plan-saved-output (kvector-getter <plan> saved-output:))
 (: plan-raw-output (vector --> (or false string)))
 (define plan-raw-output (kvector-getter <plan> raw-output:))
-(: plan-parallel (vector --> (or boolean symbol)))
-(define plan-parallel (kvector-getter <plan> parallel:))
 
 (define plan-saved-hash-set! (kvector-setter <plan> saved-hash:))
 (define plan-saved-output-set! (kvector-setter <plan> saved-output:))
@@ -303,6 +299,52 @@
   (let-values (((pid ok? status) (process-wait/yield (process-run prog args))))
     (unless (and ok? (= status 0))
       (error "command failed:" (cons prog args)))))
+
+(define current-jobserver
+  (make-parameter #f))
+
+;; call a thunk with a fresh jobserver bound to current-jobserver
+;; during the dynamic extent of the thunk
+(: with-new-jobserver ((-> 'a) -> 'a))
+(define (with-new-jobserver thunk)
+  (let* ((js (fdpipe))
+         (res (parameterize ((current-jobserver js))
+                (thunk))))
+    (fdclose (car js))
+    (fdclose (cadr js))
+    res))
+
+(: jobserver+ (fixnum -> *))
+(define (jobserver+ n)
+  (let* ((pipe (current-jobserver))
+         (wfd  (cadr pipe))
+         (bv   (make-string n #\a)))
+    (fdwrite wfd bv)))
+
+(: jobserver- (fixnum -> *))
+(define (jobserver- n)
+  (or (fx<= n 0)
+      (let* ((rfd   (car (current-jobserver)))
+             (buf   (make-string n))
+             (ret   (fdread rfd buf)))
+        (cond
+          ((fx= ret 0) (error "pipe: EOF"))
+          ((fx< ret 0) (error "errno:" (- ret)))
+          (else        (jobserver- (fx- n ret)))))))
+
+(: call-with-job ((-> 'a) -> 'a))
+(define (call-with-job proc)
+  (let ((throw (current-exception-handler)))
+    (jobserver- 1)
+    (let ((res
+            (parameterize ((current-exception-handler
+                             (lambda (exn)
+                               (current-exception-handler throw)
+                               (jobserver+ 1)
+                               (throw exn))))
+              (proc))))
+      (jobserver+ 1)
+      res)))
 
 ;; run a command inside a new virtual root 'root'
 ;; which is a directory populated like a root filesystem
@@ -514,8 +556,8 @@
 ;; all of the input plan's dependencies must
 ;; have been built (i.e. have plan-outputs)
 ;; in order for this to work
-(: plan->outputs! (vector fixnum -> artifact))
-(define (plan->outputs! p nproc)
+(: plan->outputs! (vector -> artifact))
+(define (plan->outputs! p)
   (with-tmpdir
     (lambda (root)
       (define outdir (filepath-join root "out"))
@@ -540,17 +582,37 @@
 
       ;; fork+exec into the recipe inside the sandbox
       (infoln "running build script ...")
-      (sandbox-run
-        root
-        "/bin/emptyenv"
-        "/bin/envfile" "/env"
-        ;; close stdin and redirect stdin+stderr to a log file
-        ;; (otherwise builds just get really noisy in the terminal)
-        "redirfd" "-r" "0" "/dev/null"
-        "redirfd" "-w" "1" "/build.log"
-        "fdmove" "-c" "2" "1"
-        "export" "nproc" (number->string nproc)
-        "/build")
+      (let* ((pipefd (current-jobserver))
+             (infd   (car pipefd))
+             (outfd  (cadr pipefd)))
+        (apply
+          sandbox-run
+          root
+          (append
+            (list
+              "/bin/emptyenv"
+              "/bin/envfile" "/env"
+              ;; close stdin and redirect stdin+stderr to a log file
+              ;; (otherwise builds just get really noisy in the terminal)
+              "redirfd" "-r" "0" "/dev/null"
+              "redirfd" "-w" "1" "/build.log"
+              "fdmove" "-c" "2" "1")
+            ;; we need to shuffle around the pipe fds to 6,7
+            ;; while taking care when the fds are (5,6) or (7,6) or whatever
+            (cond
+              ((= infd 6) '())
+              ((= outfd 6) (begin
+                             (set! outfd 7)
+                             (list
+                               "fdmove" "7" (number->string outfd)
+                               "fdmove" "6" (number->string infd))))
+              (else (list "fdmove" "6" (number->string infd))))
+            (if (= outfd 7)
+              '()
+              (list "fdmove" "7" (number->string outfd)))
+            (list
+              "export" "MAKEFLAGS" "--jobserver-auth=6,7"
+              "/build"))))
 
       ;; save the compressed build log independently
       ;; (it's not 'reproduced' as such) and delete
@@ -605,94 +667,42 @@
    (k/unbuilt-dfs
      (lambda (in out)
        (proc in)
-       (void)))
+       out))
    (void)))
-
-;; compute-stages assigns stages to the build,
-;; where leaf nodes of the DAG are stage 0,
-;; their dependents are stage 1, and so forth;
-;; compute-stages returns a vector of lists where
-;; each element of the vector is a list of plans
-;; that can be built in parallel
-(: compute-stages ((list-of vector) -> vector))
-(define (compute-stages lst)
-  (let* ((stage   (make-hash-table test: eq? hash: eq?-hash))
-         (kstage  ((kompose k/unbuilt (k/hash-ref stage)) max)))
-    (define (stage-of p)
-      (+ 1 ((input-seq p) kstage -1)))
-    (for-each/unbuilt-dfs
-      (lambda (p)
-        (or (hash-table-ref/default stage p #f)
-            (hash-table-set! stage p (stage-of p))))
-      lst)
-    (let* ((endstage ((list->seq lst) ((k/map (cut hash-table-ref/default stage <> -1)) max) -1))
-           (vec      (make-vector (+ endstage 1) '())))
-      (hash-table-for-each
-        stage
-        (lambda (p num)
-          (for-each/s
-            ;; sanity check: all inputs must be one of:
-            ;; 1) artifacts,
-            ;; 2) built plans,
-            ;; 3) unbuilt plans with stage less than this plan
-            (lambda (in)
-              (or (artifact? in)
-                  (plan-built? in)
-                  (< (hash-table-ref stage in) num)
-                  (error "bad input:" p)))
-            (input-seq p))
-          (vector-set! vec num (cons p (vector-ref vec num)))))
-      vec)))
 
 (: build-graph! ((list-of vector) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
-  (let* ((sema           (make-semaphore maxprocs))
-         (stages         (compute-stages lst))
-         (ht             (make-hash-table test: eq? hash: eq?-hash))
+  (let* ((ht             (make-hash-table test: eq? hash: eq?-hash))
          (err            #f)
-         (k/jobs         (lambda (kons)
-                           (lambda (in out)
-                             (cond
-                               ((hash-table-ref/default ht in #f)
-                                => (lambda (j)
-                                     (kons j out)))
-                               ((and (plan? in) (not (plan-built? in)))
-                                (error "input plan unbuilt but not scheduled" (plan-name in)))
-                               (else out)))))
-         (k/join-ok      (lambda (in out)
-                           (let ((v (join/value in)))
-                             (cond
-                               (err #f)
-                               ((eq? (proc-status in) 'exn)
-                                (begin
-                                  (unless err
-                                    (set! err v))
-                                  #f))
-                               (else out)))))
+         ;; join-dep takes a plan input and
+         ;; waits for it to complete (if it is a plan),
+         ;; and returns #t if the input was built successfully
+         ;; or #f otherwise
+         (join-dep       (lambda (in)
+                           (cond
+                             ((hash-table-ref/default ht in #f)
+                              => (lambda (p)
+                                   (let ((ret (join/value p)))
+                                     (and (not err)
+                                          (if (eq? (proc-status p) 'exn)
+                                            (begin (set! err ret) #f)
+                                            #t)))))
+                             ((and (plan? in) (not (plan-built? in)))
+                              (error "input plan unbuild but not scheduled" (plan-name in)))
+                             (else (not err)))))
          ;; should-build? waits for all of the
          ;; input plans for 'p' to be done building
          ;; and then checks if we should really build
          ;; (i.e. no error has been encountered and
          ;; the plan is actually stale)
          (should-build?  (lambda (p)
-                           (let ((inputs ((input-seq p) (k/jobs cons) '())))
-                             (and ((list->seq inputs) k/join-ok #t)
-                                  (not (plan-built? p))))))
-         (plan-semacquire (lambda (p maxjobs)
-                            (let ((parallel (plan-parallel p)))
-                              (cond
-                                ((not parallel)
-                                 (begin (semacquire sema) 1))
-                                ((eq? parallel 'very)
-                                 (begin (semacquire/n sema maxprocs) maxprocs))
-                                (else
-                                 (semacquire/max sema maxjobs)))))))
+                           (and (all/s? join-dep (input-seq p))
+                                (not (plan-built? p))))))
     ;; core build procedure:
     ;; first, wait for inputs (dependencies) to complete,
     ;; then either a) return, if there has been an error,
-    ;; or b) acquire up to maxjobs jobs from the semaphore
-    ;; and then execute with that level of intra-build parallelism
-    (define (build-one! p maxjobs)
+    ;; or b) acquire a job from the jobserver and start running
+    (define (build-one! p)
       (let ((rethrow (current-exception-handler)))
         ;; if this build encounters an error, catch it and re-throw
         ;; with associated plan information (should aid debugging)
@@ -701,33 +711,34 @@
                                                     (rethrow
                                                       (plan-exn p exn)))))
           (if (should-build? p)
-            (let ((jobs (plan-semacquire p maxjobs)))
-              ;; in the time spent waiting to acquire resources,
-              ;; another plan could have encountered an error, so
-              ;; this inner bit should become a no-op in that situation
-              (or err
-                  (parameterize ((info-prefix (string-append (plan-name p) " j=" (number->string jobs) " |")))
+            ;; in the time spent waiting to acquire resources,
+            ;; another plan could have encountered an error, so
+            ;; this inner bit should become a no-op in that situation
+            (or err
+                (call-with-job
+                  (lambda ()
                     (infoln "building")
-                    (save-plan-outputs! p (plan->outputs! p jobs))
-                    (infoln "completed")))
-              (semrelease/n sema jobs))
+                    (save-plan-outputs! p (plan->outputs! p))
+                    (infoln "completed"))))
             #t))))
     ;; spawn a builder coroutine for each unbuilt package
-    (for-each/s
-      (lambda (stage)
-        (let* ((slen (length stage))
-               (maxp (max 1 (quotient maxprocs (max slen 1)))))
-          ;; TODO: this would be closer to optimal if the stage itself
-          ;; was sorted in increasing estimated build time ...
-          (for-each
-            (lambda (p)
-              (hash-table-set! ht p (spawn build-one! p maxp)))
-            stage)))
-      (vector->seq stages))
-    ;; wait for every coroutine to exit
-    ((list->seq (hash-table-values ht))
-     k/join-ok
-     #t)
+    (with-new-jobserver
+      (lambda ()
+        (jobserver+ maxprocs)
+        (for-each/unbuilt-dfs
+          (lambda (p)
+            (when (hash-table-ref/default ht p #f)
+              (error "plan already present?" (plan-name p)))
+            (hash-table-set! ht p (spawn build-one! p)))
+          lst)
+        ;; wait for every coroutine to exit; the jobserver
+        ;; must live at least this long
+        (for-each
+          (lambda (p)
+            (let ((ret (join/value p)))
+              (if (eq? (proc-status p) 'exn)
+                (or err (set! err ret)))))
+          (hash-table-values ht))))
     (if err (fatal-plan-failure err) #t)))
 
 ;; build-plan! unconditionally builds a plan
@@ -738,7 +749,12 @@
   (unless (plan-resolved? top)
     (error "called build-plan! on unresolved plan"))
   (infoln "building" (plan-name top))
-  (plan->outputs! top (nproc)))
+  (with-new-jobserver
+    (lambda ()
+      (let ((np (nproc)))
+        (when (> np 1)
+          (jobserver+ (- np 1)))
+        (plan->outputs! top)))))
 
 ;; load-plan loads an old plan from the plan directory
 ;;

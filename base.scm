@@ -71,7 +71,6 @@
     (lambda (target)
       (lambda (host)
         (make-package
-          parallel: #f
           label: (conc "musl-headers-" *musl-version* "-" ($arch target))
           src:   *musl-src*
           tools: (list make execline-tools busybox-core)
@@ -98,14 +97,12 @@
                          (if ((./configure --disable-shared --enable-static
                                            --prefix=/usr ,@(splat conf CC: CFLAGS:)
                                            --target ,($arch conf))))
-                         (if ((importas -u "-i" nproc nproc)
-                              (make -j $nproc ,@(kvargs ($make-overrides conf)))))
+                         (if ((make ,@(kvargs ($make-overrides conf)))))
                          (make DESTDIR=/out install))))))
 
 (define libssp-nonshared
   (lambda (conf)
     (make-package
-      parallel: #f
       label:   (conc "libssp-nonshared-" ($arch conf))
       tools:   (cc-for-target conf)
       inputs:  '()
@@ -240,9 +237,7 @@ EOF
         build:  (make-recipe
                   script: (execline*
                             (cd ,(conc "bzip2-" version))
-                            (importas -u "-i" nproc nproc)
-                            (make -j $nproc
-                                  PREFIX=/out/usr ;; no DESTDIR supported
+                            (make PREFIX=/out/usr ;; no DESTDIR supported
                                   ,@(kvargs ($cc-env conf))
                                   ,@(kvargs ($make-overrides conf))
                                   install)))))))
@@ -503,10 +498,7 @@ EOF
                      (make-recipe
                        script: (execline*
                                  (cd ,(conc "fakemusl-" version))
-                                 (if ((importas -u "-i" nproc nproc)
-                                      (make -j $nproc
-                                            ,@(splat target AS: AR:)
-                                            all)))
+                                 (if ((make ,@(splat target AS: AR:) all)))
                                  (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install))))))))))
 
 (define gcc-for-target
@@ -520,7 +512,6 @@ EOF
               (patches       (patch*
                                (include-file-text "patches/gcc/pie-gcc.patch"))))
           (make-package
-            parallel: 'very
             prebuilt: (and (eq? host target) (maybe-prebuilt host 'gcc))
             label: (conc "gcc-" *gcc-version* "-" ($arch target) "-"
                          (if (eq? host-arch target-arch)
@@ -634,8 +625,7 @@ EOF
                               (export KCONFIG_NOTIMESTAMP 1)
                               ,@(script-apply-patches patches)
                               (if ((mv /src/config.head .config)))
-                              (if ((importas -u "-i" nproc nproc)
-                                   (make V=1 -j $nproc
+                              (if ((make V=1
                                          ,(conc "CROSS_COMPILE=" ($triple conf) "-")
                                          ,(conc "CONFIG_SYSROOT=" ($sysroot conf))
                                          ,(conc "CONFIG_EXTRA_CFLAGS=" (spaced ($CFLAGS conf)))

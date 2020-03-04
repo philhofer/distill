@@ -33,7 +33,6 @@
   (let ()
     (lambda (conf)
       (make-package
-        parallel: #f
         src:    *linux-source*
         label:  (conc "linux-headers-" *major* "." *patch* "-" ($arch conf))
         tools:  (append (list execline-tools busybox-core make xz-utils)
@@ -100,7 +99,6 @@ EOF
         (install (installkernel* install)))
     (lambda (conf)
       (make-package
-        parallel: 'very
         src:   (append (list install config) *linux-source*)
         label: (conc "linux-" *major* "." *patch* "-" name)
         tools: (append (list perl xz-utils reflex byacc libelf zlib linux-headers)
@@ -115,7 +113,6 @@ EOF
                  (make-recipe
                    script: (execline*
                              (cd ,(conc "linux-" *major*))
-                             (importas -u "-i" nproc nproc)
                              (if ((pipeline ((xzcat /src/linux.patch)))
                                   (patch -p1)))
                              ;; reflex: %option full is not compatible with %option yylineno
@@ -137,7 +134,7 @@ EOF
                                     KCONFIG_ALLCONFIG=/src/config
                                     ,@make-args
                                     allnoconfig)))
-                             (if ((make -j $nproc V=1 ,@make-args)))
+                             (if ((make V=1 ,@make-args)))
                              (make install))))))))
 
 (define linux-virt-x86_64
@@ -153,7 +150,6 @@ EOF
                     #f "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
     (lambda (conf)
       (make-package
-        parallel: #f
         label:  (conc "libelf-" version "-" ($arch conf))
         src:    (list leaf config)
         tools:  (cc-for-target conf)
@@ -242,8 +238,7 @@ EOF
             script: (execline*
                       (cd ,(conc "perl-" version))
                       (if ((./Configure -des ,@configure-flags)))
-                      (if ((importas -u nproc nproc)
-                           (make -j $nproc ,@(kvargs ($make-overrides conf)))))
+                      (if ((make ,@(kvargs ($make-overrides conf)))))
                       (if ((make DESTDIR=/out install)))
                       (if ((rm -rf /out/usr/share/man)))
                       (find /out -name ".*" -delete))))))))

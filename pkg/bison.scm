@@ -10,10 +10,10 @@
   (only (distill linux) perl))
 
 (define bison
-  (let* ((version '3.4.2)
+  (let* ((version '3.5.2)
          (leaf    (remote-archive
-                    (conc "https://ftp.gnu.org/gnu/bison/bison-" version ".tar.xz")
-                    "mISdVqFsbf8eeMe8BryH2Zf0oxcABOyW26NZT61RMSU=")))
+                    (conc "https://ftp.gnu.org/gnu/bison/bison-" version ".tar.gz")
+                    "RzNc3Yv-A6hUD9trf_dAdZRKF_Lhvwmpw6r_UAtVyY0=")))
     (lambda (conf)
       (make-package
         label:  (conc "bison-" version "-" ($arch conf))
@@ -23,10 +23,4 @@
         build:  (gnu-recipe
                   (conc "bison-" version)
                   (kwith
-                    ($gnu-build conf)
-                    ;; there is a buggy makefile in examples/ that will
-                    ;; occasionally explode during parallel builds;
-                    ;; just delete the directory entirely
-                    ;; https://lists.gnu.org/archive/html/bug-bison/2019-10/msg00044.html
-                    pre-configure: (+= (execline*
-                                         (if ((rm -rf examples/c/recalc)))))))))))
+                    ($gnu-build conf)))))))

@@ -35,12 +35,10 @@
         tools: (list execline-tools squashfs-tools)
         inputs: inputs
         build: (let ((opts `(-all-root
-                              -processors $nproc
                               -pf "/src/pseudo"
                               -comp ,compress)))
                  (make-recipe
                    script: (execline*
-                             (importas -u "-i" nproc nproc)
                              (mksquashfs ,($sysroot conf) ,(conc "/out/" out-img) ,@opts))))))))
 
 (define (initramfs inputs #!key (chown '()) (compress 'zstd))
@@ -95,12 +93,11 @@
         build:  (make-recipe
                   script: (execline*
                             (cd ,(conc "squashfs-tools-" version "/squashfs-tools"))
-                            (importas -u "-i" nproc nproc)
                             ;; can't set CFLAGS= in the make invocation
                             ;; because the Makefile is clever and toggles
                             ;; a bunch of additional -DXXX flags based on configuration
                             ,@(kvexport ($cc-env conf))
-                            (if ((make -j $nproc XZ_SUPPORT=1 LZO_SUPPORT=0
+                            (if ((make XZ_SUPPORT=1 LZO_SUPPORT=0
                                        LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0
                                        ,@(kvargs ($make-overrides conf)))))
                             (if ((mkdir -p /out/usr/bin)))
@@ -120,8 +117,7 @@
         build:  (make-recipe
                   script: (execline*
                             (cd ,(conc "lz4-" version))
-                            (importas -u "-i" nproc nproc)
-                            (if ((make -j $nproc DESTDIR=/out PREFIX=/usr
+                            (if ((make DESTDIR=/out PREFIX=/usr
                                        ,@(kvargs ($cc-env conf))
                                        ,@(kvargs ($make-overrides conf))
                                        install)))
@@ -155,12 +151,11 @@
           (make-recipe
             script: (execline*
                       (cd ,(conc "zstd-" version))
-                      (importas -u "-i" nproc nproc)
                       (if ((cd lib/)
-                           (make -j $nproc PREFIX=/usr DESTDIR=/out
+                           (make PREFIX=/usr DESTDIR=/out
                                  ,@makeflags install-static install-includes)))
                       (if ((cd programs/)
-                           (make -j $nproc ,@makeflags zstd)))
+                           (make ,@makeflags zstd)))
                       (install -D -m "755"
                                programs/zstd /out/usr/bin/zstd))))))))
 
