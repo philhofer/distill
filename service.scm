@@ -136,7 +136,7 @@
 
 (define busybox-full
   (busybox/config
-    "dqQ64qnqMRlFufvFWDpkBeEHAVfmWy_ivBhy6FAP-6Y="
+    "KCPbK4zCat3hyqDNYlVR_pKYSAAW0vuDh84mfXqtT6w="
     (list linux-headers)))
 
 (define <service>
@@ -314,7 +314,7 @@
       (fdclose 3)
       (foreground ((echo "beginning s6-svscan")))
       (redirfd -r 0 /dev/null)
-      (redirfd -wnb 1 ,*catchall-fifo*)
+      (redirfd -w -n -b 1 ,*catchall-fifo*)
       (fdmove -c 2 1)
       (s6-svscan -d 4 -St0 ,*service-dir*)))))
 
@@ -332,20 +332,11 @@
                                (write-exexpr
                                  (execline*
                                    (redirfd -w 2 /dev/console)
-                                   (redirfd -rnb 0 fifo)
+                                   (redirfd -r -n -b 0 fifo)
                                    (s6-setuidgid catchlog)
                                    (exec -c)
-                                   (s6-log t /run/uncaught-logs)))))))
-         (finish (interned "/etc/early-services/.s6-svscan/finish"
-                           #o700
-                           (with-output-to-string
-                             (lambda ()
-                               (write-exexpr
-                                 (execline*
-                                   (s6-rc -bad change)
-                                   (s6-svc -X -- /run/service/s6-svscan-log)
-                                   (reboot))))))))
-    (list init logger finish
+                                   (s6-log t /run/uncaught-logs))))))))
+    (list init logger
           (interned-dir "/tmp" #o1777)
           (interned-dir "/dev" #o755)
           (interned-dir "/var" #o755)

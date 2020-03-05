@@ -1,5 +1,6 @@
 (define-library (distill fs)
   (export
+    kmsg
     swapon
     var-mount
     var-mounted-rw

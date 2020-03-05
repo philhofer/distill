@@ -62,9 +62,7 @@
                      (all     (rp_filter 1)
                               (accept_redirects 0)
                               (secure_redirects 1))))
-         (ipv6 (conf (default use_tempaddr 2))
-               (all  (accept_redirects 0)
-                     (use_tempaddr 2))))
+         (ipv6 all use_tempaddr 2))
     (fs (protected_hardlinks 1)
         (protected_fifos     1)
         (protected_symlinks  1))
@@ -72,13 +70,14 @@
             (dmesg_restrict 1)
             (panic 10)
             (panic_on_io_nmi 1)
-            (panic_on_stackoverflow 1)
             (panic_on_oops 1))))
 
 (define (sysctls->string lst)
   (lines/s (s/bind (list->seq lst)
                    (kompose (k/map sysctl->text) k/recur))))
 
+;; sysctl-service creates a service with the given name
+;; that toggles the provided sysctl spec
 (define (sysctl-service name sysctls #!key (after '()))
   (let* ((file        (string-append "/etc/sysctl.d/" name ".conf"))
          (sysctl-file (interned file #o644 (sysctls->string sysctls))))
@@ -87,6 +86,10 @@
       inputs: (list sysctl-file)
       after:  after
       spec:   (oneshot*
+                ;; note: this configuration is noisy
+                ;; (it will log every sysctl line),
+                ;; but that seems okay given that it
+                ;; is likely going to the standard logger
                 up: `((fdmove -c 2 1)
                       (/sbin/sysctl -p ,file))))))
 

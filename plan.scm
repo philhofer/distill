@@ -378,8 +378,8 @@
                         (string-append (cdn-url) hash))))
          (dst (filepath-join (artifact-dir) hash))
          (tmp (string-append dst ".tmp")))
-    (infoln "fetching" src)
-    (run "wget" "-q" "-O" tmp src)
+    (infoln "fetching" url)
+    (run "wget" "-q" "-O" tmp url)
     (let ((h (hash-file tmp)))
       (if (string=? h hash)
         (rename-file tmp dst #t)
@@ -635,12 +635,7 @@
 
 (: plan-built? (vector -> boolean))
 (define (plan-built? p)
-  (and-let* ((out (plan-outputs p)))
-    (file-exists?
-      ;; TODO: if we're here, we already know the plan outputs,
-      ;; so we could try to fetch the output from the CDN
-      ;; instead of performing a re-build
-      (filepath-join (artifact-dir) (artifact-hash out)))))
+  (if (plan-outputs p) #t #f))
 
 ;; k/unbuilt is a reducer-transformer
 ;; that yields only unbuilt plans to its reducer

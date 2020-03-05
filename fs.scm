@@ -82,19 +82,28 @@
 
 ;; kmsg is a super lightweight syslogd-style service
 ;; that reads logs from /dev/kmsg and stores them in
-;; /var/log/services/kmsg
+;; /var/log/services/kmsg, taking care to compress
+;; (and eventually delete) old logs
 (define kmsg
-  (make-service
-    name: 'kmsg
-    after: (list var-mounted-rw)
-    spec:  (longrun*
-             run: `((if ((mkdir -p /var/log/services/kmsg)))
-                    (if ((chown -R catchlog:catchlog /var/log/services/kmsg)))
-                    (if ((chmod "2700" /var/log/services/kmsg)))
-                    (redirfd -r 0 /dev/kmsg)
-                    (s6-setuidgid catchlog)
-                    (exec -c)
-                    (s6-log /var/log/services/kmsg)))))
+  (let ((dir  '/var/log/services/kmsg)
+        (opts '(t n10 s1000000 "!zstd -c -"))
+        (nfd  3))
+    (make-service
+      name:   'kmsg
+      inputs: (list zstd)
+      after:  (list var-mounted-rw)
+      spec:   (longrun*
+                notification-fd: nfd
+                run: `((fdmove -c 2 1)
+                       (if ((mkdir -p ,dir)))
+                       (if ((chown -R catchlog:catchlog ,dir)))
+                       (if ((chmod "2700" ,dir)))
+                       ;; strip off timestamps and have s6-log prepend tai64n timestamps instead
+                       (pipeline ((redirfd -r -b 0 /dev/kmsg)
+                                  (s6-setuidgid catchlog)
+                                  (sed -e "s/^[0-9].*-;//g")))
+                       (s6-setuidgid catchlog)
+                       (s6-log -b -d ,nfd -- ,@opts /var/log/services/kmsg))))))
 
 ;; log-services creates a mount at /var
 ;; using "var-dev" and then maps the list
