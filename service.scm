@@ -3,12 +3,23 @@
     type:
     run:
     finish:
+    pipeline-name:
+    nosetsid:
+    max-death-tally:
+    down-signal:
+    timeout-up:
+    timeout-down:
+    timeout-kill:
+    timeout-finish:
     dependencies:
     notification-fd:
     producer-for:
     consumer-for:))
 
-(define symbolic? (or/c string? symbol?))
+(define symbolic?       (or/c string? symbol?))
+(define maybe-int?      (or/c false/c integer?))
+(define maybe-string?   (or/c false/c string?))
+(define maybe-symbolic? (or/c false/c symbolic?))
 
 (define longrun*
   (kvector-constructor
@@ -16,10 +27,18 @@
     type:   'longrun (eq?/c 'longrun)
     run:    #f       list?
     finish: #f       (or/c false/c list?)
-    dependencies:    #f (or/c false/c string?)
-    notification-fd: #f (or/c false/c integer?)
-    producer-for:    #f (or/c false/c symbolic?)
-    consumer-for:    #f (or/c false/c symbolic?)))
+    pipeline-name:   #f maybe-symbolic?
+    nosetsid:        #f maybe-symbolic?
+    max-death-tally: #f maybe-int?
+    down-signal:     #f maybe-int?
+    timeout-up:      #f maybe-int?
+    timeout-down:    #f maybe-int?
+    timeout-kill:    #f maybe-int?
+    timeout-finish:  #f maybe-int?
+    dependencies:    #f maybe-string?
+    notification-fd: #f maybe-int?
+    producer-for:    #f maybe-symbolic?
+    consumer-for:    #f maybe-symbolic?))
 
 (define longrun? (kvector-predicate <longrun>))
 
@@ -28,6 +47,8 @@
     type:
     up:
     down:
+    timeout-up:
+    timeout-down:
     dependencies:))
 
 (define oneshot*
@@ -36,7 +57,9 @@
     type: 'oneshot (eq?/c 'oneshot)
     up:   #f       list?
     down: #f       (or/c false/c list?)
-    dependencies: #f (or/c false/c string?)))
+    timeout-up:   #f maybe-int?
+    timeout-down: #f maybe-int?
+    dependencies: #f maybe-string?))
 
 (define oneshot? (kvector-predicate <oneshot>))
 
@@ -45,18 +68,22 @@
     type:
     contents:))
 
+(: %make-bundle (#!rest * -> vector))
 (define %make-bundle
   (kvector-constructor
     <bundle>
     type: 'bundle (eq?/c 'bundle)
     contents: #f string?))
 
+(: bundle? (* --> boolean))
 (define bundle? (kvector-predicate <bundle>))
 
+(: bundle* (#!rest vector --> vector))
 (define (bundle* . args)
   (%make-bundle
     contents: (lines/s (s/bind (list->seq args) service-name))))
 
+(: spec? (* -> boolean))
 (define spec?
   (or/c longrun? oneshot? bundle?))
 
@@ -123,7 +150,7 @@
                     "KCvqdFSKEUNPkHQuCBfs86zE9JvLrNHU2ZhEzLYY5RY=")))
     (lambda (conf)
       (make-package
-        label:  (conc "s6-rc-" ($arch conf))
+        label:  (conc "s6-rc-" version "-" ($arch conf))
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list s6 skalibs execline-tools musl libssp-nonshared)
@@ -134,9 +161,29 @@
                     configure-args: (+= `(,(conc '--with-sysdeps= ($sysroot conf) "/lib/skalibs/sysdeps")
                                            --enable-static-libc))))))))
 
+;; hard(8) command; an alternative to busybox halt(8)/reboot(8)/poweroff(8)
+(define hard
+  (let* ((version '0.1)
+         (hash    "aVGnVsRk_al4CfeliyuIZsyj7LBG-GphmUM-BgHad7E=")
+         (src     (remote-archive
+                    (conc "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
+                    hash
+                    kind: 'tar.zst)))
+    (lambda (conf)
+      (make-package
+        label:  (conc "hard-" version "-" ($arch conf))
+        src:    src
+        tools:  (cc-for-target conf)
+        inputs: (list musl libssp-nonshared)
+        build:  (make-recipe
+                  script: `((cd ,(conc "hard-" version))
+                            (if ((make ,@(splat conf CC: CFLAGS: LDFLAGS:)
+                                       DESTDIR=/out install)))
+                            ,@(strip-binaries-script ($triple conf))))))))
+
 (define busybox-full
   (busybox/config
-    "KCPbK4zCat3hyqDNYlVR_pKYSAAW0vuDh84mfXqtT6w="
+    "kHCLlhEuZrIcR3vjYENuNyI1a0eGB1B6APiyWjvkvok="
     (list linux-headers)))
 
 (define <service>
@@ -293,8 +340,12 @@
           ;; TODO: make this configurable?
           (mount -t tmpfs -o "noexec,nosuid,nodev,mode=1777,size=10%" tmpfs /tmp))
       (if ((mkdir -p ,*service-dir*)))
-      (if ((elglob svcs "/etc/early-services/*")
-           (cp -r $svcs ,*service-dir*)))
+      ;; elglob won't match leading '.' characters,
+      ;; so we have to use an extra glob to make sure
+      ;; we pick up stuff in .s6-svscan
+      (if ((elglob -m svcs "/etc/early-services/*")
+           (elglob -m dots "/etc/early-services/.[!.]*")
+           (cp -r $dots $svcs ,*service-dir*)))
       (foreground ((mkfifo -m "0600" ,*catchall-fifo*)))
       (if ((mkdir -p ,*uncaught-logs*)))
       (foreground ((chown catchlog:catchlog ,*uncaught-logs*)))
@@ -322,21 +373,55 @@
 ;; that are the contents of a working s6-rc init system,
 ;; absent the actual compiled service database
 (define (init-artifacts)
-  (let* ((init   (interned "/sbin/init" #o700 (with-output-to-string
-                                                (lambda ()
-                                                  (write-exexpr (init-script))))))
-         (logger (interned "/etc/early-services/s6-svscan-log/run"
-                           #o700
-                           (with-output-to-string
-                             (lambda ()
-                               (write-exexpr
-                                 (execline*
-                                   (redirfd -w 2 /dev/console)
-                                   (redirfd -r -n -b 0 fifo)
-                                   (s6-setuidgid catchlog)
-                                   (exec -c)
-                                   (s6-log t /run/uncaught-logs))))))))
-    (list init logger
+  (let* ((script*  (lambda (path body)
+                     (interned path #o744
+                               (with-output-to-string
+                                 (lambda () (write-exexpr body))))))
+         (scanctl* (lambda (script flag)
+                     (script* script `((foreground ((s6-rc -v2 -bad -t 10000 change)))
+                                       (s6-svscanctl ,flag /run/service)))))
+         (init     (script* "/sbin/init" (init-script)))
+         (reboot   (scanctl* "/sbin/reboot" "-i"))
+         (poweroff (scanctl* "/sbin/poweroff" "-7"))
+         (halt     (scanctl* "/sbin/halt" "-0"))
+         (crash    (script* "/etc/early-services/.s6-svscan/crash"
+                            '((foreground ((redirfd -w 1 /dev/console)
+                                           (fdmove -c 2 1)
+                                           (echo "pid 1 is crashing!")))
+                              (foreground ((kill -15 -1)))
+                              (foreground ((sleep 1)))
+                              (foreground ((kill -9 -1)))
+                              (foreground ((sleep 1)))
+                              (foreground ((sync)))
+                              (hard reboot))))
+         (finish   (interned "/etc/early-services/.s6-svscan/finish"
+                             #o744
+                             (with-output-to-string
+                               (lambda ()
+                                 (write-exexpr
+                                   ;; note: at this point it is expected that
+                                   ;; everything under process supervision is already dead,
+                                   ;; but there still may be other processes running
+                                   '((redirfd -w 1 /dev/console)
+                                     (fdmove -c 2 1)
+                                     (foreground ((kill -15 -1)))
+                                     (foreground ((sleep 1)))
+                                     (foreground ((kill -9 -1)))
+                                     (foreground ((sync)))
+                                     (hard $1))
+                                   shebang: "#!/bin/execlineb -s1")))))
+         (logger   (interned "/etc/early-services/s6-svscan-log/run"
+                             #o744
+                             (with-output-to-string
+                               (lambda ()
+                                 (write-exexpr
+                                   (execline*
+                                     (redirfd -w 2 /dev/console)
+                                     (redirfd -r -n -b 0 fifo)
+                                     (s6-setuidgid catchlog)
+                                     (exec -c)
+                                     (s6-log t /run/uncaught-logs))))))))
+    (list init logger finish crash reboot poweroff halt
           (interned-dir "/tmp" #o1777)
           (interned-dir "/dev" #o755)
           (interned-dir "/var" #o755)
@@ -344,5 +429,5 @@
           (interned-dir "/proc" #o555)
           (interned-dir "/sys" #o555)
           (interned-dir "/boot" #o755)
-          s6 s6-rc execline-tools busybox-full)))
+          s6 s6-rc execline-tools busybox-full hard)))
 

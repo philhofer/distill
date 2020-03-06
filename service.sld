@@ -2,6 +2,7 @@
   (export
     s6
     s6-rc
+    hard
     busybox-full
     services->packages
     named*

@@ -42,6 +42,8 @@
                       (mount -t ext4 -o ,(join/s "," (list->seq opts)) ,dev /var))
                 down: (execline*
                         (fdmove -c 2 1)
+                        (foreground ((mount -o "ro,remount,noexec,nosuid" ,dev /var)))
+                        (foreground ((sync)))
                         (foreground ((umount /var)))
                         (true))))))
 
