@@ -82,6 +82,63 @@ cp $3 /out/boot/System.map
 EOF
 )
 
+;; yypush_buffer_state() and yypop_buffer_state()
+;; are GNU extensions
+(define portable-lexer-patch #<<EOF
+--- a/scripts/dtc/dtc-lexer.l
++++ b/scripts/dtc/dtc-lexer.l
+@@ -277,15 +277,21 @@
+
+ %%
+
++#define __MAX_INCLUDES 32
++static int __n_includes = 0;
++static void *__fstack[__MAX_INCLUDES];
++
+ static void push_input_file(const char *filename)
+ {
+ 	assert(filename);
++        assert(__n_includes < __MAX_INCLUDES);
+
+ 	srcfile_push(filename);
++        __fstack[__n_includes++] = YY_CURRENT_BUFFER;
+
+ 	yyin = current_srcfile->f;
+
+-	yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
++	yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
+ }
+
+
+@@ -293,8 +299,8 @@
+ {
+ 	if (srcfile_pop() == 0)
+ 		return false;
+-
+-	yypop_buffer_state();
++        yy_delete_buffer(YY_CURRENT_BUFFER);
++        yy_switch_to_buffer(__fstack[--__n_includes]);
+ 	yyin = current_srcfile->f;
+
+ 	return true;
+EOF
+)
+
+;; common fixes to scripts/dtc between linux and uboot;
+;; the dtc yacc+lex files do not play nicely with BSD yacc+lex
+(define (fix-dtc-script #!key
+                        (fix-lex-options #f)  ;; scripts/kconfig/<foo>.l
+                        (fix-yacc-cmdline #f)) ;; scripts/Makefile.host or scripts/Makefile.lib
+  (unless (and fix-lex-options fix-yacc-cmdline)
+    (error "fix-dtc-script is missing required keyword arguments"))
+  `((if ((sed "-i" -e "/^%option/s/ full / /" ,fix-lex-options)))
+    (if ((sed "-i" -e "3a override YACC:=$(YACC) -L"
+              scripts/dtc/Makefile)))
+    (if ((sed "-i"
+              -e "/^extern.*yyerror(/a #define YYERROR_CALL(msg) yyerror(msg)" scripts/dtc/dtc-parser.y)))
+    ;; byacc: use -H <file> instead of --defines=<file>
+    (if ((sed "-i" -e "/cmd_bison/s/--defines=/-H /" ,fix-yacc-cmdline)))))
+
 ;; linux/config takes a name and configuration hash
 ;; and produces a kernel package named "linux-<version>-<name>"
 ;; using the given configuration file
@@ -94,12 +151,15 @@ EOF
 ;;
 ;; this build option only supports configs with CONFIG_MODULES=n
 ;; (i.e. self-contained kernels without loadable modules)
-(define (linux/config-static name config-hash #!key (install *default-installkernel*))
+(define (linux/config-static name config-hash #!key
+                             (install *default-installkernel*)
+                             (dtb     #f))
   (let ((config  (remote-file #f config-hash "/src/config" #o644))
-        (install (installkernel* install)))
+        (install (installkernel* install))
+        (patches (patch* portable-lexer-patch)))
     (lambda (conf)
       (make-package
-        src:   (append (list install config) *linux-source*)
+        src:   (append (list install config) *linux-source* patches)
         label: (conc "linux-" *major* "." *patch* "-" name)
         tools: (append (list perl xz-utils reflex byacc libelf zlib linux-headers)
                        (native-toolchain-for conf)
@@ -108,6 +168,7 @@ EOF
         build: (let ((make-args (append
                                   (kvargs cc-env/for-kbuild)
                                   (k=v*
+                                    YACC: 'yacc ;; not bison -y
                                     ARCH: (arch-dir-name ($arch conf))
                                     HOST_LIBELF_LIBS: '(-lelf -lz)))))
                  (make-recipe
@@ -115,12 +176,11 @@ EOF
                              (cd ,(conc "linux-" *major*))
                              (if ((pipeline ((xzcat /src/linux.patch)))
                                   (patch -p1)))
-                             ;; reflex: %option full is not compatible with %option yylineno
-                             (if ((sed "-i" -e "/^%option/s/ full / /" scripts/kconfig/lexer.l)))
-                             ;; byacc: use -H <file> instead of --defines=<file>
-                             (if ((sed "-i" -e "/cmd_bison/s/--defines=/-H /" scripts/Makefile.host)))
-                             ;; byacc: doesn't support %destructor
-                             (if ((sed "-i" -e "/^%destructor/,/^}/d" scripts/kconfig/parser.y)))
+                             ,@(script-apply-patches patches)
+                             ,@(fix-dtc-script
+                                 fix-lex-options: 'scripts/kconfig/lexer.l
+                                 fix-yacc-cmdline: 'scripts/Makefile.host)
+                             ;; libelf is built with zlib, so -lelf should imply -lz
                              (if ((find "." -type f -name "Make*"
                                         -exec sed "-i" -e
                                         "s/-lelf/-lelf -lz/g" "{}" ";")))
@@ -130,12 +190,14 @@ EOF
                              (export KBUILD_BUILD_HOST distill)
                              (export CROSS_COMPILE ,(conc ($triple conf) "-"))
                              (if ((make
-                                    V=1 YACC=yacc
-                                    KCONFIG_ALLCONFIG=/src/config
+                                    V=1 KCONFIG_ALLCONFIG=/src/config
                                     ,@make-args
                                     allnoconfig)))
                              (if ((make V=1 ,@make-args)))
-                             (make install))))))))
+                             ,@(if dtb
+                                 `((if ((install -D -m "644" -t /out/boot ,dtb))))
+                                 '())
+                             (make V=1 ,@make-args install))))))))
 
 (define linux-virt-x86_64
   (linux/config-static "virt-x86_64" "FTMQoxE4ClKOWLDdcDVzWt8UuizXfMmR4duX8Z-5qlY="))
@@ -242,4 +304,82 @@ EOF
                       (if ((make DESTDIR=/out install)))
                       (if ((rm -rf /out/usr/share/man)))
                       (find /out -name ".*" -delete))))))))
+
+
+;; busybox xxd doesn't recognize '-i'
+;; but we can achieve a similar result
+;; using busybox's hexdump
+(define no-xxd-patch #<<EOF
+--- a/Makefile
++++ b/Makefile
+@@ -1831,7 +1831,7 @@
+ 	 grep -v '^$$' | \
+ 	 tr '\n' '\0' | \
+ 	 sed -e 's/\\\x0/\n/g' | \
+-	 xxd -i ; echo ", 0x00" ; )
++	 hexdump -v -e '/1 "0x%X, "' ; echo "0x00" ; )
+ endef
+
+ $(version_h): include/config/uboot.release FORCE
+EOF
+)
+
+;; uboot/config accepts 5 arguments:
+;;  - name: a suffix added to the package name
+;;    (the package will be named "uboot-<version>-<name>"
+;;  - hash: the hash of the .config
+;;  - env:  a list of key=value strings that populate
+;;    the default environment for the bootloader
+;;  - bootargs: the default kernel argument list
+;;  - bootcmd: the default kernel boot command for u-boot (i.e. booti, etc.)
+(define uboot/config
+  (let* ((version '2020.04-rc3)
+         (src     (remote-archive
+                    (conc "https://ftp.denx.de/pub/u-boot/u-boot-" version ".tar.bz2")
+                    "-se2Ch0_yG0gCjtkTSEUmOYrle8860Gg887w3f7I8yI=")))
+    (lambda (name h env bootargs bootcmd)
+
+      (let ((patches (patch* no-xxd-patch portable-lexer-patch))
+            (envfile (interned
+                       "/src/uboot-env"
+                       #o644
+                       (lines/s (list->seq env))))
+            (dotconf (remote-file
+                       #f h "/src/uboot-config" #o644)))
+        (lambda (conf)
+          (make-package
+            label: (conc "uboot-" version "-" name)
+            src:   (cons* src envfile dotconf patches)
+            tools: (append
+                     (list reflex byacc)
+                     (cc-for-target conf)
+                     (native-toolchain-for conf))
+            inputs: '()
+            build: (let ((make-args (append
+                                      (k=v*
+                                        YACC: '(yacc -d)
+                                        CONFIG_BOOTARGS: bootargs
+                                        CONFIG_BOOTCOMMAND: bootcmd
+                                        CROSS_COMPILE: (conc ($triple conf) "-"))
+                                      (kvargs cc-env/for-kbuild))))
+                     ;; note that we don't really do much in terms of
+                     ;; setting the usual CFLAGS=..., LDFLAGS=... here,
+                     ;; because those flags likely do not apply safely
+                     ;; to building a freestanding bootloader
+                     (make-recipe
+                       script: `((cd ,(conc "u-boot-" version))
+                                 (importas -D 0 epoch SOURCE_DATE_EPOCH)
+                                 (backtick SOURCE_DATE_EPOCH
+                                           ((pipeline ((echo -n $epoch)))
+                                            (sed -e "s/@//")))
+                                 ,@(script-apply-patches patches)
+                                 (if ((cp /src/uboot-config .config)))
+                                 ,@(fix-dtc-script
+                                     fix-lex-options: 'scripts/kconfig/zconf.l
+                                     fix-yacc-cmdline: 'scripts/Makefile.lib)
+                                 ;; we're using yacc -d, so the zconf.tab.c needs to #include the generated definitions
+                                 (if ((sed "-i"
+                                           -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)))
+                                 (if ((make V=1 ,@make-args)))
+                                 (install -D -m 644 -t /out/boot u-boot.bin))))))))))
 

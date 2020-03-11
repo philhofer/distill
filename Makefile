@@ -3,7 +3,7 @@
 # earlier chickens do not know about the -M flag
 
 CSI:=csi-5.2
-CSC_FLAGS:=-O3 -disable-interrupts -clustering -d1
+CSC_FLAGS:=-O3 -disable-interrupts -clustering
 CSC:=csc-5.2
 CSC_LIBFLAGS:=-setup-mode -D compiling-static-extension -static -J -M
 CHICKEN_DO:=chicken-do-5.2

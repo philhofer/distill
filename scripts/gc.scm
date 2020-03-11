@@ -12,17 +12,19 @@
 
 (define (note-inputs f ht)
   (let ((lst (with-input-from-file f read)))
-    (for-each
-      (lambda (vec)
-        (hash-table-set! ht (vector-ref vec 2) #t))
-      lst)))
+    (or (eof-object? lst)
+        (for-each
+          (lambda (vec)
+            (hash-table-set! ht (vector-ref vec 2) #t))
+          lst))))
 
 (define (note-outputs f ht)
   (let ((vec (with-input-from-file f read)))
-    (hash-table-set!
-      ht
-      (vector-ref vec 1)
-      #t)))
+    (or (eof-object? vec)
+        (hash-table-set!
+          ht
+          (vector-ref vec 1)
+          #t))))
 
 ;; walk every known plan and mark its inputs and outputs as live;
 ;; if the plan never produced outputs, it is dead (and can be pruned)

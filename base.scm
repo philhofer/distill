@@ -293,7 +293,11 @@ EOF
         inputs: libc
         build:  (gnu-recipe
                   (conc "byacc-" version)
-                  ($gnu-build conf))))))
+                  ($gnu-build
+                    (kwith conf
+                           ;; --enable-btyacc enables %destructor
+                           ;; and %location tracking
+                           configure-flags: (+= '(--enable-btyacc)))))))))
 
 (define reflex
   (let* ((version '20191123)
@@ -394,7 +398,7 @@ EOF
 
 (define *gcc-src*
   (remote-archive
-    (conc "https://gcc.gnu.org/pub/gcc/releases/gcc-" *gcc-version* "/gcc-" *gcc-version* ".tar.gz")
+    (conc "https://ftp.gnu.org/gnu/gcc/gcc-" *gcc-version* "/gcc-" *gcc-version* ".tar.gz")
     "nzv8PqT49a1fkkQtn60mgKbxtcTl8Mazq0swhypLLRo="))
 
 (define (gcc-target-flags conf)

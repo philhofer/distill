@@ -4,11 +4,13 @@
     libelf
     linux-headers
     linux/config-static
+    uboot/config
     linux-virt-x86_64)
   (import
     scheme
     (distill base)
     (distill plan)
+    (distill sequence)
     (only (distill memo) cons*)
     (distill package)
     (distill execline)

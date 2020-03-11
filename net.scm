@@ -134,7 +134,7 @@
 (define (el-end-or expr rest)
   (if (null? rest)
     (list expr)
-    `((if (,expr)) ,@rest)))
+    `((foreground (,expr)) ,@rest)))
 
 (define (netif name #!key
                (addrs     '())

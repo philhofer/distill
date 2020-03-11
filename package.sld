@@ -24,6 +24,7 @@
   (export
     *this-machine*
     patch*
+    config*
     script-apply-patches
     strip-binaries-script
     build-config
