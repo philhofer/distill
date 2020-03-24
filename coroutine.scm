@@ -1,5 +1,6 @@
 (foreign-declare #<<EOF
 #define _GNU_SOURCE
+#include <stdbool.h>
 #include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -28,7 +29,7 @@ static int sigchld_handler(void)
     wchldpipe = pipefd[1];
     return pipefd[0];
 }
-static int do_poll(int32_t *rfd, int nrfd, int32_t *wfd, int nwfd)
+static int do_poll(int32_t *rfd, int nrfd, int32_t *wfd, int nwfd, bool block)
 {
     struct pollfd *pfd;
     int ret, i;
@@ -45,7 +46,8 @@ static int do_poll(int32_t *rfd, int nrfd, int32_t *wfd, int nwfd)
         pfd[i].events = POLLOUT|POLLERR|POLLHUP;
     }
 again:
-    ret = poll(pfd, nrfd+nwfd, -1);
+    ret = poll(pfd, nrfd+nwfd, block ? -1 : 0);
+    if (!ret) goto done;
     if (ret < 0) {
         if (errno == EAGAIN || errno == EINTR) goto again;
         ret = -errno;
@@ -164,32 +166,38 @@ EOF
         (else (error "fdread: errno:" (- ret)))))))
 
 (define (%poll-fds)
-  (let ((%raw-poll (foreign-lambda int do_poll s32vector int s32vector int))
+  (let ((%raw-poll (foreign-lambda int do_poll s32vector int s32vector int bool))
         (rfds      (list->s32vector (hash-table-keys *readfd-tab*)))
-        (wfds      (list->s32vector (hash-table-keys *writefd-tab*))))
+        (wfds      (list->s32vector (hash-table-keys *writefd-tab*)))
+        (flush     (lambda (vec ht)
+                     (let ((len (s32vector-length vec)))
+                       (let loop ((i 0))
+                         (or (fx>= i len)
+                             (let ((fd (s32vector-ref vec i)))
+                               (if (fx= fd -1)
+                                 (loop (fx+ i 1))
+                                 (let ((q  (hash-table-ref ht fd)))
+                                   (hash-table-delete! ht fd)
+                                   (let inner ((cont (queue-pop! q)))
+                                     (and cont (begin (pushcont! cont) (inner (queue-pop! q)))))
+                                   (loop (fx+ i 1)))))))))))
     (when (= 0 (+ (s32vector-length rfds) (s32vector-length wfds)))
       (fatal "deadlock"))
-    (let ((ret (%raw-poll rfds (s32vector-length rfds)
-                          wfds (s32vector-length wfds))))
-      (define (flush vec ht)
-        (let ((len (s32vector-length vec)))
-          (let loop ((i 0))
-            (or (fx>= i len)
-                (let ((fd (s32vector-ref vec i)))
-                  (if (fx= fd -1)
-                    (loop (fx+ i 1))
-                    (let ((q  (hash-table-ref ht fd)))
-                      (hash-table-delete! ht fd)
-                      (let inner ((cont (queue-pop! q)))
-                        (and cont (begin (pushcont! cont) (inner (queue-pop! q)))))
-                      (loop (fx+ i 1)))))))))
-      (cond
-        ((fx= 0 ret) (%poll-fds))
-        ((fx> 0 ret) (error "poll error:" (- ret)))
-        (else
-          (begin
-            (flush rfds *readfd-tab*)
-            (flush wfds *writefd-tab*)))))))
+    ;; first, do a non-blocking poll; if nothing is immediately ready,
+    ;; then perform a major GC and try again
+    (let again ((block #f))
+      ;; do_poll() doesn't modify the fd vectors if ret==0,
+      ;; so we can safely re-use them when no fds are ready
+      (let ((ret (%raw-poll rfds (s32vector-length rfds)
+                            wfds (s32vector-length wfds)
+                            block)))
+        (cond
+          ((fx= 0 ret) (begin (gc #t) (again #t)))
+          ((fx> 0 ret) (error "poll error:" (- ret)))
+          (else
+            (begin
+              (flush rfds *readfd-tab*)
+              (flush wfds *writefd-tab*))))))))
 
 ;; push a continuation onto the tail of the cont-queue
 (: pushcont! (procedure -> undefined))

@@ -19,6 +19,7 @@
     (distill eprint))
   (cond-expand
     (chicken (import
+               (only (chicken gc) gc)
                (chicken type)
                (chicken condition)
                (chicken foreign)
