@@ -239,10 +239,10 @@ EOF
                                   install)))))))
 
 (define skalibs
-  (let* ((version '2.9.1.0)
+  (let* ((version '2.9.2.0)
          (leaf    (remote-archive
                     (conc "https://skarnet.org/software/skalibs/skalibs-" version ".tar.gz")
-                    "FlrvgEOHU_UzTJDBjUrQ0HHLijHeqstC_QgCK-NE2yo=")))
+                    "s_kjqv340yaXpye_on0w-h8_PR0M6t8Agb4dPqAMWIs=")))
     (lambda (conf)
       (make-package
         label:  (conc "skalibs-" version "-" ($arch conf))
@@ -256,10 +256,10 @@ EOF
                     configure-args: (+= '(--with-sysdep-devurandom=yes))))))))
 
 (define execline-tools
-  (let* ((version '2.5.3.0)
+  (let* ((version '2.6.0.0)
          (leaf    (remote-archive
                     (conc "https://skarnet.org/software/execline/execline-" version ".tar.gz")
-                    "qoNVKJ4tBKdrzqlq10C5rqIsv3FDzeFa9umqs7EJOdM=")))
+                    "KLkA2uCEV2wf2sOEbSzdE7NAiJpolLFh6HrgohLAGFo=")))
     (lambda (conf)
       (make-package
         prebuilt: (maybe-prebuilt conf 'execline)
@@ -271,14 +271,15 @@ EOF
                     (conc "execline-" version)
                     (kwith
                       ($ska-build conf)
-                      configure-args: (+= `(,(conc "--with-sysdeps=" ($sysroot conf) "/lib/skalibs/sysdeps") --enable-static-libc))))))))
-
+                      configure-args: (+= `(,(conc "--with-sysdeps=" ($sysroot conf) "/lib/skalibs/sysdeps")
+                                             --enable-pedantic-posix
+                                             --enable-static-libc))))))))
 
 (define byacc
   (let* ((version '20191125)
          (leaf    (remote-archive
                     ;; XXX this isn't a stable tarball path;
-                    ;; this will fail when upstream changes
+                    ;; this will fail when upstream changes...
                     "https://invisible-island.net/datafiles/release/byacc.tar.gz"
                     "2r0VA-wLi8PcDpjnyON2pyyzqY7a7tdfApRBa-HfYbg=")))
     (lambda (conf)
@@ -384,7 +385,7 @@ EOF
                       pre-configure: (+= '((if ((sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c)))))))))))
 
 (define *binutils-version* '2.34)
-(define *gcc-version* '9.2.0)
+(define *gcc-version* '9.3.0)
 
 (define *binutils-src*
   (remote-archive
@@ -394,7 +395,7 @@ EOF
 (define *gcc-src*
   (remote-archive
     (conc "https://ftp.gnu.org/gnu/gcc/gcc-" *gcc-version* "/gcc-" *gcc-version* ".tar.gz")
-    "nzv8PqT49a1fkkQtn60mgKbxtcTl8Mazq0swhypLLRo="))
+    "Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="))
 
 (define (gcc-target-flags conf)
   (case ($arch conf)

@@ -8,10 +8,10 @@
   (only (chicken string) conc))
 
 (define ncurses
-  (let* ((version  '6.1-20200118)
+  (let* ((version  '6.2)
          (src      (remote-archive
-                     (conc "https://invisible-mirror.net/archives/ncurses/current/ncurses-" version ".tgz")
-                     "Xt6yJZFzVbsW3C9DrJFKxQjtkCLP1pRLc8fTiyHqKoI="))
+                     (conc "https://invisible-mirror.net/archives/ncurses/ncurses-" version ".tar.gz")
+                     "yMw83zJIGrC7h2uhSt_NgbUA2Rx8nn8gX6Wncy1NEek="))
          (cc-build (cc-env/build (lambda (kw)
                                    (string->keyword
                                      (string-append "BUILD_" (keyword->string kw)))))))
