@@ -1,33 +1,33 @@
 (foreign-declare #<<EOF
 #define _GNU_SOURCE
 #include <stdbool.h>
+#include <stdint.h>
 #include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/eventfd.h>
 #include <err.h>
-static int wchldpipe;
+static int chldfd;
 static void handle_sigchld(int sig)
 {
-    char buf[1];
+    int64_t val;
 
-    buf[0] = 'a';
-    write(wchldpipe, buf, 1);
+    val = 1;
+    write(chldfd, &val, sizeof(val));
 }
 static int sigchld_handler(void)
 {
     struct sigaction act;
-    int pipefd[2];
-
-    if (pipe2(pipefd, O_NONBLOCK|O_CLOEXEC) < 0) return -errno;
+    if ((chldfd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK)) < 0)
+        return -errno;
 
     act = (struct sigaction){
         .sa_handler = handle_sigchld,
         .sa_flags = SA_NOCLDSTOP,
     };
     if (sigaction(SIGCHLD, &act, NULL) < 0) return -errno;
-    wchldpipe = pipefd[1];
-    return pipefd[0];
+    return chldfd;
 }
 static int do_poll(int32_t *rfd, int nrfd, int32_t *wfd, int nwfd, bool block)
 {
@@ -270,7 +270,7 @@ EOF
                                       (%procexit box 'exn exn))))
                      (apply proc args)))))))
 
-;; %pid-poll reads a single byte from the pipe 'fd'
+;; %pid-poll reads from the chldfd eventfd
 ;; and then calls wait() repeatedly until there are no
 ;; child processes outstanding
 (define (%pid-poll fd)
@@ -281,22 +281,35 @@ EOF
                      (lambda (exn)
                        (otherwise))))
       (process-wait -1 #t)))
-  (let ((buf "a"))
-    (let loop ()
-      (begin
-        (fdread fd buf 1)
-        (let inner ()
-          (let-values (((pid ok status) (wait-all loop)))
-            (cond
-              ((= pid 0) (loop))
-              ((hash-table-ref/default *wait-tab* pid #f)
-               => (lambda (cont)
-                    (hash-table-delete! *wait-tab* pid)
-                    (pushcont! (lambda () (cont pid ok status)))
-                    (inner)))
-              (else
-                (info "warning: pid not registered?" pid)
-                (inner)))))))))
+  (let ((getcount (foreign-lambda* integer64 ((int fd))
+                    "int64_t out; C_return(read(fd,&out,8)==8 ? out : -(int64_t)errno);")))
+    (let loop ((n (getcount fd)))
+      (cond
+        ((> n 0) ;; happy case
+         (let-values (((pid ok status) (wait-all loop)))
+           (cond
+             ((= pid 0) (loop (getcount fd)))
+             ((hash-table-ref/default *wait-tab* pid #f)
+              => (lambda (cont)
+                   (hash-table-delete! *wait-tab* pid)
+                   (pushcont! (lambda () (cont pid ok status)))
+                   (loop (- n 1))))
+             (else
+               (info "warning: pid not registered?" pid)
+               (loop (- n 1))))))
+        ((or (= n 0) (= n (- eintr)))
+         (loop (getcount fd)))
+        ((= n (- eagain))
+         (begin
+           (queue-wait!
+             (hash-table-update!/default
+               *readfd-tab*
+               fd
+               identity
+               (cons '() '())))
+           (loop (getcount fd))))
+        (else
+          (error "fatal errno from read(eventfd):" n))))))
 
 (: %poll (-> undefined))
 (define (%poll)

@@ -588,31 +588,23 @@
         (apply
           sandbox-run
           root
-          (append
-            (list
-              "/bin/emptyenv"
-              "/bin/envfile" "/env"
-              ;; close stdin and redirect stdin+stderr to a log file
-              ;; (otherwise builds just get really noisy in the terminal)
-              "redirfd" "-r" "0" "/dev/null"
-              "redirfd" "-w" "1" "/build.log"
-              "fdmove" "-c" "2" "1")
-            ;; we need to shuffle around the pipe fds to 6,7
-            ;; while taking care when the fds are (5,6) or (7,6) or whatever
-            (cond
-              ((= infd 6) '())
-              ((= outfd 6) (begin
-                             (set! outfd 7)
-                             (list
-                               "fdmove" "7" (number->string outfd)
-                               "fdmove" "6" (number->string infd))))
-              (else (list "fdmove" "6" (number->string infd))))
-            (if (= outfd 7)
-              '()
-              (list "fdmove" "7" (number->string outfd)))
-            (list
-              "export" "MAKEFLAGS" "--jobserver-auth=6,7"
-              "/build"))))
+          (list
+            "/bin/emptyenv"
+            "/bin/envfile" "/env"
+            ;; close stdin and redirect stdin+stderr to a log file
+            ;; (otherwise builds just get really noisy in the terminal)
+            "redirfd" "-r" "0" "/dev/null"
+            "redirfd" "-w" "1" "/build.log"
+            "fdmove" "-c" "2" "1"
+            ;; TODO: seriously broken build scripts
+            ;; may not be reproducible if the environment
+            ;; is not 100% identical...
+            "export" "MAKEFLAGS" (string-append
+                                   "--jobserver-auth="
+                                   (number->string infd)
+                                   ","
+                                   (number->string outfd))
+            "/build")))
 
       ;; save the compressed build log independently
       ;; (it's not 'reproduced' as such) and delete
