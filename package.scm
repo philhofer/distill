@@ -422,8 +422,7 @@
 
 ;; generator for an execline sequence that strips binaries
 (define (strip-binaries-script triple)
-  (execline*
-    (forbacktickx file ((find /out -type f -perm -o+x)))
+  `((forbacktickx file ((find /out -type f -perm -o+x)))
     (importas "-i" -u file file)
     (backtick prefix ((head -c4 $file)))
     (importas "-i" -u prefix prefix)
@@ -514,8 +513,7 @@
       (unless (gnu? v)
         (error "gnu-recipe called on non-<gnu-build> object:" v))
       (make-recipe
-        script: (execline*
-                  (cd ,dir)
+        script: `((cd ,dir)
                   ,@($pre-configure v)
                   ,@(exports->script ($exports v))
                   ,@(if ($out-of-tree v)
@@ -569,8 +567,7 @@
         (error "ska-recipe given a non-<ska-build> object:" bld))
       (make-recipe
         script:
-        (execline*
-          (cd ,dir)
+        `((cd ,dir)
           ,@(exports->script ($exports bld))
           ;; don't let the configure script override our CFLAGS selections
           (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))

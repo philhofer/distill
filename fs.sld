@@ -16,8 +16,7 @@
     (only (distill linux) linux-headers)
     (only (distill image) zstd)
     (distill kvector)
-    (distill sequence)
-    (distill execline))
+    (distill sequence))
   (cond-expand
     (chicken (import
                (only (chicken base) include error foldl)

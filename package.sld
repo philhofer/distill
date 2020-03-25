@@ -7,10 +7,10 @@
     (srfi 69) ;; make-hash-table, etc
     (distill memo)
     (distill eprint)
-    (distill execline)
     (distill contract)
     (distill kvector)
     (distill filepath)
+    (distill execline)
     (distill plan))
   (cond-expand
     (chicken (import

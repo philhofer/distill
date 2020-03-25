@@ -102,8 +102,7 @@
                          (cc-for-target conf))
           inputs: (list linux-headers iptables libmnl libelf zlib musl libssp-nonshared)
           build:  (make-recipe
-                    script: (execline*
-                              (cd ,(conc "iproute2-" version))
+                    script: `((cd ,(conc "iproute2-" version))
                               (if ((cp /src/config.mk config.mk)))
                               ,@(script-apply-patches (list patch0 patch1))
                               (if ((sed "-i" -e "/^SUBDIRS/s: netem::" Makefile)))
@@ -120,11 +119,9 @@
     name:   'net.lo
     inputs: (list iproute2)
     spec:   (oneshot*
-              up:   (execline*
-                      (fdmove -c 2 1)
+              up:   `((fdmove -c 2 1)
                       (ip link set dev lo up))
-              down: (execline*
-                      (fdmove -c 2 1)
+              down: `((fdmove -c 2 1)
                       (foreground ((ip link set dev lo down)))
                       (true)))))
 
@@ -148,16 +145,14 @@
     inputs: (list iproute2)
     after:  (as list? after)
     spec:   (oneshot*
-              up:   (execline*
-                      (fdmove -c 2 1)
+              up:   `((fdmove -c 2 1)
                       ,@(map
                           (lambda (addr)
                             `(ip address add ,addr dev ,name))
                           addrs)
                       ,@(el-null-or pre-up)
                       ,@(el-end-or `(ip link set dev ,name up) post-up))
-              down: (execline*
-                      (fdmove -c 2 1)
+              down: `((fdmove -c 2 1)
                       ,@(el-null-or pre-down)
                       ,@(el-end-or `(ip link set dev ,name down) post-down)))))
 

@@ -12,30 +12,9 @@
 
 (define conf "/etc/sysctl.conf")
 
-(let ((got (exexpr->string
-	     (exec-begin
-	       (make -j4)
-	       (make install))))
-      (want #<<EOF
-#!/bin/execlineb -P
-if {
-	make -j4
-}
-make install
-
-EOF
-))
-  (unless (equal? got want)
-    (display "got:\n")
-    (display got)
-    (display "\nwant:\n")
-    (display want)
-    (newline)))
-
 (define
   script
-  (execline*
-    ;; test string quoting when spaces are present
+  `(;; test string quoting when spaces are present
     (if ((sed -e s/foo/bar/g "s/foo = bar/bar = foo/g" file)))
     (ifelse ((echo #u8(127 69 76 70)))
             ((echo "echo failed")))

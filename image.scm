@@ -38,8 +38,7 @@
                               -pf "/src/pseudo"
                               -comp ,compress)))
                  (make-recipe
-                   script: (execline*
-                             (mksquashfs ,($sysroot conf) ,(conc "/out/" out-img) ,@opts))))))))
+                   script: `((mksquashfs ,($sysroot conf) ,(conc "/out/" out-img) ,@opts))))))))
 
 (define (initramfs inputs #!key (chown '()) (compress 'zstd))
   (unless (null? chown)
@@ -56,8 +55,7 @@
                                   ((zstd) '((zstd - -o /out/initramfs.zst)))
                                   (else (error "unrecognized compressor" compress)))))
                 (make-recipe
-                  script: (execline*
-                            (cd ,($sysroot conf))
+                  script: `((cd ,($sysroot conf))
                             ;; set mtime to 0, since bsdtar(1)
                             ;; does not have an option to override it
                             (if ((find "." -mindepth 1
@@ -91,8 +89,7 @@
         tools:  (cc-for-target conf)
         inputs: (list zstd lz4 xz-utils zlib musl libssp-nonshared)
         build:  (make-recipe
-                  script: (execline*
-                            (cd ,(conc "squashfs-tools-" version "/squashfs-tools"))
+                  script: `((cd ,(conc "squashfs-tools-" version "/squashfs-tools"))
                             ;; can't set CFLAGS= in the make invocation
                             ;; because the Makefile is clever and toggles
                             ;; a bunch of additional -DXXX flags based on configuration
@@ -115,8 +112,7 @@
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
         build:  (make-recipe
-                  script: (execline*
-                            (cd ,(conc "lz4-" version))
+                  script: `((cd ,(conc "lz4-" version))
                             (if ((make DESTDIR=/out PREFIX=/usr
                                        ,@(kvargs ($cc-env conf))
                                        ,@(kvargs ($make-overrides conf))
@@ -149,8 +145,7 @@
                              ZSTD_LEGACY_SUPPORT: 0
                              ZSTD_LIB_DEPRECATED: 0))))
           (make-recipe
-            script: (execline*
-                      (cd ,(conc "zstd-" version))
+            script: `((cd ,(conc "zstd-" version))
                       (if ((cd lib/)
                            (make PREFIX=/usr DESTDIR=/out
                                  ,@makeflags install-static install-includes)))
@@ -191,8 +186,7 @@
                   (conc "libressl-" version)
                   (kwith
                     ($gnu-build conf)
-                    post-install: (+= (execline*
-                                        (if ((ln -s openssl /out/usr/bin/libressl)))))))))))
+                    post-install: (+= `((if ((ln -s openssl /out/usr/bin/libressl)))))))))))
 
 (define xz-utils
   (let* ((version '5.2.4)

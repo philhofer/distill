@@ -32,8 +32,8 @@
     (distill unix)
     (distill linux)
     (distill sequence)
-    (distill filepath)
-    (distill execline))
+    (distill execline)
+    (distill filepath))
   (cond-expand
     (chicken (import
                (chicken type)

@@ -1,9 +1,7 @@
 (define-library (distill execline)
   (export
     write-exexpr
-    execline-shebang
-    exec-begin
-    execline*)
+    execline-shebang)
   (import
     scheme
     (srfi 4)

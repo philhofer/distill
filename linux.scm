@@ -38,8 +38,7 @@
                         (native-toolchain))
         inputs: '()
         build:  (make-recipe
-                  script: (execline*
-                            (cd ,(conc "linux-" *major*))
+                  script: `((cd ,(conc "linux-" *major*))
                             (if ((pipeline ((xzcat /src/linux.patch)))
                                  (patch -p1)))
                             (if ((make ,(conc 'ARCH= (arch-name ($arch conf)))
@@ -171,8 +170,7 @@ EOF
                                     ARCH: (arch-dir-name ($arch conf))
                                     HOST_LIBELF_LIBS: '(-lelf -lz)))))
                  (make-recipe
-                   script: (execline*
-                             (cd ,(conc "linux-" *major*))
+                   script: `((cd ,(conc "linux-" *major*))
                              (if ((pipeline ((xzcat /src/linux.patch)))
                                   (patch -p1)))
                              ,@(script-apply-patches patches)
@@ -220,12 +218,11 @@ EOF
                       (cc     ($CC conf)))
                   (make-recipe
                     ;; ALLLLRIGHTY THEN, here's what happening here...
-                    ;; elfutils depends on a ton of arcane dependencies
-                    ;; that I don't want to pull in just to make linux happy,
-                    ;; so I'm manually building *just* libelf.a and headers
-                    ;; without going through the upstream autoconf nonsense
-                    script: (execline*
-                              (cd ,(conc "elfutils-" version))
+                    ;; elfultils' configure script is utterly broken
+                    ;; and also requires a bunch of libraries that
+                    ;; I don't want to package, so we're just building
+                    ;; libelf.a manually and ignoring everything else
+                    script: `((cd ,(conc "elfutils-" version))
                               (if ((cp /src/config.h config.h)))
                               (if ((find lib/ libelf/ -type f -name "*.[ch]"
                                          -exec sed "-i"
@@ -261,7 +258,10 @@ EOF
     (lambda (conf)
       ;; TODO: really, this test should be even tighter:
       ;; you can't build perl on a machine that can't run
-      ;; the perl executable produced using $CC
+      ;; the perl executable produced using $CC, which
+      ;; means that i686/x86_64 builds and ppc{32,64}{,le}
+      ;; builds may or may not work, depending on how
+      ;; the kernel is configured...
       (unless (eq? ($arch conf) *this-machine*)
         (fatal "one does not simply cross-compile perl; please read the comment(s) in perl.scm"))
       (make-package
@@ -296,8 +296,7 @@ EOF
                      (BUILD_BZIP2 . 0)
                      (BZIP2_LIB . ,(filepath-join ($sysroot conf) "/usr/lib"))
                      (BZIP2_INCLUDE . ,(filepath-join ($sysroot conf) "/usr/include")))
-            script: (execline*
-                      (cd ,(conc "perl-" version))
+            script: `((cd ,(conc "perl-" version))
                       (if ((./Configure -des ,@configure-flags)))
                       (if ((make ,@(kvargs ($make-overrides conf)))))
                       (if ((make DESTDIR=/out install)))

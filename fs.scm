@@ -5,13 +5,11 @@
     inputs: '()
     after:  (list dev)
     spec:   (oneshot*
-              up:   (execline*
-                      ;; TODO: detect swap and don't mkswap
+              up:   `(;; TODO: detect swap and don't mkswap
                       (fdmove -c 2 1)
                       (foreground ((mkswap ,dev)))
                       (swapon ,dev))
-              down: (execline*
-                      (fdmove -c 2 1)
+              down: `((fdmove -c 2 1)
                       (foreground ((swapoff ,dev)))
                       (true)))))
 
@@ -30,8 +28,7 @@
       inputs: (list e2fsprogs)
       after:  (list dev)
       spec:   (oneshot*
-                up: (execline*
-                      (fdmove -c 2 1)
+                up: `((fdmove -c 2 1)
                       (if ((test -b ,dev)))
                       ;; TODO: figure out a better way
                       ;; to determine if this device has actually
@@ -40,8 +37,7 @@
                            (foreground ((echo "fsck didn't work; running mkfs.ext4 on /var ...")))
                            (mkfs.ext4 ,@mkopts ,dev)))
                       (mount -t ext4 -o ,(join/s "," (list->seq opts)) ,dev /var))
-                down: (execline*
-                        (fdmove -c 2 1)
+                down: `((fdmove -c 2 1)
                         (foreground ((mount -o "ro,remount,noexec,nosuid" ,dev /var)))
                         (foreground ((sync)))
                         (foreground ((umount /var)))

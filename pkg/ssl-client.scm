@@ -10,8 +10,7 @@
         cc-for-target
         musl
         libssp-nonshared)
-  (only (distill image) libressl)
-  (distill execline))
+  (only (distill image) libressl))
 
 ;; TLS client for wget (shamelessly lifted from Alpine)
 (define ssl-client
@@ -26,8 +25,7 @@
       tools:  (cc-for-target conf)
       inputs: (list libressl musl libssp-nonshared)
       build:  (make-recipe
-                script: (execline*
-                          (cd /src)
+                script: `((cd /src)
                           (if ((,@($CC conf) ,@($CFLAGS conf) ssl_client.c -ltls -lssl -lcrypto -o ssl_client)))
                           (install -D -m "755" ssl_client /out/usr/bin/ssl_client))))))
 

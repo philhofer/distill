@@ -111,29 +111,6 @@
       (newline)))
   (dsp-execline expr))
 
-;; execline* is a macro that quasiquotes
-;; execline scripts as s-expressions
-;;
-;; The actual implementation of execline*
-;; is just (quasiquote ...), but the
-;; syntax-rules macro guarantees that
-;; we only match (lexically) valid scripts.
-(define-syntax execline*
-  ;; the implementation here is really just
-  ;; (quasiquote (args ...)), but we enforce
-  ;; that each argument have the form (cmd args* ...)
-  (syntax-rules ()
-    ((_ (cmd args* ...) ...)
-     (quasiquote ((cmd args* ...) ...)))))
-
-;; execline-begin wraps a series of execline expressions
-;; in if { } blocks so that they execute in sequence
-(define-syntax exec-begin
-  (syntax-rules ()
-    ((_ (cmd args* ...) ... (final fargs* ...))
-     (quasiquote
-       ((if ((cmd args* ...))) ... (final fargs* ...))))))
-
 ;; check-terminal checks the structure of an execline program
 ;; and determines whether or not each block consists of zero
 ;; or more non-terminal statements and finishes with one terminal

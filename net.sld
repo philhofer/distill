@@ -17,8 +17,7 @@
     (distill kvector)
     (distill service)
     (distill sequence)
-    (distill linux)
-    (distill execline))
+    (distill linux))
   (cond-expand
     (chicken (import
                (only (chicken base) include)

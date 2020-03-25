@@ -122,8 +122,7 @@
           tools:  (list busybox-core execline-tools s6 s6-rc)
           inputs: '()
           build:  (make-recipe
-                    script: (execline*
-                              (if ((mkdir -p "/out/etc/s6-rc")))
+                    script: `((if ((mkdir -p "/out/etc/s6-rc")))
                               (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services"))))))))
 
 (define s6
@@ -319,8 +318,7 @@
                            ((_ expr* ...)
                             (quasiquote
                               ((foreground (expr*)) ...))))))
-    (execline*
-      (export PATH "/usr/bin:/bin:/usr/sbin:/sbin")
+    `((export PATH "/usr/bin:/bin:/usr/sbin:/sbin")
       (export LC_ALL "C.UTF-8")
       (/bin/umask "022")
       ,@(fg*
@@ -415,8 +413,7 @@
                              (with-output-to-string
                                (lambda ()
                                  (write-exexpr
-                                   (execline*
-                                     (redirfd -w 2 /dev/console)
+                                   `((redirfd -w 2 /dev/console)
                                      (redirfd -r -n -b 0 fifo)
                                      (s6-setuidgid catchlog)
                                      (exec -c)

@@ -76,9 +76,8 @@
           tools: (list make execline-tools busybox-core)
           inputs: '()
           build: (make-recipe
-                    script: (execline*
-                               (cd ,(conc "musl-" *musl-version*))
-                               (make ,(conc "DESTDIR=/out/" ($sysroot target)) ,(conc "ARCH=" ($arch target)) "prefix=/usr" install-headers))))))))
+                    script: `((cd ,(conc "musl-" *musl-version*))
+                              (make ,(conc "DESTDIR=/out/" ($sysroot target)) ,(conc "ARCH=" ($arch target)) "prefix=/usr" install-headers))))))))
 
 (define musl
   (lambda (conf)
@@ -92,8 +91,7 @@
       inputs: '()
       build: (make-recipe
                ;; ./configure, but not autotools
-               script: (execline*
-                         (cd ,(conc "musl-" *musl-version*))
+               script: `((cd ,(conc "musl-" *musl-version*))
                          (if ((./configure --disable-shared --enable-static
                                            --prefix=/usr ,@(splat conf CC: CFLAGS:)
                                            --target ,($arch conf))))
@@ -112,8 +110,7 @@
 EOF
                          )
       build: (make-recipe
-               script: (execline*
-                         (cd ./src)
+               script: `((cd ./src)
                          (if ((,@($CC conf) ,@($CFLAGS conf) -c ssp-nonshared.c -o __stack_chk_fail_local.o)))
                          (if ((,($AR conf) -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
                          (if ((mkdir -p /out/usr/lib)))
@@ -235,8 +232,7 @@ EOF
         tools:  (cc-for-target conf)
         inputs: libc
         build:  (make-recipe
-                  script: (execline*
-                            (cd ,(conc "bzip2-" version))
+                  script: `((cd ,(conc "bzip2-" version))
                             (make PREFIX=/out/usr ;; no DESTDIR supported
                                   ,@(kvargs ($cc-env conf))
                                   ,@(kvargs ($make-overrides conf))
@@ -317,8 +313,7 @@ EOF
                      ;; install the lex(1)+flex(1) symlinks
                      post-install:
                      (+=
-                       (execline*
-                         (if ((ln -s reflex /out/usr/bin/lex)))
+                       `((if ((ln -s reflex /out/usr/bin/lex)))
                          (if ((ln -s reflex++ /out/usr/bin/lex++)))
                          (if ((ln -s reflex /out/usr/bin/flex)))
                          (if ((ln -s reflex++ /out/usr/bin/flex++)))))))))))
@@ -472,8 +467,7 @@ EOF
                                               ,(conc "--host=" host-triple)
                                               ,(conc "--with-sysroot=" ($sysroot target))))
                           post-install:
-                          (+= (execline*
-                                (if ((rm -rf /out/usr/include)))
+                          (+= `((if ((rm -rf /out/usr/include)))
                                 (if ((rm -rf /out/include)))
                                 (if ((rm -rf /out/usr/lib)))
                                 (if ((rm -rf /out/lib)))))))))))))
@@ -500,8 +494,7 @@ EOF
             inputs: '()
             build: (let* ((outdir (filepath-join "/out" ($sysroot target))))
                      (make-recipe
-                       script: (execline*
-                                 (cd ,(conc "fakemusl-" version))
+                       script: `((cd ,(conc "fakemusl-" version))
                                  (if ((make ,@(splat target AS: AR:) all)))
                                  (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install))))))))))
 
@@ -556,8 +549,7 @@ EOF
                                  '(gcc_cv_c_no_fpie . no)))
                   pre-configure: (+=
                                    (script-apply-patches patches)
-                                   (execline*
-                                     ;; some makefile templates don't set AR+ARFLAGS correctly;
+                                   `(;; some makefile templates don't set AR+ARFLAGS correctly;
                                      ;; just let them take the values from the environment
                                      (if ((find "." -name Makefile.in -exec sed "-i"
                                                 -e "/^AR = ar/d"
@@ -624,8 +616,7 @@ EOF
                     (native-toolchain-for conf))
           inputs: (append libc extra-inputs)
           build:  (make-recipe
-                    script: (execline*
-                              (cd ,(conc "busybox-" version))
+                    script: `((cd ,(conc "busybox-" version))
                               (export KCONFIG_NOTIMESTAMP 1)
                               ,@(script-apply-patches patches)
                               (if ((mv /src/config.head .config)))
