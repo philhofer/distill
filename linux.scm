@@ -263,7 +263,7 @@ EOF
       ;; builds may or may not work, depending on how
       ;; the kernel is configured...
       (unless (eq? ($arch conf) *this-machine*)
-        (fatal "one does not simply cross-compile perl; please read the comment(s) in perl.scm"))
+        (fatal "one does not simply cross-compile perl :("))
       (make-package
         label:  (conc "perl-" version "-" ($arch conf))
         src:    leaf
@@ -302,7 +302,6 @@ EOF
                       (if ((make DESTDIR=/out install)))
                       (if ((rm -rf /out/usr/share/man)))
                       (find /out -name ".*" -delete))))))))
-
 
 ;; busybox xxd doesn't recognize '-i'
 ;; but we can achieve a similar result

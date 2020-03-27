@@ -300,9 +300,15 @@
 ;; and converts them into a list of strings of the form keyword=value
 (: k=v* (keyword * #!rest * --> (list-of string)))
 (define (k=v* k v . rest)
-  (cons
-    (k=v k v)
-    (if (null? rest) '() (apply k=v* rest))))
+  (let loop ((k k)
+             (v v)
+             (rest rest))
+    (cons (k=v k v)
+          (if (null? rest)
+            '()
+            (let ((k  (car rest))
+                  (vp (cdr rest)))
+              (loop k (car vp) (cdr vp)))))))
 
 ;; kvargs takes a kvector
 ;; and produces a list of strings

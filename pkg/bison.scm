@@ -22,5 +22,4 @@
         inputs: (list musl libssp-nonshared)
         build:  (gnu-recipe
                   (conc "bison-" version)
-                  (kwith
-                    ($gnu-build conf)))))))
+                  ($gnu-build conf))))))
