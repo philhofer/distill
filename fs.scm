@@ -194,3 +194,32 @@ EOF
       (list (var-mount var-dev)
             kmsg)
       svcs)))
+
+;; ext2fs creates a package-lambda that
+;; takes everything in 'inputs' and produces
+;; an ext2 filesystem image (as a sparse file)
+(define (ext2fs name uuid size . inputs)
+  (lambda (conf)
+    (let* ((outfile '/fs.img)
+           (dst     (filepath-join '/out outfile)))
+      (make-package
+        raw-output: outfile
+        label: name
+        tools: (list busybox-core execline-tools e2fsprogs)
+        inputs: inputs
+        build: (make-recipe
+                 script: `((if ((truncate -s ,size ,dst)))
+                           ;; can't set this to zero, because mke2fs
+                           ;; uses expressions like
+                           ;;   x = fs->now ? fs->now : time(NULL);
+                           (export E2FSPROGS_FAKE_TIME 1585499935)
+                           (export MKE2FS_DETERMINISTIC 1)
+                           (mkfs.ext2 -d ,($sysroot conf)
+                                      -U ,uuid
+                                      ;; for determinism, use the
+                                      ;; uuid as the hash seed as well
+                                      -E ,(string-append
+                                            "hash_seed=" uuid)
+                                      -F -b 4096
+                                      ,dst)))))))
+

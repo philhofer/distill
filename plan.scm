@@ -1,3 +1,5 @@
+(foreign-declare "#include \"copy-sparse.c\"")
+
 ;; artifacts are just vectors
 ;;
 ;; note that artifact-extra must not contain
@@ -495,20 +497,24 @@
     res))
 
 ;; intern! interns a file into the artifact directory
-;; and returns its hash
-;; NOTE: the source file is deleted as part of this
-;; operation, since it is sometimes implemented as relink(2)
+;; and returns its hash;
+;; the interning operation may create a hardlink to
+;; the file, or it will copy the file while preserving
+;; holes in the file
 (: intern! (string -> string))
 (define (intern! fp)
-  (let ((h (hash-file fp)))
+  (let ((h           (hash-file fp))
+        (copy-sparse (foreign-lambda
+                       int "copy_file_sparse"
+                       nonnull-c-string nonnull-c-string)))
     (unless h (error "couldn't find file" fp))
     (let ((dst (filepath-join (artifact-dir) h)))
       (if (and (file-exists? dst) (equal? (hash-file dst) h))
+        (infoln "artifact reproduced:" (short-hash h))
         (begin
-          (infoln "artifact reproduced:" (short-hash h))
-          (delete-file fp))
-        (begin
-          (move-file fp dst #t 32768)
+          (let ((e (copy-sparse fp dst)))
+            (or (= e 0)
+                (error "copy_file_sparse: errno:" (- e))))
           ;; regardless of source file permissions,
           ;; artifacts should have 644 perms
           (set-file-permissions! dst #o644)))

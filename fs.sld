@@ -4,6 +4,7 @@
     swapon
     var-mount
     var-mounted-rw
+    ext2fs
     e2fsprogs)
   (import
     scheme
@@ -13,6 +14,7 @@
     (distill base)
     (distill package)
     (distill service)
+    (distill filepath)
     (only (distill linux) linux-headers)
     (only (distill image) zstd)
     (distill kvector)

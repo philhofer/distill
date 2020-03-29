@@ -3,7 +3,7 @@
 # earlier chickens do not know about the -M flag
 
 CSI:=csi-5.2
-CSC_FLAGS:=-O3 -disable-interrupts -clustering
+CSC_FLAGS:=-C -D_GNU_SOURCE -O3 -disable-interrupts -clustering
 CSC:=csc-5.2
 CSC_LIBFLAGS:=-setup-mode -D compiling-static-extension -static -J -M
 CHICKEN_DO:=chicken-do-5.2
@@ -26,6 +26,8 @@ Makefile.dep: $(wildcard *.sld) autodep.scm
 	$(CSI) -s autodep.scm > Makefile.dep
 
 include Makefile.dep
+
+distill.plan.o: copy-sparse.c
 
 # since chicken won't touch %.import.scm
 # unless a module's exports (or syntax) have changed,

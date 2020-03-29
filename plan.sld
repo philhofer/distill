@@ -36,7 +36,8 @@
         matchable
         (chicken fixnum)
         (chicken type) ;; type hints can be replaced with a no-op
-	(only (chicken file) file-exists? directory-exists? move-file copy-file create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
+        (chicken foreign)
+	(only (chicken file) file-exists? directory-exists? copy-file create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
 	(only (chicken file posix) file-permissions set-file-permissions! create-symbolic-link file-size)
         (only (chicken base) include error unless when flatten void current-error-port exit)
 	(only (chicken io) read-string write-string)
