@@ -1,9 +1,9 @@
-#define _GNU_SOURCE 1
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <assert.h>
+#include <stdbool.h>
 
 /* musl unistd.h does not define SEEK_DATA ... */
 #ifndef SEEK_DATA
@@ -14,11 +14,11 @@
 #define SEEK_HOLE 4
 #endif
 
-/* copy_file_sparse() either hardlinks 'from' to
+/* copy_file_sparse() either renames 'from' to
  * 'to,' or copies a sparse file and takes care
  * to preserve holes in the file */
 static int
-copy_file_sparse(const char *from, const char *to)
+copy_file_sparse(const char *from, const char *to, bool canrename)
 {
         /* a guess at filesystem block granularity */
         int fdfrom, fdto;
@@ -27,8 +27,8 @@ copy_file_sparse(const char *from, const char *to)
         off_t off, off2, end, sz;
         ssize_t ln;
 
-        /* easy case: just create a hard link */
-        if (link(from, to) == 0)
+        /* easy case: just rename */
+        if (canrename && rename(from, to) == 0)
                 return 0;
         fdfrom = open(from, O_RDONLY|O_CLOEXEC);
         if (fdfrom == -1)

@@ -1,6 +1,6 @@
 
 (define *major* 5.4)
-(define *patch* 27)
+(define *patch* 28)
 
 (define *linux-source*
   (list
@@ -9,7 +9,7 @@
       "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
     (remote-file
       (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" *major* "." *patch* ".xz")
-      "Md8P-smp6nx6QSwcvJpp4wNpolgr6I1I_a6QZUFbqws="
+      "17NPZlCjiaK9xOv8DnN_ctOypA5ur3cLNafcArF9gks="
       "/src/linux.patch"
       #o644)))
 

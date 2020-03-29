@@ -1,5 +1,16 @@
 (foreign-declare "#include \"copy-sparse.c\"")
 
+;; we have our own copy-file that preserves sparse files
+;; and can optimizes some copies into a rename(2)
+(: copy-file (string string boolean -> true))
+(define (copy-file src dst rename?)
+  (let* ((raw (foreign-lambda
+               int "copy_file_sparse"
+               nonnull-c-string nonnull-c-string bool))
+         (e   (raw src dst rename?)))
+    (or (= e 0)
+        (error "copy_file_sparse: errno" e))))
+
 ;; artifacts are just vectors
 ;;
 ;; note that artifact-extra must not contain
@@ -98,7 +109,7 @@
       (error "overlay file doesn't exist:" p))
     (let ((dst (filepath-join (artifact-dir) h)))
       (unless (file-exists? dst)
-        (copy-file p dst)))
+        (copy-file p dst #f)))
     (%artifact
       `#(file ,abspath ,(file-permissions p))
       h
@@ -450,7 +461,7 @@
           (else
             (error "unrecognized file content spec:" content))))
       (create-directory (dirname dstfile) #t)
-      (copy-file (filepath-join (artifact-dir) hash) dstfile)
+      (copy-file (filepath-join (artifact-dir) hash) dstfile #f)
       (set-file-permissions! dstfile mode)))
 
   (define (unpack-archive dst kind hash src)
@@ -498,23 +509,17 @@
 
 ;; intern! interns a file into the artifact directory
 ;; and returns its hash;
-;; the interning operation may create a hardlink to
-;; the file, or it will copy the file while preserving
-;; holes in the file
+;; the interning operation may rename the file,
+;; or it will copy the file while preserving holes
 (: intern! (string -> string))
 (define (intern! fp)
-  (let ((h           (hash-file fp))
-        (copy-sparse (foreign-lambda
-                       int "copy_file_sparse"
-                       nonnull-c-string nonnull-c-string)))
+  (let ((h (hash-file fp)))
     (unless h (error "couldn't find file" fp))
     (let ((dst (filepath-join (artifact-dir) h)))
       (if (and (file-exists? dst) (equal? (hash-file dst) h))
         (infoln "artifact reproduced:" (short-hash h))
         (begin
-          (let ((e (copy-sparse fp dst)))
-            (or (= e 0)
-                (error "copy_file_sparse: errno:" (- e))))
+          (copy-file fp dst #t)
           ;; regardless of source file permissions,
           ;; artifacts should have 644 perms
           (set-file-permissions! dst #o644)))
