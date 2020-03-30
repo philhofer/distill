@@ -120,6 +120,10 @@
 (define plan-dir (make-parameter "./plans"))
 (define artifact-dir (make-parameter "./artifacts"))
 
+(: artifact-path (vector -> string))
+(define (artifact-path art)
+  (filepath-join (artifact-dir) (artifact-hash art)))
+
 ;; plan is the lowest-level representation of a "package"
 ;; or other build step; it simply connects itself to other
 ;; inputs plus a recipe for producing the output

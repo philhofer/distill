@@ -119,4 +119,4 @@
     (parameterize ((program-name           (car args))
                    (command-line-arguments (cdr args))
                    (eval-handler           child-eval))
-      (%load (car args)))))
+      (for-each %load args))))

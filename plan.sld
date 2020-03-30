@@ -22,6 +22,7 @@
 
     short-hash
     artifact?
+    artifact-path
     artifact-hash
     artifact-format
     artifact-extra)

@@ -1,5 +1,5 @@
 (import
-  (scheme base)
+  scheme
   (srfi 69)
   (chicken type)
   (only (srfi 13) substring/shared)

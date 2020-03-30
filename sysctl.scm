@@ -62,14 +62,14 @@
                      (all     (rp_filter 1)
                               (accept_redirects 0)
                               (secure_redirects 1))))
-         (ipv6 all use_tempaddr 2))
+         (ipv6 conf all use_tempaddr 2))
     (fs (protected_hardlinks 1)
         (protected_fifos     1)
         (protected_symlinks  1))
     (kernel (yama ptrace_scope 2)
             (dmesg_restrict 1)
             (panic 10)
-            (panic_on_io_nmi 1)
+            (panic_on_io_nmi 1) ;; doesn't always exist
             (panic_on_oops 1))))
 
 (define (sysctls->string lst)

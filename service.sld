@@ -6,6 +6,7 @@
     busybox-full
     services->packages
     named*
+    service?
     make-service
     update-service
     longrun*
