@@ -3,22 +3,13 @@
 ;; and dd's each given artifact to the device's partitions
 ;; in sequence
 ;; (#f indicates the partition should be skipped)
-(define (write-dd-script lst)
-  (let ((script (let loop ((lst  lst)
-                           (n    1))
-                  (cond
-                    ((null? lst)
-                     `((sync "${1}")))
-                    ((not (car lst))
-                     (loop (cdr lst) (+ n 1)))
-                    (else
-                      (cons
-                        `(if ((dd ,(string-append "if=" (abspath (artifact-path (car lst))))
-                                  ,(string-append "of=${1}p" (number->string n)))))
-                        (loop (cdr lst) (+ n 1))))))))
-    (write-exexpr
-      script
-      shebang: "#!/bin/execlineb -s1")))
+(define (write-setparts-script lst)
+  (write-exexpr
+    `((setparts "${1}" ,@(map
+                           (lambda (x)
+                             (if x (abspath (artifact-path x)) "-"))
+                           lst)))
+    shebang: "#!/bin/execlineb -s1"))
 
 (define <system>
   (make-kvector-type
@@ -48,12 +39,19 @@
         ;; XXX need to dedup pkgs from svcs
         (plat (append (services->packages svcs) pkgs))))))
 
-;; uniq-dd-script produces a uniquely-named dd script
-(define (uniq-dd-script prefix parts)
+;; uniq-setparts-script produces a uniquely-named setparts script
+(define (uniq-setparts-script prefix parts)
+  ;; artifacts that become raw disk partitions
+  ;; should be raw files, not archives, symlinks, etc.
+  (for-each
+    (lambda (art)
+      (unless (eq? (artifact-kind art) 'file)
+        (info "warning: artifact" (short-hash (artifact-hash art)) "is of kind" (artifact-kind art))))
+    parts)
   (let* ((h (apply string-append (map artifact-hash parts)))
          (f (string-append prefix (substring h 0 10))))
     (info "writing final privileged script to" f)
     (with-output-to-file
       f
-      (lambda () (write-dd-script parts)))
+      (lambda () (write-setparts-script parts)))
     (set-file-permissions! f #o755)))

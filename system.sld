@@ -1,7 +1,7 @@
 (define-library (distill system)
   (export
     build-system
-    uniq-dd-script)
+    uniq-setparts-script)
   (import
     scheme
     (distill execline)
@@ -13,6 +13,6 @@
     (distill plan))
   (cond-expand
     (chicken (import
-               (only (chicken base) include)
+               (only (chicken base) unless include)
                (only (chicken file posix) set-file-permissions!))))
   (include "system.scm"))

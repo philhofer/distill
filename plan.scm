@@ -29,6 +29,10 @@
 (define (artifact-extra v)  (vector-ref v 2))
 (define (artifact? v) (and (vector? v) (= (vector-length v) 3)))
 
+(: artifact-kind (artifact -> symbol))
+(define (artifact-kind v)
+  (vector-ref (artifact-format v) 0))
+
 ;; short-hash is a 6-character hash prefix
 (define (short-hash h)
   (substring/shared h 0 6))

@@ -86,7 +86,7 @@
 
 (define (mcbin-sdimage-platform conf kernel)
   (lambda (rootpkgs)
-    (uniq-dd-script
+    (uniq-setparts-script
       "mcbin-sdimage-"
       ((config->builder conf)
        atf-mcbin               ;; mmcblk1p1

@@ -19,8 +19,8 @@ UNITS:=distill.hash distill.nproc \
 	distill.net distill.kvector distill.contract
 
 
-.PHONY: test all
-all: distill ${UNITS:%=%.o}
+.PHONY: test all tools
+all: tools distill ${UNITS:%=%.o}
 
 Makefile.dep: $(wildcard *.sld) autodep.scm
 	$(CSI) -s autodep.scm > Makefile.dep
@@ -42,6 +42,9 @@ distill.plan.o: copy-sparse.c
 distill: distill.scm ${UNITS:%=%.o}
 	@echo "link $@"
 	@$(CSC) $(CSC_FLAGS) -setup-mode ${UNITS:%=-uses %} -m main -static -L -static-pie $< ${UNITS:%=%.o} -o $@
+
+tools:
+	+$(MAKE) -C tools/
 
 TESTS:=$(wildcard *-test.scm)
 test: distill $(TESTS)

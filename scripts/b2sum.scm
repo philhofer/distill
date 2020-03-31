@@ -16,3 +16,4 @@
                  (null? (cdr args))))
       (list "/proc/self/fd/0")
       args)))
+(exit 0)
