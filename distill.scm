@@ -24,22 +24,22 @@
 
 ;; we re-parameterize 'eval' so
 ;; we need to ensure that we're using the right
-;; procedure inside load-package, etc.
+;; procedure inside load-builtin, etc.
 (define real-eval (eval-handler))
 
-;; load-package loads a package with the given symbol
-;; from (search-dirs)/<sym>.scm, taking care to load
+;; load-builtin loads a module with the given symbol
+;; from (search-dirs)/<kind>/<sym>.scm, taking care to load
 ;; its dependencies in advance by walking the import table
-(define load-package
+(define load-builtin
   (let ((loaded (make-hash-table)))
-    (lambda (sym)
+    (lambda (kind sym)
       (or (hash-table-ref/default loaded sym #f)
           (begin
             (hash-table-set! loaded sym #t)
             (let ((file (let loop ((dirs (search-dirs)))
                           (if (null? dirs)
-                            (error "can't find pkg" sym)
-                            (let ((f (filepath-join (car dirs) "pkg" (string-append (symbol->string sym) ".scm"))))
+                            (error "can't find" kind sym)
+                            (let ((f (filepath-join (car dirs) kind (string-append (symbol->string sym) ".scm"))))
                               (if (file-exists? f) f (loop (cdr dirs)))))))
                   (read* (lambda ()
                            (let loop ((datum (read)))
@@ -52,16 +52,17 @@
               (with-input-from-file
                 file
                 (lambda ()
-                  (trace "load pkg:" file)
-                  (real-eval `(module (pkg ,sym)
+                  (real-eval `(module (,kind ,sym)
                                 (,sym)
                                 ,@(read*)))))))))))
 
 (define (scan-imports lst)
   (for-each
     (lambda (im)
-      (when (and (pair? im) (eq? (car im) 'pkg))
-        (load-package (cadr im))))
+      (and-let* ((_ (pair? im))
+                 (h (car im))
+                 (_ (memq h '(pkg svc plat))))
+        (load-builtin h (cadr im))))
     lst))
 
 (define (%load file)

@@ -1,5 +1,6 @@
 (import
   scheme
+  (only (chicken base) unless error)
   (only (chicken string) conc)
   (distill kvector)
   (distill base)
