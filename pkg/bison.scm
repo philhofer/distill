@@ -1,13 +1,11 @@
 (import
   scheme
-  (only (chicken load) require)
   (only (chicken string) conc)
   (distill plan)
   (distill package)
   (distill kvector)
-  (distill base)
   (distill execline)
-  (only (distill linux) perl))
+  (distill base))
 
 (define bison
   (let* ((version '3.5.2)

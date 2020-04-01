@@ -1,23 +1,12 @@
 (define-library (distill net)
   (export
     ;; services:
-    netif-loopback
-
-    ;; packages:
-    libmnl
-    libnftnl
-    iptables
-    iproute2)
+    netif-loopback)
   (import
     scheme
-    (distill plan)
-    (distill memo)
     (distill base)
-    (distill package)
     (distill kvector)
-    (distill service)
-    (distill sequence)
-    (distill linux))
+    (distill service))
   (cond-expand
     (chicken (import
                (only (chicken base) include)

@@ -52,26 +52,6 @@
                      (string-append str "." (symbol->string head)))))
             (else (error "malformed sysctl" lst))))))))
 
-;; a guess at some conservative sysctl defaults for headless systems
-(define *default-sysctls*
-  '((net (core bpf_jit_harden 2)
-         ;; note: these tcp sysctls apply to ipv6 as well
-         (ipv4 (tcp_syncookies 1)
-               (tcp_rfc1337 1)
-               (conf (default rp_filter 1)
-                     (all     (rp_filter 1)
-                              (accept_redirects 0)
-                              (secure_redirects 1))))
-         (ipv6 conf all use_tempaddr 2))
-    (fs (protected_hardlinks 1)
-        (protected_fifos     1)
-        (protected_symlinks  1))
-    (kernel (yama ptrace_scope 2)
-            (dmesg_restrict 1)
-            (panic 10)
-            (panic_on_io_nmi 1) ;; doesn't always exist
-            (panic_on_oops 1))))
-
 (define (sysctls->string lst)
   (lines/s (s/bind (list->seq lst)
                    (kompose (k/map sysctl->text) k/recur))))
@@ -93,6 +73,24 @@
                 up: `((fdmove -c 2 1)
                       (/sbin/sysctl -p ,file))))))
 
+;; generic hardening sysctls; suitable for most systems
 (define default-sysctls
-  (sysctl-service "sysctl.default" *default-sysctls*))
-
+  (sysctl-service
+    "sysctl.default"
+    '((net (core bpf_jit_harden 2)
+           ;; note: these tcp sysctls apply to ipv6 as well
+           (ipv4 (tcp_syncookies 1)
+                 (tcp_rfc1337 1)
+                 (conf (default rp_filter 1)
+                       (all     (rp_filter 1)
+                                (accept_redirects 0)
+                                (secure_redirects 1))))
+           (ipv6 conf all use_tempaddr 2))
+      (fs (protected_hardlinks 1)
+          (protected_fifos     1)
+          (protected_symlinks  1))
+      (kernel (yama ptrace_scope 2)
+              (dmesg_restrict 1)
+              (panic 10)
+              (panic_on_io_nmi 1) ;; doesn't always exist
+              (panic_on_oops 1)))))

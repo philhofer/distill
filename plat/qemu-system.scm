@@ -6,11 +6,11 @@
   (distill hash)
   (distill base)
   (distill plan)
+  (distill image)
   (distill package)
   (distill execline)
   (distill filepath)
-  (only (distill image) squashfs)
-  (only (distill linux) linux-virt-x86_64))
+  (pkg linux-virt-x86_64))
 
 (export qemu-x86_64-kvm)
 

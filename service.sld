@@ -31,7 +31,6 @@
     (distill package)
     (distill base)
     (distill unix)
-    (distill linux)
     (distill sequence)
     (distill execline)
     (distill filepath))

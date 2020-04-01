@@ -3,20 +3,15 @@
     kmsg
     swapon
     var-mount
-    var-mounted-rw
-    ext2fs
-    e2fsprogs)
+    var-mounted-rw)
   (import
     scheme
     (only (srfi 13) substring/shared)
     (srfi 88)
     (distill plan)
     (distill base)
-    (distill package)
     (distill service)
     (distill filepath)
-    (only (distill linux) linux-headers)
-    (only (distill image) zstd)
     (distill kvector)
     (distill sequence))
   (cond-expand

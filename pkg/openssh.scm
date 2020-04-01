@@ -4,8 +4,6 @@
   (distill package)
   (distill kvector)
   (distill base)
-  (only (distill linux) linux-headers)
-  (only (distill image) libressl)
   (only (chicken string) conc)
   (pkg libedit)
   (pkg ncurses))
@@ -22,7 +20,7 @@
                     #o644)))
     (lambda (conf)
       (make-package
-        label:  (conc "openssh-" ($arch conf))
+        label:  (conc "openssh-" version "-" ($arch conf))
         src:    (list src patch0)
         tools:  (cc-for-target conf)
         inputs: (list linux-headers libedit ncurses zlib libressl musl libssp-nonshared)

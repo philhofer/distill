@@ -125,66 +125,6 @@
                     script: `((if ((mkdir -p "/out/etc/s6-rc")))
                               (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services"))))))))
 
-(define s6
-  (let* ((version '2.9.0.1)
-         (src     (remote-archive
-                    (conc "https://skarnet.org/software/s6/s6-" version ".tar.gz")
-                    "uwnwdcxfc7i3LTjeNPcnouhShXzpMPIG0I2AbQfjL_I=")))
-    (lambda (conf)
-      (make-package
-        label:  (conc "s6-" ($arch conf))
-        src:    src
-        tools:  (cc-for-target conf)
-        inputs: (list skalibs execline-tools musl libssp-nonshared)
-        build:  (ska-recipe
-                  (conc "s6-" version)
-                  (kwith
-                    ($ska-build conf)
-                    configure-args: (+= `(,(conc '--with-sysdeps= ($sysroot conf) "/lib/skalibs/sysdeps")
-                                           --enable-static-libc))))))))
-(define s6-rc
-  (let* ((version '0.5.1.1)
-         (src     (remote-archive
-                    (conc "https://skarnet.org/software/s6-rc/s6-rc-" version ".tar.gz")
-                    "KCvqdFSKEUNPkHQuCBfs86zE9JvLrNHU2ZhEzLYY5RY=")))
-    (lambda (conf)
-      (make-package
-        label:  (conc "s6-rc-" version "-" ($arch conf))
-        src:    src
-        tools:  (cc-for-target conf)
-        inputs: (list s6 skalibs execline-tools musl libssp-nonshared)
-        build:  (ska-recipe
-                  (conc "s6-rc-" version)
-                  (kwith
-                    ($ska-build conf)
-                    configure-args: (+= `(,(conc '--with-sysdeps= ($sysroot conf) "/lib/skalibs/sysdeps")
-                                           --enable-static-libc))))))))
-
-;; hard(8) command; an alternative to busybox halt(8)/reboot(8)/poweroff(8)
-(define hard
-  (let* ((version '0.1)
-         (hash    "aVGnVsRk_al4CfeliyuIZsyj7LBG-GphmUM-BgHad7E=")
-         (src     (remote-archive
-                    (conc "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
-                    hash
-                    kind: 'tar.zst)))
-    (lambda (conf)
-      (make-package
-        label:  (conc "hard-" version "-" ($arch conf))
-        src:    src
-        tools:  (cc-for-target conf)
-        inputs: (list musl libssp-nonshared)
-        build:  (make-recipe
-                  script: `((cd ,(conc "hard-" version))
-                            (if ((make ,@(splat conf CC: CFLAGS: LDFLAGS:)
-                                       DESTDIR=/out install)))
-                            ,@(strip-binaries-script ($triple conf))))))))
-
-(define busybox-full
-  (busybox/config
-    "kHCLlhEuZrIcR3vjYENuNyI1a0eGB1B6APiyWjvkvok="
-    (list linux-headers)))
-
 (define <service>
   (make-kvector-type
     name:
@@ -427,4 +367,3 @@
           (interned-dir "/sys" #o555)
           (interned-dir "/boot" #o755)
           s6 s6-rc execline-tools busybox-full hard)))
-

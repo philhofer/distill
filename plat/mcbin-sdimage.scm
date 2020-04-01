@@ -5,14 +5,13 @@
   (distill kvector)
   (distill base)
   (distill plan)
-  (only (distill image) libressl squashfs)
   (distill service)
   (distill sysctl)
   (distill net)
   (distill package)
   (distill system)
-  (distill fs)
-  (distill linux))
+  (distill image)
+  (distill fs))
 
 ;; see include/configs/mvebu_armada-8k.h
 ;; in the u-boot source tree; these are

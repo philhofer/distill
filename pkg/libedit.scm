@@ -1,9 +1,9 @@
 (import
   scheme
+  (only (chicken string) conc)
   (distill plan)
   (distill package)
   (distill base)
-  (only (chicken string) conc)
   (pkg ncurses))
 
 (define libedit

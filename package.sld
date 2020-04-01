@@ -16,6 +16,8 @@
     (chicken (import
                (chicken type)
                (chicken keyword)
+               (chicken module)
+               (only (chicken syntax) define-for-syntax)
                (only (chicken string) conc)
                (only (chicken port)
                      with-output-to-string
@@ -30,7 +32,7 @@
     build-config
     default-config
     config->builder
-    
+
     package?
     make-package
     update-package

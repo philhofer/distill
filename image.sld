@@ -2,20 +2,15 @@
   (export
     squashfs
     initramfs
-    ;; packages:
-    xz-utils
-    lz4
-    zstd
-    squashfs-tools
-    libarchive
-    libressl)
+    ext2fs)
   (import
     scheme
     (distill kvector)
-    (distill base)
     (distill execline)
     (distill plan)
-    (distill package))
+    (distill package)
+    (distill filepath)
+    (distill base))
   (cond-expand
     (chicken (import
                (only (chicken base) include error unless)

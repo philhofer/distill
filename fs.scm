@@ -43,78 +43,6 @@
                         (foreground ((umount /var)))
                         (true))))))
 
-;; e2fsprogs is weird and uses BUILD_CC, BUILD_CFLAGS, etc.
-;; in order to indicate which CC to use for building tools
-(define buildcc-env
-  (cc-env/build
-    (lambda (kw)
-      (string->keyword
-        (string-append
-          "BUILD_"
-          (keyword->string kw))))))
-
-;; mke2fs -d <dir> does not have a way
-;; to bypass timestamps and override uid/gid,
-;; so this hacks in a way to at least ensure
-;; that those fields get zeroed...
-(define mke2fs-repro-patch #<<EOF
---- a/misc/create_inode.c
-+++ b/misc/create_inode.c
-@@ -17,6 +17,7 @@
- #include <time.h>
- #include <sys/stat.h>
- #include <sys/types.h>
-+#include <stdlib.h>
- #include <unistd.h>
- #include <limits.h> /* for PATH_MAX */
- #include <dirent.h> /* for scandir() and alphasort() */
-@@ -128,6 +129,16 @@
- 	inode.i_atime = st->st_atime;
- 	inode.i_mtime = st->st_mtime;
- 	inode.i_ctime = st->st_ctime;
-+
-+        if (getenv("MKE2FS_DETERMINISTIC")) {
-+                inode.i_uid = 0;
-+                ext2fs_set_i_uid_high(inode, 0);
-+                inode.i_gid = 0;
-+                ext2fs_set_i_gid_high(inode, 0);
-+                inode.i_atime = 0;
-+                inode.i_mtime = 0;
-+                inode.i_ctime = 0;
-+        }
-
- 	retval = ext2fs_write_inode(fs, ino, &inode);
- 	if (retval)
-EOF
-)
-
-(define e2fsprogs
-  (let* ((version '1.45.5)
-         (src     (remote-archive
-                    (conc "https://kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v" version "/e2fsprogs-" version ".tar.xz")
-                    "w7R6x_QX6QpTEtnNihjwlHLBBtfo-r9RrWVjt9Nc818="))
-         (patches (patch* mke2fs-repro-patch)))
-    (lambda (conf)
-      (make-package
-        label:  (conc "e2fsprogs-" version "-" ($arch conf))
-        src:    (cons src patches)
-        tools:  (append (cc-for-target conf)
-                        (native-toolchain-for conf))
-        inputs: (list linux-headers musl libssp-nonshared)
-        build:  (gnu-recipe
-                  (conc "e2fsprogs-" version)
-                  (kwith
-                    ($gnu-build conf)
-                    pre-configure: (+= (script-apply-patches patches))
-                    configure-args: (+=
-                                      `(--enable-symlink-install
-                                         --enable-libuuid
-                                         --enable-libblkid
-                                         --disable-uuidd
-                                         --disable-fsck
-                                         ,@(kvargs buildcc-env)))
-                    install-flags: (:= '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))))))
-
 ;; kmsg is a super lightweight syslogd-style service
 ;; that reads logs from /dev/kmsg and stores them in
 ;; /var/log/services/kmsg, taking care to compress
@@ -194,32 +122,4 @@ EOF
       (list (var-mount var-dev)
             kmsg)
       svcs)))
-
-;; ext2fs creates a package-lambda that
-;; takes everything in 'inputs' and produces
-;; an ext2 filesystem image (as a sparse file)
-(define (ext2fs name uuid size . inputs)
-  (lambda (conf)
-    (let* ((outfile '/fs.img)
-           (dst     (filepath-join '/out outfile)))
-      (make-package
-        raw-output: outfile
-        label: name
-        tools: (list busybox-core execline-tools e2fsprogs)
-        inputs: inputs
-        build: (make-recipe
-                 script: `((if ((truncate -s ,size ,dst)))
-                           ;; can't set this to zero, because mke2fs
-                           ;; uses expressions like
-                           ;;   x = fs->now ? fs->now : time(NULL);
-                           (export E2FSPROGS_FAKE_TIME 1585499935)
-                           (export MKE2FS_DETERMINISTIC 1)
-                           (mkfs.ext2 -d ,($sysroot conf)
-                                      -U ,uuid
-                                      ;; for determinism, use the
-                                      ;; uuid as the hash seed as well
-                                      -E ,(string-append
-                                            "hash_seed=" uuid)
-                                      -F -b 4096
-                                      ,dst)))))))
 

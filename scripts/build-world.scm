@@ -4,11 +4,6 @@
   (distill package)
   (distill filepath)
   (distill base)
-  (distill image)
-  (distill linux)
-  (distill service)
-  (distill fs)
-  (distill net)
   (chicken file)
   (chicken process-context)
   (only (srfi 13) substring/shared))
@@ -89,8 +84,7 @@
       libnftnl
       iptables
       iproute2
-      (perl              (eq? ($arch conf) *this-machine*))
-      (linux-virt-x86_64 (eq? ($arch conf) 'x86_64)))))
+      (perl (eq? ($arch conf) *this-machine*)))))
 
 (let* ((config  (let ((args (command-line-arguments)))
                   (if (null? args)
@@ -111,3 +105,4 @@
       (newline))
     (map car all)
     outputs))
+(exit 0)

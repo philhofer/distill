@@ -1,16 +1,12 @@
 (import
   scheme
+  (distill base)
   (only (distill package)
         make-package
         make-recipe
         $arch $CC $CFLAGS)
   (only (distill plan) remote-file)
-  (only (chicken string) conc)
-  (only (distill base)
-        cc-for-target
-        musl
-        libssp-nonshared)
-  (only (distill image) libressl))
+  (only (chicken string) conc))
 
 ;; TLS client for wget (shamelessly lifted from Alpine)
 (define ssl-client
