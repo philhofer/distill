@@ -1,5 +1,10 @@
 #include <assert.h>
-#include <stdio.h>
+#include <limits.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "blake2.h"
 
 /* convert a 32-byte hash into a 44-byte printable string
@@ -28,41 +33,41 @@ hash_to_base64(unsigned char *restrict dst, const unsigned char *restrict src)
 	dst[43] = '=';
 }
 
-static inline void
-simple_hash(unsigned char *restrict dst, const unsigned char *restrict src, size_t len)
-{
-	unsigned char hbuf[32];
-	int ret;
-
-	ret = blake2b(hbuf, sizeof(hbuf), src, len, NULL, 0);
-	assert(ret == 0);
-	hash_to_base64(dst, hbuf);
-}
-
+/* fast-path for file hashing */
 static inline int
-simple_hash_file(unsigned char *restrict dst, const char *fname)
+fast_hash_file(unsigned char *restrict dst, const char *fname)
 {
-	unsigned char dbuf[4096];
-	ssize_t rd, off;
+        unsigned char buf[32];
+        unsigned char *mem;
+        struct stat stbuf;
 	blake2b_state S;
-	int err;
-	FILE *f;
+	int err, fd;
 
-	if ((f = fopen(fname, "r")) == NULL)
-		return errno;
+        fd = open(fname, O_RDONLY|O_CLOEXEC);
+        if (fd < 0)
+                return errno;
 
-	err = blake2b_init(&S, 32);
-	assert(err == 0);
-	while ((rd = fread(dbuf, 1, sizeof(dbuf), f)) > 0) {
-		err = blake2b_update(&S, dbuf, rd);
-		assert(err == 0);
-	}
-	err = errno;
-	while(fclose(f) < 0 && errno == EINTR) ;
-	if (rd < 0)
-		return err;
-	err = blake2b_final(&S, dbuf, 32);
-	assert(err == 0);
-	hash_to_base64(dst, dbuf);
+        if (fstat(fd, &stbuf) < 0)
+                goto fail;
+
+        /* use slow fallback */
+        if (stbuf.st_rdev || stbuf.st_size > SSIZE_MAX) {
+                errno = EINVAL;
+                goto fail;
+        }
+
+        mem = mmap(NULL, (size_t)stbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if (mem == MAP_FAILED)
+                goto fail;
+
+        err = blake2b(buf, 32, mem, stbuf.st_size, NULL, 0);
+        assert(err == 0);
+	hash_to_base64(dst, buf);
+
+        while (munmap(mem, stbuf.st_size) < 0 && errno == EINTR) ;
 	return 0;
+fail:
+        err = errno;
+        while (close(fd) < 0 && errno == EINTR) ;
+        return err;
 }

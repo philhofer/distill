@@ -396,35 +396,42 @@
                         (cons ($sysroot host) (map ->input inputs)))))))))
 
 ;; default environment for recipes
+(: *default-env* (list-of pair))
 (define *default-env*
   '((PATH . "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin")
     (LC_ALL . "C.UTF-8")
     (SOURCE_DATE_EPOCH . "0")))
 
-(: real-env (vector --> (list-of pair)))
-(define (real-env r)
-  (append *default-env* (recipe-env r)))
-
-(: recipe-envfile (vector --> vector))
-(define (recipe-envfile r)
-  (let ((str (call-with-output-string
-               (lambda (oport)
-                 (for-each
-                   (lambda (pr)
-                     (display (car pr) oport)
-                     (display "=" oport)
-                     (display (cdr pr) oport)
-                     (newline oport))
-                   (real-env r))))))
-    (interned
-      "/env" #o644 str)))
+(: recipe-envfile (vector -> vector))
+(define recipe-envfile
+  ;; almost 100% of recipes do not
+  ;; need a custom entry environment,
+  ;; so we pre-compute the artifact
+  ;; for *default-env*
+  (let* ((tail   (lambda (env)
+                   (interned
+                     "/env" #o644
+                     (lambda ()
+                       (for-each
+                         (lambda (pr)
+                           (display (car pr))
+                           (display "=")
+                           (display (cdr pr))
+                           (newline))
+                         env)))))
+         (default (tail *default-env*)))
+    (lambda (r)
+      (let ((env (recipe-env r)))
+        (if (null? env)
+          default
+          (tail (append *default-env* env)))))))
 
 (: recipe-buildfile (vector -> vector))
 (define (recipe-buildfile r)
-  (let ((str (with-output-to-string
-               (lambda () (write-exexpr (recipe-script r))))))
-    (interned
-      "/build" #x744 str)))
+  (interned
+    "/build" #x744
+    (lambda ()
+      (write-exexpr (recipe-script r)))))
 
 ;; generator for an execline sequence that strips binaries
 (define (strip-binaries-script triple)

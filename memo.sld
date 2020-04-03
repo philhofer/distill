@@ -9,7 +9,6 @@
         (only (chicken base) include error)
         (chicken type))))
   (export
-    as
     cons*
     memoize-eq
     memoize-one-eq

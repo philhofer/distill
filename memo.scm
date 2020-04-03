@@ -6,33 +6,25 @@
     ((_ head next rest* ...)
      (cons head (cons* next rest* ...)))))
 
-(define-syntax as
-  (syntax-rules ()
-    ((_ pred? expr)
-     (let ((v expr))
-       (assert (pred? v))
-       v))))
-
-;; a sigil used for determining if we're stuck in a loop
-(define *bad* (list 'in-progress))
-
 ;; memoize a single-argument function
 ;;
 ;; TODO: something more efficient than an alist?
 (: memoize-eq (forall (a b) ((a -> b) -> (a -> b))))
-(define (memoize-eq proc)
-  (let ((results (make-hash-table test: eq? hash: eq?-hash)))
-    (lambda (arg)
-      (let ((res (hash-table-ref
-                   results arg
-                   (lambda ()
-                     (hash-table-set! results arg *bad*)
-                     (let ((out (proc arg)))
-                       (hash-table-set! results arg out)
-                       out)))))
-        (if (eq? res *bad*)
-          (error "cannot perform recursive memoization")
-          res)))))
+(define memoize-eq
+  (let ((bad (list 'in-progress)))
+    (lambda (proc)
+      (let ((results (make-hash-table test: eq? hash: eq?-hash)))
+        (lambda (arg)
+          (let ((res (hash-table-ref
+                       results arg
+                       (lambda ()
+                         (hash-table-set! results arg bad)
+                         (let ((out (proc arg)))
+                           (hash-table-set! results arg out)
+                           out)))))
+            (if (eq? res bad)
+              (error "cannot perform recursive memoization")
+              res)))))))
 
 ;; memoize-one-eq is like memoize-eq, but
 ;; it only caches the latest result

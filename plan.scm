@@ -85,24 +85,27 @@
     hash
     #f))
 
-(: interned (string integer string --> artifact))
+(: interned (string integer (or string procedure) -> artifact))
 (define (interned abspath mode contents)
-  (%artifact
-    `#(file ,abspath ,mode)
-    (hash-string contents)
-    (cons 'inline contents)))
+  (let ((kind `#(file ,abspath ,mode)))
+    (cond
+      ((string? contents)
+       (%artifact kind (hash-of contents) (cons 'inline contents)))
+      ((procedure? contents)
+       (%artifact kind (with-interned-output contents) #f))
+      (else (error "bad argument to plan#interned")))))
 
 (: interned-symlink (string string --> vector))
 (define (interned-symlink abspath lnk)
   (%artifact
     `#(symlink ,abspath ,lnk)
-    (hash-string lnk)
+    (hash-of lnk)
     #f))
 
 (define (interned-dir abspath mode)
   (%artifact
     `#(dir ,abspath ,mode)
-    (hash-string abspath)
+    (hash-of abspath)
     #f))
 
 (: overlay (string -> vector))
@@ -202,6 +205,27 @@
       (close-output-port p)
       s)))
 
+;; with-interned-output calls a thunk
+;; and interns everything written to
+;; current-output-port into the current
+;; artifact directory
+(: with-interned-output ((-> *) -> string))
+(define (with-interned-output thunk)
+  (let* ((h  (new-hasher))
+         (f  (create-temporary-file ".to-intern"))
+         (fp (open-output-file f))
+         (bp (make-broadcast-port (hasher->output-port h) fp)))
+    (parameterize ((current-output-port bp))
+      (thunk))
+    (close-output-port bp)
+    (close-output-port fp)
+    (let* ((hres (hash-finalize h))
+           (dst  (filepath-join (artifact-dir) hres)))
+      (or (file-exists? dst)
+          (copy-file f dst #t))
+      (delete-file* f)
+      hres)))
+
 ;; plan-resolved? returns whether or not
 ;; all of the inputs to this plan are resolved
 ;; (i.e. artifacts or plans with known outputs)
@@ -212,7 +236,11 @@
                 (plan-outputs in)))
           (input-seq p)))
 
-(define (%write-plan-inputs inputs out)
+;; canonicalize takes plan-inputs and
+;; produces those inputs in canonicalized form
+;; (used for calculating plan hashes)
+(: canonicalize (list -> (list-of vector)))
+(define (canonicalize inputs)
   ;; turn an input into an artifact unconditionally
   (define (->artifact in)
     (if (plan? in)
@@ -248,9 +276,8 @@
   ;; that way we can build old plans even if we don't
   ;; have the code that generated them (as long as
   ;; we have the original artifacts)
-  (let* ((inputs ((list->seq inputs) ((k/map pair->inseq) (k/recur cons)) '()))
-         (inputs (sort inputs art<?)))
-    (write inputs out)))
+  (let ((inputs ((list->seq inputs) ((k/map pair->inseq) (k/recur cons)) '())))
+    (sort inputs art<?)))
 
 ;; plan-hash returns the canonical hash of a plan,
 ;; or #f if any of its inputs have unknown outputs
@@ -258,16 +285,13 @@
 (define (plan-hash p)
   (or (plan-saved-hash p)
       (and (plan-resolved? p)
-           (let* ((str (call-with-output-string
-                         (cute
-                           %write-plan-inputs (plan-inputs p) <>)))
-                  (h   (hash-string str))
+           (let* ((h   (with-interned-output
+                         (lambda ()
+                           (write (canonicalize (plan-inputs p))))))
                   (dir (filepath-join (plan-dir) h))
-                  (ofd (string-append dir "/inputs.scm"))
                   (lfd (string-append dir "/label")))
-             (unless (file-exists? ofd)
+             (unless (file-exists? lfd)
                (create-directory dir #t)
-               (call-with-output-file ofd (cut write-string str #f <>))
                (call-with-output-file lfd (cute display (plan-name p) <>)))
              (plan-saved-hash-set! p h)
              h))))
@@ -774,7 +798,7 @@
                     (filepath-join (plan-dir) hash "label")
                     read-string))
          (vinput  (with-input-from-file
-                    (filepath-join (plan-dir) hash "inputs.scm")
+                    (filepath-join (artifact-dir) hash)
                     read))
          (voutput (let ((fp (filepath-join (plan-dir) hash "outputs.scm")))
                     (if (file-exists? fp)

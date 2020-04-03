@@ -38,7 +38,7 @@
            (arts (bld! kernel (squashfs rootpkgs)))
            (kern (car arts))
            (root (cadr arts))
-           (hash (hash-string (string-append (artifact-hash kern) (artifact-hash root))))
+           (hash (hash-of (artifact-hash kern) (artifact-hash root)))
            (file (conc "vm-" arch "-" (substring hash 0 10))))
       (with-output-to-file
         file

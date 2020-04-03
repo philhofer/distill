@@ -43,6 +43,7 @@
 	(only (chicken file posix) file-permissions set-file-permissions! create-symbolic-link file-size)
         (only (chicken base) include error unless when flatten void current-error-port exit)
 	(only (chicken io) read-string write-string)
+        (only (chicken port) make-broadcast-port)
         (only (chicken process-context) current-directory)
         (only (chicken condition) print-error-message)
 	(only (chicken process) process-run)
