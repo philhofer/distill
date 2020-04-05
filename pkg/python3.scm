@@ -32,7 +32,13 @@
                   (kwith ($gnu-build conf)
                          pre-configure: (+= '((export ac_cv_file__dev_ptmx yes)
                                               (export ac_cv_file__dev_ptc no)))
+                         ;; files in __pycache__ are not reproducible; remove them
+                         post-install: (+= '((if ((pipeline ((find /out -type d -name __pycache__ -print0)))
+                                                  (xargs "-0")
+                                                  (rm -rf)))))
                          configure-args: (+= '(--disable-rpath
+                                                --disable-test-modules
+                                                --disable-lib2to3
                                                 --enable-ipv6
                                                 --enable-optimizations=no
                                                 --with-computed-gotos

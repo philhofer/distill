@@ -11,9 +11,14 @@ static int chldfd;
 static void handle_sigchld(int sig)
 {
     int64_t val;
+    int rc;
 
     val = 1;
-    write(chldfd, &val, sizeof(val));
+    do {
+        rc = write(chldfd, &val, sizeof(val));
+    } while (rc < 0 && errno == EINTR);
+    /* terribly bad ... */
+    if (rc != sizeof(val)) err(1, "write(eventfd)");
 }
 static int sigchld_handler(void)
 {
@@ -191,7 +196,7 @@ EOF
                             wfds (s32vector-length wfds)
                             block)))
         (cond
-          ((fx= 0 ret) (begin (gc #t) (again #t)))
+          ((fx= 0 ret) (begin (gc #f) (again #t)))
           ((fx> 0 ret) (error "poll error:" (- ret)))
           (else
             (begin
@@ -339,3 +344,22 @@ EOF
     (if (<= err 0)
       (error "error registering SIGCHLD handler:" (- err))
       (spawn %pid-poll err))))
+
+;; push-exception-wrapper installs ((current-exception-handler) (wrap exn))
+;; as the current exception handler for the dynamic extent
+;; of (thunk)
+(define (push-exception-wrapper wrap thunk)
+  (let* ((old (current-exception-handler))
+         (new (lambda (exn)
+                (parameterize ((current-exception-handler old))
+                  (old (wrap exn))))))
+    (parameterize ((current-exception-handler new))
+      (thunk))))
+
+(define (with-cleanup done thunk)
+  (push-exception-wrapper
+    (lambda (exn) (done) exn)
+    (lambda ()
+      (let ((res (thunk)))
+        (done)
+        res))))

@@ -18,3 +18,4 @@
                 (artifact-hash out))
         (fatal "uh oh; got a new build hash:" (artifact-hash out)))
       (info "new (unsaved) output:" (artifact-hash out)))))
+(exit 0)

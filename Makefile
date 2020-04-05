@@ -14,7 +14,7 @@ UNITS:=distill.hash distill.nproc \
 	distill.plan distill.package distill.execline \
 	distill.filepath distill.eprint distill.memo \
 	distill.sequence distill.base distill.system \
-	distill.image distill.unix \
+	distill.image distill.unix distill.tai64 \
 	distill.service distill.sysctl distill.fs \
 	distill.net distill.kvector distill.contract
 

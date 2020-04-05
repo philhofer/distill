@@ -1,4 +1,3 @@
-(include "memo.mod.scm")
 (include "test-helpers.scm")
 
 (import

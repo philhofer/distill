@@ -9,6 +9,7 @@
              (c (assq ref (cdr c))))
     (cdr c)))
 
+
 (define (bootstrap-base!)
   (let* ((host   (build-config))
          (build! (config->builder host))
@@ -276,12 +277,12 @@ EOF
                                              --enable-static-libc))))))))
 
 (define byacc
-  (let* ((version '20191125)
+  (let* ((version '20200330)
          (leaf    (remote-archive
                     ;; XXX this isn't a stable tarball path;
                     ;; this will fail when upstream changes...
-                    "https://invisible-island.net/datafiles/release/byacc.tar.gz"
-                    "2r0VA-wLi8PcDpjnyON2pyyzqY7a7tdfApRBa-HfYbg=")))
+                    (conc "https://invisible-mirror.net/archives/byacc/byacc-" version ".tgz")
+                    "FTAMi_kKoQy3LVJS7qBVMo-rrgG5IlzUK10JGTUaq7c=")))
     (lambda (conf)
       (make-package
         label:  (conc "byacc-" version "-" ($arch conf))
@@ -299,7 +300,7 @@ EOF
 (define reflex
   (let* ((version '20191123)
          (leaf    (remote-archive
-                    "https://invisible-island.net/datafiles/release/reflex.tar.gz"
+                    (conc "https://invisible-mirror.net/archives/reflex/reflex-" version ".tgz")
                     "SsgYKYUlYwedhJWxTvBAO2hdfrAMJ8mNpFjuIveGpSo=")))
     (lambda (conf)
       (make-package
@@ -985,10 +986,17 @@ EOF
       ;; the kernel is configured...
       (unless (eq? ($arch conf) *this-machine*)
         (fatal "one does not simply cross-compile perl :("))
+      ;; a dummy date(1) binary
+      (define samedate
+        (interned "/bin/samedate" #o755
+                  (lambda ()
+                    (write-exexpr
+                      '((echo "Fri Apr 3 20:09:47 UTC 2020"))
+                      shebang: "#!/bin/execlineb -s0"))))
       (make-package
         label:  (conc "perl-" version "-" ($arch conf))
         src:    leaf
-        tools:  (cc-for-target conf)
+        tools:  (cons samedate (cc-for-target conf))
         inputs: (list zlib bzip2 musl libssp-nonshared)
         build:
         ;; yes, this is gross
@@ -1004,13 +1012,17 @@ EOF
                                      -Dnm:       ($NM conf)
                                      -Dranlib:   ($RANLIB conf)
                                      -Dsysroot:  ($sysroot conf))
+                                  ;; force reproducible date and uname:
+                                  -A "define:osname=linux"
+                                  -A "define:osvers=5.4.x"
+                                  -Dmyuname=distill-builder -Dcf_by=distill-builder
                                   -Dprefix=/usr -Dprivlib=/usr/share/perl5/core_perl
                                   -Darchlib=/usr/lib/perl5/core_perl -Dvendorprefix=/usr
                                   -Dvendorlib=/usr/share/perl5/vendor_perl -Dvendorarch=/usr/lib/perl5/vendor_perl
                                   -Duselargefiles -Dusethreads -Duseshrplib=false -Dd_semctl_semun
                                   -Dman1dir=/usr/share/man/man1 -Dman3dir=/usr/share/man/man3
                                   -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
-                                  -Dman1ext=1 -Dman3ext=3pm -Dcf_by=sysplan -Ud_csh -Uusedl -Dusenm
+                                  -Dman1ext=1 -Dman3ext=3pm -Ud_csh -Uusedl -Dusenm
                                   -Dusemallocwrap)))
           (make-recipe
             env:   `((BUILD_ZLIB . 0)
@@ -1018,6 +1030,8 @@ EOF
                      (BZIP2_LIB . ,(filepath-join ($sysroot conf) "/usr/lib"))
                      (BZIP2_INCLUDE . ,(filepath-join ($sysroot conf) "/usr/include")))
             script: `((cd ,(conc "perl-" version))
+                      ;; force date(1) output to be stable
+                      (if ((ln -sf /bin/samedate /bin/date)))
                       (if ((./Configure -des ,@configure-flags)))
                       (if ((make ,@(kvargs ($make-overrides conf)))))
                       (if ((make DESTDIR=/out install)))

@@ -39,9 +39,10 @@
         (chicken fixnum)
         (chicken type) ;; type hints can be replaced with a no-op
         (chicken foreign)
+        (only (chicken string) conc)
 	(only (chicken file) file-exists? directory-exists? create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
 	(only (chicken file posix) file-permissions set-file-permissions! create-symbolic-link file-size)
-        (only (chicken base) include error unless when flatten void current-error-port exit)
+        (only (chicken base) include error unless when flatten void current-error-port exit identity)
 	(only (chicken io) read-string write-string)
         (only (chicken port) make-broadcast-port)
         (only (chicken process-context) current-directory)
@@ -67,5 +68,6 @@
     (distill coroutine)
     (distill contract)
     (distill kvector)
+    (distill tai64)
     (distill hash))
   (include "plan.scm"))

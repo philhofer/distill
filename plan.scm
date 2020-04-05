@@ -292,7 +292,9 @@
                   (lfd (string-append dir "/label")))
              (unless (file-exists? lfd)
                (create-directory dir #t)
-               (call-with-output-file lfd (cute display (plan-name p) <>)))
+               (call-with-output-file
+                 lfd
+                 (cute display (string-append (plan-name p) "-" (short-hash h)) <>)))
              (plan-saved-hash-set! p h)
              h))))
 
@@ -352,12 +354,14 @@
 ;; during the dynamic extent of the thunk
 (: with-new-jobserver ((-> 'a) -> 'a))
 (define (with-new-jobserver thunk)
-  (let* ((js (fdpipe))
-         (res (parameterize ((current-jobserver js))
-                (thunk))))
-    (fdclose (car js))
-    (fdclose (cadr js))
-    res))
+  (let ((js (fdpipe)))
+    (with-cleanup
+      (lambda ()
+        (fdclose (car js))
+        (fdclose (cadr js)))
+      (lambda ()
+        (parameterize ((current-jobserver js))
+          (thunk))))))
 
 (: jobserver+ (fixnum -> *))
 (define (jobserver+ n)
@@ -379,17 +383,10 @@
 
 (: call-with-job ((-> 'a) -> 'a))
 (define (call-with-job proc)
-  (let ((throw (current-exception-handler)))
-    (jobserver- 1)
-    (let ((res
-            (parameterize ((current-exception-handler
-                             (lambda (exn)
-                               (current-exception-handler throw)
-                               (jobserver+ 1)
-                               (throw exn))))
-              (proc))))
-      (jobserver+ 1)
-      res)))
+  (jobserver- 1)
+  (with-cleanup
+    (lambda () (jobserver+ 1))
+    proc))
 
 ;; run a command inside a new virtual root 'root'
 ;; which is a directory populated like a root filesystem
@@ -426,11 +423,15 @@
     (infoln "fetching" url)
     (run "wget" "-q" "-O" tmp url)
     (let ((h (hash-file tmp)))
-      (if (string=? h hash)
-        (rename-file tmp dst #t)
-        (begin
-          (delete-file tmp)
-          (fatal "fetched artifact has the wrong hash:" h "not" hash))))))
+      (cond
+        ((not h)
+         (error "fetch failed? output file doesn't exist..."))
+        ((string=? h hash)
+         (rename-file tmp dst #t))
+        (else
+          (begin
+            (delete-file tmp)
+            (error "fetched artifact has the wrong hash" h "not" hash)))))))
 
 ;; plan-outputs-file is the file that stores the serialized
 ;; interned file information for a plan
@@ -533,11 +534,11 @@
 
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
 (define (with-tmpdir proc)
-  (let* ((dir (create-temporary-directory))
-         (_   (set-file-permissions! dir #o700))
-         (res (proc dir)))
-    (delete-directory dir #t)
-    res))
+  (let ((dir (create-temporary-directory)))
+    (set-file-permissions! dir #o700)
+    (with-cleanup
+      (lambda () (delete-directory dir #t))
+      (lambda () (proc dir)))))
 
 ;; intern! interns a file into the artifact directory
 ;; and returns its hash;
@@ -604,7 +605,6 @@
   (with-tmpdir
     (lambda (root)
       (define outdir (filepath-join root "out"))
-      (trace "building in root" root)
       (create-directory outdir #t)
       (for-each
         (lambda (p)
@@ -615,7 +615,7 @@
                   (if (plan? in)
                     (or
                       (begin
-                        (infoln "unpacking output of" (plan-name in))
+                        (infoln "unpacking" (plan-name in) (short-hash (plan-hash in)))
                         (plan-outputs in))
                       (fatal "unbuilt plan prerequisite:" (plan-name in)))
                     in)
@@ -628,49 +628,57 @@
       (let* ((pipefd (current-jobserver))
              (infd   (car pipefd))
              (outfd  (cadr pipefd)))
-        (apply
-          sandbox-run
-          root
-          (list
-            "/bin/emptyenv"
-            "/bin/envfile" "/env"
-            ;; close stdin and redirect stdin+stderr to a log file
-            ;; (otherwise builds just get really noisy in the terminal)
-            "redirfd" "-r" "0" "/dev/null"
-            "redirfd" "-w" "1" "/build.log"
-            "fdmove" "-c" "2" "1"
-            ;; TODO: seriously broken build scripts
-            ;; may not be reproducible if the environment
-            ;; is not 100% identical...
-            "export" "MAKEFLAGS" (string-append
-                                   "--jobserver-auth="
-                                   (number->string infd)
-                                   ","
-                                   (number->string outfd))
-            "/build")))
+        ;; if /build fails, put the build log
+        ;; into the current directory
+        (push-exception-wrapper
+          (lambda (exn)
+            (let ((logfile (filepath-join root "build.log"))
+                  (dst     (filepath-join (current-directory) (string-append (plan-name p) ".log"))))
+              (when (file-exists? logfile)
+                (copy-file logfile dst #t)
+                (infoln "build failed; please see" dst))
+            exn))
+          (lambda ()
+            (apply
+              sandbox-run
+              root
+              (list
+                "/bin/emptyenv"
+                "/bin/envfile" "/env"
+                ;; close stdin and redirect stdin+stderr to a log file
+                ;; (otherwise builds just get really noisy in the terminal)
+                "redirfd" "-r" "0" "/dev/null"
+                "redirfd" "-w" "1" "/build.log"
+                "fdmove" "-c" "2" "1"
+                ;; TODO: seriously broken build scripts
+                ;; may not be reproducible if the environment
+                ;; is not 100% identical...
+                "export" "MAKEFLAGS" (string-append
+                                       "--jobserver-auth="
+                                       (number->string infd)
+                                       ","
+                                       (number->string outfd))
+                "/build")))))
 
-      ;; save the compressed build log independently
-      ;; (it's not 'reproduced' as such) and delete
-      ;; the old log
+      ;; save the build log for posterity
       (let* ((pdir  (filepath-join (plan-dir) (plan-hash p)))
-             (ofile (filepath-join pdir "build.log.zst")))
-        ;; the zstd tool will complain if we reproduce an ouput,
-        ;; so only keep one build log at a time
-        (when (file-exists? ofile)
-          (delete-file* ofile))
+             (now   (tai64n-now))
+             (ofile (filepath-join pdir (string-append "build@" (tai64n->string now) ".log.zst"))))
         (create-directory pdir #t)
         (run "zstd"
              "-q"
              "--rm" (filepath-join root "build.log")
              "-o"   ofile))
+      ;; now save the actual build outputs
       (let ((raw (plan-raw-output p)))
         (if raw
           (file->artifact (filepath-join outdir raw) raw)
           (dir->artifact outdir))))))
 
-(: plan-built? (vector -> boolean))
+(: plan-built? (vector -> (or string false)))
 (define (plan-built? p)
-  (if (plan-outputs p) #t #f))
+  (and-let* ((art (plan-outputs p)))
+    (file-exists? (artifact-path art))))
 
 ;; k/unbuilt is a reducer-transformer
 ;; that yields only unbuilt plans to its reducer
@@ -700,9 +708,25 @@
        out))
    (void)))
 
+(define (loop-check lst)
+  (letrec ((check-one (lambda (p stk)
+                        (cond
+                          ((artifact? p)
+                           stk)
+                          ((memq p stk)
+                           (error "circular plan dependency" (plan-name p) (map plan-name stk)))
+                          (else
+                            ((input-seq p) check-one (cons p stk))
+                            stk)))))
+    (let ((check-top (lambda (p)
+                       (check-one p '()))))
+      (for-each check-top lst))))
+
 (: build-graph! ((list-of vector) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
-  (let* ((ht             (make-hash-table test: eq? hash: eq?-hash))
+  (loop-check lst)
+  (let* ((plan->proc     (make-hash-table test: eq? hash: eq?-hash))
+         (hash->plan     (make-hash-table test: string=? hash: string-hash))
          (err            #f)
          ;; join-dep takes a plan input and
          ;; waits for it to complete (if it is a plan),
@@ -710,56 +734,53 @@
          ;; or #f otherwise
          (join-dep       (lambda (in)
                            (cond
-                             ((hash-table-ref/default ht in #f)
-                              => (lambda (p)
-                                   (let ((ret (join/value p)))
-                                     (and (not err)
-                                          (if (eq? (proc-status p) 'exn)
-                                            (begin (set! err ret) #f)
-                                            #t)))))
-                             ((and (plan? in) (not (plan-built? in)))
-                              (error "input plan unbuild but not scheduled" (plan-name in)))
+                             ((plan? in)
+                              (or (plan-built? in)
+                                  (let* ((proc (hash-table-ref plan->proc in))
+                                         (ret  (join/value proc)))
+                                    (and (not err)
+                                         (if (eq? (proc-status proc) 'exn)
+                                           (begin (set! err ret) #f)
+                                           #t)))))
                              (else (not err)))))
-         ;; should-build? waits for all of the
-         ;; input plans for 'p' to be done building
-         ;; and then checks if we should really build
-         ;; (i.e. no error has been encountered and
-         ;; the plan is actually stale)
+         ;; only build a plan if we haven't seen its hash
+         ;; before in this graph; we can safely skip building
+         ;; "different" plans with the same hash; they are equivalent
+         (unique?        (lambda (p)
+                           (or (eq? p (hash-table-update!/default hash->plan (plan-hash p) identity p))
+                               (begin
+                                 (info "merging equivalent" (plan-name p) (short-hash (plan-hash p)))
+                                 #f))))
+         ;; only build plans if
+         ;;  1) all inputs are built
+         ;;  2) this plan doesn't have a known output already
+         ;;  3) another plan in this graph isn't equivalent to this one
+         ;;  4) no build errors have been encountered
          (should-build?  (lambda (p)
                            (and (all/s? join-dep (input-seq p))
-                                (not (plan-built? p))))))
-    ;; core build procedure:
-    ;; first, wait for inputs (dependencies) to complete,
-    ;; then either a) return, if there has been an error,
-    ;; or b) acquire a job from the jobserver and start running
+                                (not (plan-built? p))
+                                (unique? p)
+                                (not err)))))
     (define (build-one! p)
-      (let ((rethrow (current-exception-handler)))
-        ;; if this build encounters an error, catch it and re-throw
-        ;; with associated plan information (should aid debugging)
-        (parameterize ((info-prefix (string-append (plan-name p) " |"))
-                       (current-exception-handler (lambda (exn)
-                                                    (rethrow
-                                                      (plan-exn p exn)))))
-          (if (should-build? p)
-            ;; in the time spent waiting to acquire resources,
-            ;; another plan could have encountered an error, so
-            ;; this inner bit should become a no-op in that situation
-            (or err
-                (call-with-job
-                  (lambda ()
-                    (infoln "building")
-                    (save-plan-outputs! p (plan->outputs! p))
-                    (infoln "completed"))))
-            #t))))
+      (push-exception-wrapper
+        (lambda (exn)
+          (plan-exn p exn))
+        (lambda ()
+          (and (should-build? p)
+               (parameterize ((info-prefix (string-append (plan-name p) "-" (short-hash (plan-hash p)) " |")))
+                 (call-with-job
+                   (lambda ()
+                     (infoln "building")
+                     (save-plan-outputs! p (plan->outputs! p))
+                     (infoln "completed")))
+                 #t)))))
     ;; spawn a builder coroutine for each unbuilt package
     (with-new-jobserver
       (lambda ()
         (jobserver+ maxprocs)
         (for-each/unbuilt-dfs
           (lambda (p)
-            (when (hash-table-ref/default ht p #f)
-              (error "plan already present?" (plan-name p)))
-            (hash-table-set! ht p (spawn build-one! p)))
+            (hash-table-set! plan->proc p (spawn build-one! p)))
           lst)
         ;; wait for every coroutine to exit; the jobserver
         ;; must live at least this long
@@ -768,7 +789,7 @@
             (let ((ret (join/value p)))
               (if (eq? (proc-status p) 'exn)
                 (or err (set! err ret)))))
-          (hash-table-values ht))))
+          (hash-table-values plan->proc))))
     (if err (fatal-plan-failure err) #t)))
 
 ;; build-plan! unconditionally builds a plan
@@ -778,7 +799,7 @@
 (define (build-plan! top)
   (unless (plan-resolved? top)
     (error "called build-plan! on unresolved plan"))
-  (infoln "building" (plan-name top))
+  (infoln "building" (plan-name top) "-" (short-hash (plan-hash top)))
   (with-new-jobserver
     (lambda ()
       (let ((np (nproc)))

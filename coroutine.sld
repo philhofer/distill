@@ -1,5 +1,7 @@
 (define-library (distill coroutine)
   (export
+    push-exception-wrapper
+    with-cleanup
     process-wait/yield
     proc-status
     proc-return

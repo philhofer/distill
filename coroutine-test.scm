@@ -88,4 +88,14 @@
   (test eq? #t (join/value writer))
   (test eq? #t (join/value reader)))
 
+(test string=? "foobar" (call/cc
+                          (lambda (ret)
+                            (parameterize ((current-exception-handler ret))
+                              (push-exception-wrapper
+                                (lambda (exn)
+                                  (string-append "foo" exn))
+                                (lambda ()
+                                  (abort "bar")
+                                  #f))))))
+
 (display "test OK.\n")

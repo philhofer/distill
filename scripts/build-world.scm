@@ -1,6 +1,7 @@
 (import
   scheme
   (distill plan)
+  (distill eprint)
   (distill package)
   (distill filepath)
   (distill base)

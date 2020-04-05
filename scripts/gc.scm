@@ -11,7 +11,7 @@
 ;;  2) removes artifacts that aren't referenced by any plan
 
 (define (note-inputs f ht)
-  (let ((lst (with-input-from-file f read)))
+  (let ((lst (if (file-exists? f) (with-input-from-file f read) '())))
     (or (eof-object? lst)
         (for-each
           (lambda (vec)
@@ -29,20 +29,23 @@
 ;; walk every known plan and mark its inputs and outputs as live;
 ;; if the plan never produced outputs, it is dead (and can be pruned)
 (define live-artifacts
-  (find-files
-    (plan-dir)
-    limit:  0
-    seed:   (make-hash-table test: string=? hash: string-hash)
-    action: (lambda (dir ht)
-              (let ((ofile (filepath-join dir "outputs.scm")))
-                (if (file-exists? ofile)
-                  (begin
-                    (note-outputs ofile ht)
-                    (note-inputs (filepath-join dir "inputs.scm") ht))
-                  (begin
-                    (info "removing dead plan" dir)
-                    (delete-directory dir #t))))
-              ht)))
+  (let ((art-dir (artifact-dir)))
+    (find-files
+      (plan-dir)
+      limit:  0
+      seed:   (make-hash-table test: string=? hash: string-hash)
+      action: (lambda (dir ht)
+                (let ((ofile (filepath-join dir "outputs.scm")))
+                  (if (file-exists? ofile)
+                    (begin
+                      (note-outputs ofile ht)
+                      (note-inputs (or (file-exists? (filepath-join art-dir (basename dir)))
+                                       (filepath-join dir "inputs.scm")) ht))
+                    (begin
+                      (info "removing dead plan" dir)
+                      (delete-file* (filepath-join art-dir (basename dir)))
+                      (delete-directory dir #t))))
+                ht))))
 
 ;; walk every artifact and produce a list of those
 ;; not referenced by any plan
