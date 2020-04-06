@@ -10,6 +10,10 @@
   (pkg libexpat)
   (pkg python3))
 
+;; NOTE: git has run-time dependencies on perl and python;
+;; we don't have a way of expressing that yet...
+;; also, we can't cross-compile perl, so some features
+;; of git may not be available for a cross-compiled target...
 (define git
   (let* ((ver '2.26.0)
          (src (remote-archive
@@ -19,7 +23,7 @@
       (make-package
         label:  (conc "git-" ver "-" ($arch conf))
         src:    src
-        tools:  (append (list python3 perl tar) (cc-for-target conf))
+        tools:  (cons tar (cc-for-target conf))
         inputs: (list pcre2 zlib libexpat libressl musl libssp-nonshared)
         build:  (gnu-recipe
                   (conc "git-" ver)
@@ -37,4 +41,5 @@
                                            --with-libpcre2
                                            --without-tcltk
                                            --without-iconv
+                                           --with-perl=/usr/bin/perl
                                            --with-python=/usr/bin/python3))))))))
