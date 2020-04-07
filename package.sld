@@ -54,6 +54,7 @@
     $cc-env
     build-triple
     $CC
+    $CXX
     $AR
     $LD
     $NM

@@ -114,6 +114,8 @@
 
 (: $CC (vector --> list))
 (define $CC (kvector-getter <config> CC:))
+(: $CXX (vector --> list))
+(define $CXX (kvector-getter <config> CXX:))
 (: $AR (vector --> string))
 (define $AR (kvector-getter <config> AR:))
 (: $NM (vector --> string))
