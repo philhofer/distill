@@ -7,7 +7,9 @@
   (distill base)
   (chicken file)
   (chicken process-context)
-  (only (srfi 13) substring/shared))
+  (only (srfi 13) substring/shared)
+
+  (pkg chicken))
 
 (define (filter pred? lst)
   (if (null? lst)
@@ -85,6 +87,10 @@
       libnftnl
       iptables
       iproute2
+      matchable-egg
+      srfi-13-egg
+      srfi-14-egg
+      srfi-69-egg
       (perl (eq? ($arch conf) *this-machine*)))))
 
 (let* ((config  (let ((args (command-line-arguments)))

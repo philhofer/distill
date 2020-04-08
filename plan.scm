@@ -747,10 +747,13 @@
          ;; before in this graph; we can safely skip building
          ;; "different" plans with the same hash; they are equivalent
          (unique?        (lambda (p)
-                           (or (eq? p (hash-table-update!/default hash->plan (plan-hash p) identity p))
-                               (begin
-                                 (info "merging equivalent" (plan-name p) (short-hash (plan-hash p)))
-                                 #f))))
+                           (let ((winner (hash-table-update!/default hash->plan (plan-hash p) identity p)))
+                             (or (eq? p winner)
+                                 (begin
+                                   ;; just wait for the equivalent plan to finish building
+                                   (info "merging equivalent" (plan-name p) (short-hash (plan-hash p)))
+                                   (join-dep winner)
+                                   #f)))))
          ;; only build plans if
          ;;  1) all inputs are built
          ;;  2) this plan doesn't have a known output already
@@ -759,8 +762,7 @@
          (should-build?  (lambda (p)
                            (and (all/s? join-dep (input-seq p))
                                 (not (plan-built? p))
-                                (unique? p)
-                                (not err)))))
+                                (unique? p)))))
     (define (build-one! p)
       (push-exception-wrapper
         (lambda (exn)
