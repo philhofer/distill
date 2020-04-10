@@ -241,6 +241,7 @@
 ;; (used for calculating plan hashes)
 (: canonicalize (list -> (list-of vector)))
 (define (canonicalize inputs)
+
   ;; turn an input into an artifact unconditionally
   (define (->artifact in)
     (if (plan? in)
@@ -388,30 +389,69 @@
     (lambda () (jobserver+ 1))
     proc))
 
-;; run a command inside a new virtual root 'root'
-;; which is a directory populated like a root filesystem
-(: sandbox-run (string string #!rest string -> undefined))
-(define (sandbox-run root prog . args)
-  ;; TODO: I'm not pleased about leaning on a setuid program,
-  ;; but there isn't a way to manipulate mount namespaces without
-  ;; elevated privs...
-  (apply
-    run
-    "bwrap"
-    "--unshare-ipc"
-    "--unshare-pid"
-    "--unshare-uts"
-    "--unshare-cgroup"
-    "--hostname" "builder"
-    "--bind" root "/"  ; rootfs containing host tools
-    "--dir" "/dev"
-    "--dir" "/proc"
-    "--dir" "/tmp"
-    "--dev" "/dev"
-    "--proc" "/proc"
-    "--tmpfs" "/tmp"
-    "--"
-    args))
+;; compressor-fd forks a zstd compressor writing to 'outfile'
+;; and returns its stdin file descriptor
+(: compressor-fd (string -> integer))
+;; perform an elaborate chroot into 'root'
+;; and then run '/build' inside that new
+;; root, with stdout and stderr redirected
+;; to 'logfile' (either a file path or file descriptor)
+(: sandbox-run (string string -> undefined))
+(define (sandbox-run root logfile)
+  (let ((bwrap "/usr/bin/bwrap") ;; FIXME
+        (js    (current-jobserver))
+        (args  (list
+                 "--unshare-ipc"
+                 "--unshare-pid"
+                 "--unshare-uts"
+                 "--unshare-cgroup-try"
+                 "--unshare-net"
+                 "--hostname" "builder"
+                 "--bind" root "/"  ; rootfs containing host tools
+                 "--dir" "/dev"
+                 "--dir" "/proc"
+                 "--dir" "/tmp"
+                 "--dev" "/dev"
+                 "--proc" "/proc"
+                 "--tmpfs" "/tmp"
+                 "--"
+                 "/build"))
+        ;; DO NOT CHANGE THIS LIGHTLY:
+        ;; it may cause builds to fail
+        ;; to reproduce!
+        (env   '(("PATH" . "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin")
+                 ("LC_ALL" . "C.UTF-8")
+                 ("SOURCE_DATE_EPOCH" . "0")
+                 ("MAKEFLAGS" . "--jobserver-auth=5,6")))
+        (setfd! (lambda (fd fromfd)
+                  (or (= fd fromfd)
+                      (begin
+                        (duplicate-fileno fromfd fd)
+                        (file-close fromfd))))))
+    (let-values (((pid ok status)
+                  (process-wait/yield
+                    (process-fork
+                      (lambda ()
+                        ;; any exceptions in here should immediately exit
+                        (current-exception-handler (lambda (exn)
+                                                     (fatal "(forked):" exn)))
+                        (setfd! 5 (car js))
+                        (setfd! 6 (cadr js))
+                        (setfd! fileno/stdin (file-open "/dev/null" open/rdonly))
+                        ;; can't use fdpipe here because we need a *blocking* pipe;
+                        (let-values (((rd wr) (create-pipe)))
+                          (process-fork
+                            (lambda ()
+                              (for-each file-close js)
+                              (file-close wr)
+                              (setfd! fileno/stdin rd)
+                              (process-execute "zstd" (list "-q" "-" "-o" logfile))))
+                          (file-close rd)
+                          (setfd! fileno/stdout wr))
+                        (duplicate-fileno fileno/stdout fileno/stderr)
+                        (process-execute bwrap args env))))))
+      (or (and ok (= status 0))
+          (error "sandbox build failed")))))
 
 (: fetch! ((or false string) string -> *))
 (define (fetch! src hash)
@@ -556,7 +596,8 @@
           ;; regardless of source file permissions,
           ;; artifacts should have 644 perms
           (set-file-permissions! dst #o644)))
-      h)))
+      (delete-file* fp))
+    h))
 
 (: file->artifact (string string -> artifact))
 (define (file->artifact f abspath)
@@ -623,52 +664,22 @@
               (cdr p))))
         (plan-inputs p))
 
-      ;; fork+exec into the recipe inside the sandbox
       (infoln "running build script ...")
-      (let* ((pipefd (current-jobserver))
-             (infd   (car pipefd))
-             (outfd  (cadr pipefd)))
+      (let ((outfile (filepath-join
+                       (plan-dir) (plan-hash p)
+                       (string-append "build@" (tai64n->string (tai64n-now)) ".log.zst"))))
         ;; if /build fails, put the build log
-        ;; into the current directory
+        ;; into the current directory with a friendly name
         (push-exception-wrapper
           (lambda (exn)
-            (let ((logfile (filepath-join root "build.log"))
-                  (dst     (filepath-join (current-directory) (string-append (plan-name p) ".log"))))
-              (when (file-exists? logfile)
-                (copy-file logfile dst #t)
-                (infoln "build failed; please see" dst))
-            exn))
+            (let ((linkname (filepath-join
+                              (current-directory)
+                              (string-append (plan-name p) ".log.zst"))))
+              (create-symbolic-link outfile linkname)
+              (infoln "build failed; please see" linkname)))
           (lambda ()
-            (apply
-              sandbox-run
-              root
-              (list
-                "/bin/emptyenv"
-                "/bin/envfile" "/env"
-                ;; close stdin and redirect stdin+stderr to a log file
-                ;; (otherwise builds just get really noisy in the terminal)
-                "redirfd" "-r" "0" "/dev/null"
-                "redirfd" "-w" "1" "/build.log"
-                "fdmove" "-c" "2" "1"
-                ;; TODO: seriously broken build scripts
-                ;; may not be reproducible if the environment
-                ;; is not 100% identical...
-                "export" "MAKEFLAGS" (string-append
-                                       "--jobserver-auth="
-                                       (number->string infd)
-                                       ","
-                                       (number->string outfd))
-                "/build")))))
+            (sandbox-run root outfile))))
 
-      ;; save the build log for posterity
-      (let* ((pdir  (filepath-join (plan-dir) (plan-hash p)))
-             (now   (tai64n-now))
-             (ofile (filepath-join pdir (string-append "build@" (tai64n->string now) ".log.zst"))))
-        (create-directory pdir #t)
-        (run "zstd"
-             "-q"
-             "--rm" (filepath-join root "build.log")
-             "-o"   ofile))
       ;; now save the actual build outputs
       (let ((raw (plan-raw-output p)))
         (if raw

@@ -11,20 +11,16 @@
 (: <recipe> vector)
 (define <recipe>
   (make-kvector-type
-    env:
     script:))
 
 (: make-recipe (#!rest * -> vector))
 (define make-recipe
   (kvector-constructor
     <recipe>
-    env:    '() (list-of pair?)
     script: #f  list?))
 
 (: recipe? (* --> boolean))
 (define recipe? (kvector-predicate <recipe>))
-(: recipe-env (vector -> list))
-(define recipe-env (kvector-getter <recipe> env:))
 (: recipe-script (vector -> list))
 (define recipe-script (kvector-getter <recipe> script:))
 
@@ -391,42 +387,10 @@
               name:   (package-label pkg)
               inputs: (list
                         (cons "/" (flatten
-                                    (recipe-envfile recipe)
                                     (recipe-buildfile recipe)
                                     (package-src pkg) (map ->tool tools)))
                         ;; build headers+libraries live here
                         (cons ($sysroot host) (map ->input inputs)))))))))
-
-;; default environment for recipes
-(: *default-env* (list-of pair))
-(define *default-env*
-  '((PATH . "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin")
-    (LC_ALL . "C.UTF-8")
-    (SOURCE_DATE_EPOCH . "0")))
-
-(: recipe-envfile (vector -> vector))
-(define recipe-envfile
-  ;; almost 100% of recipes do not
-  ;; need a custom entry environment,
-  ;; so we pre-compute the artifact
-  ;; for *default-env*
-  (let* ((tail   (lambda (env)
-                   (interned
-                     "/env" #o644
-                     (lambda ()
-                       (for-each
-                         (lambda (pr)
-                           (display (car pr))
-                           (display "=")
-                           (display (cdr pr))
-                           (newline))
-                         env)))))
-         (default (tail *default-env*)))
-    (lambda (r)
-      (let ((env (recipe-env r)))
-        (if (null? env)
-          default
-          (tail (append *default-env* env)))))))
 
 (: recipe-buildfile (vector -> vector))
 (define (recipe-buildfile r)

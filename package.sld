@@ -44,7 +44,6 @@
 
     make-recipe
     recipe?
-    recipe-env
     recipe-script
 
     $arch

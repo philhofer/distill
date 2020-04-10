@@ -41,13 +41,13 @@
         (chicken foreign)
         (only (chicken string) conc)
 	(only (chicken file) file-exists? directory-exists? create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
-	(only (chicken file posix) file-permissions set-file-permissions! create-symbolic-link file-size)
+	(chicken file posix)
         (only (chicken base) include error unless when flatten void current-error-port exit identity)
 	(only (chicken io) read-string write-string)
         (only (chicken port) make-broadcast-port)
         (only (chicken process-context) current-directory)
         (only (chicken condition) print-error-message)
-	(only (chicken process) process-run)
+	(chicken process)
 	(only (chicken sort) sort))))
 
   (import

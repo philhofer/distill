@@ -1038,11 +1038,11 @@ EOF
                                   -Dman1ext=1 -Dman3ext=3pm -Ud_csh -Uusedl -Dusenm
                                   -Dusemallocwrap)))
           (make-recipe
-            env:   `((BUILD_ZLIB . 0)
-                     (BUILD_BZIP2 . 0)
-                     (BZIP2_LIB . ,(filepath-join ($sysroot conf) "/usr/lib"))
-                     (BZIP2_INCLUDE . ,(filepath-join ($sysroot conf) "/usr/include")))
             script: `((cd ,(conc "perl-" version))
+                      (export BUILD_ZLIB 0)
+                      (export BUILD_BZIP2 0)
+                      (export BZIP2_LIB ,(filepath-join ($sysroot conf) "/usr/lib"))
+                      (export BZIP2_INCLUDE ,(filepath-join ($sysroot conf) "/usr/include"))
                       ;; force date(1) output to be stable
                       (if ((ln -sf /bin/samedate /bin/date)))
                       (if ((./Configure -des ,@configure-flags)))
