@@ -32,12 +32,24 @@
 (define build-system
   (let ((services   (kvector-getter <system> services:))
         (packages   (kvector-getter <system> packages:)))
-    (lambda (plat . args)
-      (let* ((sys  (apply %make-system args))
-             (svcs (services sys))
-             (pkgs (packages sys)))
-        ;; XXX need to dedup pkgs from svcs
-        (plat (append (services->packages svcs) pkgs))))))
+    (letrec ((union/eq?  (lambda (a b)
+                           (cond
+                             ((null? a) b)
+                             ((null? b) a)
+                             (else
+                               (let ((fb (car b)))
+                                 (union/eq?
+                                   (if (memq fb a) a (cons fb a))
+                                   (cdr b))))))))
+      (lambda (plat . args)
+        (let* ((sys  (apply %make-system args))
+               (svcs (services sys))
+               (pkgs (packages sys)))
+          ;; TODO: this is only doing basic deduplication
+          ;; of packages; we should probably figure out
+          ;; how to generate friendlier errors when
+          ;; packages conflict (overlap)
+          (plat (union/eq? (services->packages svcs) pkgs)))))))
 
 ;; uniq-setparts-script produces a uniquely-named setparts script
 (define (uniq-setparts-script prefix parts)
