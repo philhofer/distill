@@ -40,48 +40,131 @@
     '()
     "run bootcmd"))
 
+;; TODO: reverse-engineer this.
+;; FreeRTOS is somewhere in here.
+;; This parser for these images in ATF
+;; is at plat/marvell/common/mss/mss_scp_bootloader.c,
+;; and they *look* like thumb(2?) binaries for a Cortex-M3
+(define marvell-scp-bl2-blob
+  (remote-file
+    "https://github.com/MarvellEmbeddedProcessors/binaries-marvell/raw/binaries-marvell-armada-18.12/mrvl_scp_bl2.img"
+    "AN6vF_jBemdvGpaOYjDvnxfo8TAkxZhS1eKF0viY8l8="
+    "/src/mrvl_scp_bl2.img"
+    #o644))
+
+;; the default mv_ddr makefile embeds a build timestamp;
+;; simply replace the file that localversion.sh generates
+;; with this:
+(define mv-ddr-localversion
+  (interned
+    "/src/mv_ddr_build_message.c"
+    #o644
+    (string-append
+      "const char *mv_ddr_build_message = \"(distill - reproducible)\";\n"
+      "const char *mv_ddr_version_string = \"mv_ddr-devel-18.08.0-distill\";\n")))
+
+;; fix an uninitialized data warning in mv_ddr4_training_leveling.c
+;; and do NOT generate mv_ddr_build_message.c
+(define mv-ddr-fixup #<<EOF
+--- a/drivers/marvell/mv_ddr/Makefile
++++ b/drivers/marvell/mv_ddr/Makefile
+@@ -105,9 +105,6 @@ endif
+ # set mv_ddr build message and version string source file
+ MV_DDR_VER_CSRC = mv_ddr_build_message.c
+
+-# create mv_ddr build message and version string source file
+-$(shell $(MV_DDR_ROOT)/scripts/localversion.sh $(MV_DDR_ROOT) $(MV_DDR_VER_CSRC) 2> /dev/null)
+-
+ # ******************
+ # U-BOOT SPL SUPPORT
+ # ******************
+--- a/drivers/marvell/mv_ddr/mv_ddr4_training_leveling.c
++++ b/drivers/marvell/mv_ddr/mv_ddr4_training_leveling.c
+@@ -368,7 +368,7 @@ static int mv_ddr4_dynamic_pb_wl_supp(u32 dev_num, enum mv_wl_supp_mode ecc_mode
+ 	u32 subphy_num = ddr3_tip_dev_attr_get(dev_num, MV_ATTR_OCTET_PER_INTERFACE);
+ 	u8 compare_result = 0;
+ 	u32 orig_phase;
+-	u32 rd_data, wr_data;
++	u32 rd_data, wr_data = 0;
+ 	u32 flag, step;
+ 	struct mv_ddr_topology_map *tm = mv_ddr_topology_map_get();
+ 	u32 ecc_phy_access_id;
+
+EOF
+)
+;; various fixups; the first is that busybox truncate(1) doesn't support '%size'
+;; and the second is that marvell.mk has a weird non-PHONY clean rule
+;; that is invoked on every build...
+(define atf-truncate-fixup #<<EOF
+--- a/plat/marvell/a8k/common/a8k_common.mk
++++ b/plat/marvell/a8k/common/a8k_common.mk
+@@ -113,7 +113,7 @@ include ${BLE_PATH}/ble.mk
+ $(eval $(call MAKE_BL,e))
+
+ mrvl_flash: ${BUILD_PLAT}/${FIP_NAME} ${DOIMAGETOOL} ${BUILD_PLAT}/ble.bin
+-	$(shell truncate -s %128K ${BUILD_PLAT}/bl1.bin)
++	$(shell truncate -s 128K ${BUILD_PLAT}/bl1.bin)
+ 	$(shell cat ${BUILD_PLAT}/bl1.bin ${BUILD_PLAT}/${FIP_NAME} > ${BUILD_PLAT}/${BOOT_IMAGE})
+ 	${DOIMAGETOOL} ${DOIMAGE_FLAGS} ${BUILD_PLAT}/${BOOT_IMAGE} ${BUILD_PLAT}/${FLASH_IMAGE}
+
+EOF
+)
+
 (define atf-mcbin
-  ;; the ATF source used here is vanilla upstream ATF
-  ;; plus a vendored copy of marvell-ddr in drivers/marvel/mv-ddr
-  ;; and a vendored SCP_BL2 blob (ew)
-  ;; and some light Makefile patching to make it compatible with busybox
-  ;; (notably, truncate -s %align isn't supported, and CFLAGS needs -fno-PIE,
-  ;; and marvell.mk needs some massaging not to run a non-phony clean rule
-  ;; on every make invocation... good god.)
-  (let* ((ver "65012c0")
-         (h   "2tAUr4jElxX8cu-V7NmDstttmBzkytM0SX50JY7Yl8g=")
+  (let* ((ver '2.2)
          (src (remote-archive
-                (string-append
-                  "https://b2cdn.sunfi.sh/file/pub-cdn/" h)
-                h kind: 'tar.zst)))
+                (conc "https://github.com/ARM-software/arm-trusted-firmware/archive/v" ver ".tar.gz")
+                "Pxwp8bIs5lmYYmedB8SjKH-3bLNV5_1b0TKdAZCGWm4="))
+         (mv-ddr-ver 'mv_ddr-armada-atf-mainline)
+         (mv-ddr-src (remote-archive
+                       ;; TODO: this is not guaranteed to be a stable tarball,
+                       ;; but marvell has all but abandoned this code...
+                       (conc "https://github.com/MarvellEmbeddedProcessors/mv-ddr-marvell/archive/" mv-ddr-ver ".tar.gz")
+                       "nV3OhnbmGNAy4JQz60aYjucT1SrMuoVHppiYbyd40zI="))
+         (patches    (patch* atf-truncate-fixup mv-ddr-fixup)))
     (lambda (conf)
       (unless (eq? ($arch conf) 'aarch64)
         (error "atf-mcbin is for aarch64 targets"))
       (make-package
         raw-output: "/boot/flash-image.bin"
-        label:  "atf-65012c0-mcbin"
-        src:    src
+        label:  (conc "atf-" ver "-mcbin")
+        src:    (append (list src mv-ddr-src mv-ddr-localversion marvell-scp-bl2-blob)
+                        patches)
         tools:  (append (native-toolchain-for conf)
                         (cc-for-target conf)
                         (list libressl)) ;; for fiptool
         inputs: (list uboot-mcbin)
-        build:  (let ((mflags `(V=1 PLAT=a80x0_mcbin ,(conc "BL33=" ($sysroot conf) "/boot/u-boot.bin")))
+        build:  (let ((mflags `(V=1
+                                 SCP_BL2=/src/mrvl_scp_bl2.img
+                                 PLAT=a80x0_mcbin
+                                 ,(conc "BL33=" ($sysroot conf) "/boot/u-boot.bin")))
                       (bflags `(V=1 ,@(splat cc-env/for-kbuild HOSTCC: HOSTLD:)
                                     ,(conc "HOSTCCFLAGS=" (spaced (kref cc-env/for-kbuild HOSTCFLAGS:))))))
                   (make-recipe
-                    script: `((cd arm-trusted-firmware-master)
+                    script: `((cd ,(conc 'arm-trusted-firmware- ver))
                               (unexport MAKEFLAGS) ;; parallel build is busted
                               (export CROSS_COMPILE ,(conc ($triple conf) "-"))
+                              (if ((mkdir drivers/marvell/mv_ddr)))
+                              ;; copy mv-ddr-marvell into the ATF source tree;
+                              ;; the marvell makefiles expect it to be here
+                              (if ((elglob files ,(conc "/mv-ddr-marvell-" mv-ddr-ver "/*"))
+                                   (cp -r $files drivers/marvell/mv_ddr)))
+                              ;; for mv-ddr-localversion:
+                              (if ((cp /src/mv_ddr_build_message.c drivers/marvell/mv_ddr/)))
+                              ,@(script-apply-patches patches)
+                              ;; do not force a clean:
+                              (if ((sed "-i" -e "/^mrvl_clean:/,+3d" plat/marvell/marvell.mk)))
+                              (if ((sed "-i" -e "s/mrvl_clean//g" plat/marvell/marvell.mk)))
                               ;; the top-level makefile doesn't invoke these sub-makes
                               ;; correctly, so invoke them ahead of time with
-                              ;; the ride overrides...
+                              ;; the right overrides...
                               (if ((make ,@bflags
                                          ,(conc "LDLIBS=" (spaced '(-static-pie -lcrypto)))
                                          -C tools/fiptool all)))
                               (if ((make ,@bflags
                                          ,(conc "DOIMAGE_LD_FLAGS=" (spaced '(-static-pie)))
                                          -C tools/marvell/doimage all)))
-                              (if ((make -j1 ,@mflags "SCP_BL2=./mrvl_scp_bl2.img" all fip)))
+                              (if ((make ,@mflags "SCP_BL2=/src/mrvl_scp_bl2.img" all fip)))
                               (install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin))))))))
 
 (define (mcbin-sdimage-platform conf kernel)
