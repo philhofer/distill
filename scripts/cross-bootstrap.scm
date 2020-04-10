@@ -23,3 +23,4 @@
     (conc "prebuilt-"  arch ".scm")
     (lambda ()
       (write (list 'quote alist)))))
+(exit 0)

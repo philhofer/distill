@@ -557,6 +557,19 @@ EOF
                                                 -e "/^AR = ar/d"
                                                 -e "/^ARFLAGS = cru/d"
                                                 "{}" ";")))
+                                     ;; this $(MAKE) command invocation
+                                     ;; for libraries for the *build* system
+                                     ;; overrides the wrong variables; the
+                                     ;; right ones are already in the Makefile(s)
+                                     ;; for those targets; the configure scripts
+                                     ;; make sure of that...
+                                     ;;
+                                     ;; you can repro this build failure by
+                                     ;; cross-building a "native" GCC with
+                                     ;; CFLAGS that are invalid for the *build* system
+                                     (if ((sed "-i"
+                                               -e "s/\\$(MAKE) \\$(BASE_FLAGS_TO_PASS) \\$(EXTRA_BUILD_FLAGS)/\\$(MAKE)/g"
+                                               Makefile.in)))
                                      ;; don't pull in GNU tar just to install headers;
                                      ;; force the makefile to use busybox cpio instead
                                      (if ((sed "-i"
