@@ -37,8 +37,7 @@
         build: (let ((opts `(-all-root
                               -pf "/src/pseudo"
                               -comp ,compress)))
-                 (make-recipe
-                   script: `((mksquashfs ,($sysroot conf) ,(conc "/out/" out-img) ,@opts))))))))
+                 `((mksquashfs ,($sysroot conf) ,(conc "/out/" out-img) ,@opts)))))))
 
 (define (initramfs inputs #!key (chown '()) (compress 'zstd))
   (unless (null? chown)
@@ -54,21 +53,20 @@
                                   ;; (see note above about compressor nondeterminism)
                                   ((zstd) '((zstd - -o /out/initramfs.zst)))
                                   (else (error "unrecognized compressor" compress)))))
-                (make-recipe
-                  script: `((cd ,($sysroot conf))
-                            ;; set mtime to 0, since bsdtar(1)
-                            ;; does not have an option to override it
-                            (if ((find "." -mindepth 1
-                                       -exec touch -hcd "@0" "{}" ";")))
-                            ;; terribly gross hack courtesy of Arch:
-                            ;; in order to ensure that the cpio image doesn't
-                            ;; include inode numbers, we feed a tar archive
-                            ;; back into bsdtar to create a cpio archive
-                            (pipeline ((find "." -mindepth 1 -print0)))
-                            (pipeline ((sort -z)))
-                            (pipeline ((bsdtar --null -vcnf - -T -)))
-                            (pipeline ((bsdtar --uid 0 --gid 0 --null -cf - --format=newc "@-")))
-                            ,@compressor))))))
+                `((cd ,($sysroot conf))
+                  ;; set mtime to 0, since bsdtar(1)
+                  ;; does not have an option to override it
+                  (if ((find "." -mindepth 1
+                             -exec touch -hcd "@0" "{}" ";")))
+                  ;; terribly gross hack courtesy of Arch:
+                  ;; in order to ensure that the cpio image doesn't
+                  ;; include inode numbers, we feed a tar archive
+                  ;; back into bsdtar to create a cpio archive
+                  (pipeline ((find "." -mindepth 1 -print0)))
+                  (pipeline ((sort -z)))
+                  (pipeline ((bsdtar --null -vcnf - -T -)))
+                  (pipeline ((bsdtar --uid 0 --gid 0 --null -cf - --format=newc "@-")))
+                  ,@compressor)))))
 
 ;; ext2fs creates a package-lambda that
 ;; takes everything in 'inputs' and produces
@@ -79,22 +77,21 @@
            (dst     (filepath-join '/out outfile)))
       (make-package
         raw-output: outfile
-        label: name
-        tools: (list busybox-core execline-tools e2fsprogs)
+        label:  name
+        tools:  (list busybox-core execline-tools e2fsprogs)
         inputs: inputs
-        build: (make-recipe
-                 script: `((if ((truncate -s ,size ,dst)))
-                           ;; can't set this to zero, because mke2fs
-                           ;; uses expressions like
-                           ;;   x = fs->now ? fs->now : time(NULL);
-                           (export E2FSPROGS_FAKE_TIME 1585499935)
-                           (export MKE2FS_DETERMINISTIC 1)
-                           (mkfs.ext2 -d ,($sysroot conf)
-                                      -U ,uuid
-                                      ;; for determinism, use the
-                                      ;; uuid as the hash seed as well
-                                      -E ,(string-append
-                                            "hash_seed=" uuid)
-                                      -F -b 4096
-                                      ,dst)))))))
+        build:  `((if ((truncate -s ,size ,dst)))
+                  ;; can't set this to zero, because mke2fs
+                  ;; uses expressions like
+                  ;;   x = fs->now ? fs->now : time(NULL);
+                  (export E2FSPROGS_FAKE_TIME 1585499935)
+                  (export MKE2FS_DETERMINISTIC 1)
+                  (mkfs.ext2 -d ,($sysroot conf)
+                             -U ,uuid
+                             ;; for determinism, use the
+                             ;; uuid as the hash seed as well
+                             -E ,(string-append
+                                   "hash_seed=" uuid)
+                             -F -b 4096
+                             ,dst))))))
 

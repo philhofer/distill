@@ -121,9 +121,8 @@
           src:    artifacts
           tools:  (list busybox-core execline-tools s6 s6-rc)
           inputs: '()
-          build:  (make-recipe
-                    script: `((if ((mkdir -p "/out/etc/s6-rc")))
-                              (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services"))))))))
+          build:  `((if ((mkdir -p "/out/etc/s6-rc")))
+                    (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services")))))))
 
 (define <service>
   (make-kvector-type

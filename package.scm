@@ -8,22 +8,6 @@
     ((and ppc64 little-endian) 'ppc64le)
     ((and ppc64 big-endian) 'ppc64)))
 
-(: <recipe> vector)
-(define <recipe>
-  (make-kvector-type
-    script:))
-
-(: make-recipe (#!rest * -> vector))
-(define make-recipe
-  (kvector-constructor
-    <recipe>
-    script: #f  list?))
-
-(: recipe? (* --> boolean))
-(define recipe? (kvector-predicate <recipe>))
-(: recipe-script (vector -> list))
-(define recipe-script (kvector-getter <recipe> script:))
-
 (: <package> vector)
 (define <package>
   (make-kvector-type
@@ -42,12 +26,12 @@
 (define make-package
   (kvector-constructor
     <package>
-    label:    #f  string?
-    src:      '() (or/c artifact? (list-of artifact?))
-    tools:    '() (list-of (or/c procedure? artifact?))
-    inputs:   '() (list-of (or/c procedure? artifact?))
-    prebuilt: #f  (or/c false/c artifact?)
-    build:    #f  recipe?
+    label:    #f   string?
+    src:      '()  (or/c artifact? (list-of artifact?))
+    tools:    '()  (list-of (or/c procedure? artifact?))
+    inputs:   '()  (list-of (or/c procedure? artifact?))
+    prebuilt: #f   (or/c false/c artifact?)
+    build:    #f   list?
     raw-output: #f (or/c false/c string?)))
 
 (: update-package (vector #!rest * -> vector))
@@ -67,7 +51,7 @@
 (define package-inputs (kvector-getter <package> inputs:))
 (: package-prebuilt (vector --> (or vector false)))
 (define package-prebuilt (kvector-getter <package> prebuilt:))
-(: package-build (vector --> vector))
+(: package-build (vector --> list))
 (define package-build (kvector-getter <package> build:))
 (: package-raw-output (vector --> (or string false)))
 (define package-raw-output (kvector-getter <package> raw-output:))
@@ -392,12 +376,12 @@
                         ;; build headers+libraries live here
                         (cons ($sysroot host) (map ->input inputs)))))))))
 
-(: recipe-buildfile (vector -> vector))
+(: recipe-buildfile (list -> vector))
 (define (recipe-buildfile r)
   (interned
     "/build" #x744
     (lambda ()
-      (write-exexpr (recipe-script r)))))
+      (write-exexpr r))))
 
 ;; generator for an execline sequence that strips binaries
 (define (strip-binaries-script triple)
@@ -491,23 +475,22 @@
     (lambda (dir v)
       (unless (gnu? v)
         (error "gnu-recipe called on non-<gnu-build> object:" v))
-      (make-recipe
-        script: `((cd ,dir)
-                  ,@($pre-configure v)
-                  ,@(exports->script ($exports v))
-                  ,@(if ($out-of-tree v)
-                      `((if ((mkdir -p "/builddir")))
-                        (cd "/builddir")
-                        (if ((,(conc "/" dir "/configure")
-                               ,@($configure-args v)))))
-                      `((if ((./configure ,@($configure-args v))))))
-                  (if ((make ,@($make-flags v))))
-                  (if ((make ,@($install-flags v))))
-                  ,@($post-install v)
-                  (foreground ((rm -rf /out/usr/share/man)))
-                  (foreground ((rm -rf /out/usr/share/info)))
-                  (foreground ((find /out -type f -name "*.la" -delete)))
-                  ,@(strip-binaries-script ($triple v)))))))
+      `((cd ,dir)
+        ,@($pre-configure v)
+        ,@(exports->script ($exports v))
+        ,@(if ($out-of-tree v)
+            `((if ((mkdir -p "/builddir")))
+              (cd "/builddir")
+              (if ((,(conc "/" dir "/configure")
+                     ,@($configure-args v)))))
+            `((if ((./configure ,@($configure-args v))))))
+        (if ((make ,@($make-flags v))))
+        (if ((make ,@($install-flags v))))
+        ,@($post-install v)
+        (foreground ((rm -rf /out/usr/share/man)))
+        (foreground ((rm -rf /out/usr/share/info)))
+        (foreground ((find /out -type f -name "*.la" -delete)))
+        ,@(strip-binaries-script ($triple v))))))
 
 (: <ska-build> vector)
 (define <ska-build>
@@ -534,7 +517,7 @@
                      --disable-shared --enable-static)
           make-args: (kvargs ($make-overrides conf)))))))
 
-(: ska-recipe (string vector --> vector))
+(: ska-recipe (string vector --> list))
 (define ska-recipe
   (let (($exports        (kvector-getter <ska-build> exports:))
         ($configure-args (kvector-getter <ska-build> configure-args:))
@@ -544,14 +527,12 @@
     (lambda (dir bld)
       (unless (ska? bld)
         (error "ska-recipe given a non-<ska-build> object:" bld))
-      (make-recipe
-        script:
-        `((cd ,dir)
-          ,@(exports->script ($exports bld))
-          ;; don't let the configure script override our CFLAGS selections
-          (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
-          (if ((./configure ,@($configure-args bld))))
-          (if ((make ,@($make-args bld))))
-          (if ((make DESTDIR=/out install)))
-          ,@(strip-binaries-script ($triple bld)))))))
+      `((cd ,dir)
+        ,@(exports->script ($exports bld))
+        ;; don't let the configure script override our CFLAGS selections
+        (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
+        (if ((./configure ,@($configure-args bld))))
+        (if ((make ,@($make-args bld))))
+        (if ((make DESTDIR=/out install)))
+        ,@(strip-binaries-script ($triple bld))))))
 

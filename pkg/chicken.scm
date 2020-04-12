@@ -85,12 +85,11 @@
           src:    src
           tools:  (cc-for-target host)
           inputs: (list musl libssp-nonshared)
-          build:  (make-recipe
-                    script: `((cd ,(conc "chicken-" ver))
-                              (if ((make ,@mflags ,@kvflags chicken-config.h)))
-                              (if ((make ,@mflags ,@kvflags ,@targets)))
-                              (if ((make ,@mflags ,@kvflags ,@install)))
-                              (rm -rf /out/usr/share))))))))
+          build:  `((cd ,(conc "chicken-" ver))
+                    (if ((make ,@mflags ,@kvflags chicken-config.h)))
+                    (if ((make ,@mflags ,@kvflags ,@targets)))
+                    (if ((make ,@mflags ,@kvflags ,@install)))
+                    (rm -rf /out/usr/share)))))))
 
 (define chicken
   (%chicken-src "chicken" '(all) '(install)))
@@ -172,15 +171,14 @@
           src:    src
           tools:  (append (chicken-for-target conf) deps)
           inputs: (append (list libchicken musl libssp-nonshared) deps)
-          build:  (make-recipe
-                    script: `((cd ,(conc name "-" version))
-                              (backtick -n "-i" repo ((chicken-install -repository)))
-                              (importas "-i" -u repo repo)
-                              (export TMP /tmp)
-                              (export CHICKEN_INSTALL_REPOSITORY "/out/${repo}")
-                              ;; -host is just tricking chicken-install
-                              ;; into compiling statically
-                              (,ckn-install -host -no-install-dependencies))))))))
+          build:  `((cd ,(conc name "-" version))
+                    (backtick -n "-i" repo ((chicken-install -repository)))
+                    (importas "-i" -u repo repo)
+                    (export TMP /tmp)
+                    (export CHICKEN_INSTALL_REPOSITORY "/out/${repo}")
+                    ;; -host is just tricking chicken-install
+                    ;; into compiling statically
+                    (,ckn-install -host -no-install-dependencies)))))))
 
 (define matchable-egg
   (egg 'matchable '1.1 "rygA7BrZVhDdv2x9ksqaK0fgKIc-nYT9unDIHOYlQI4="))

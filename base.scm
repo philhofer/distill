@@ -76,9 +76,8 @@
           src:   *musl-src*
           tools: (list make execline-tools busybox-core)
           inputs: '()
-          build: (make-recipe
-                    script: `((cd ,(conc "musl-" *musl-version*))
-                              (make ,(conc "DESTDIR=/out/" ($sysroot target)) ,(conc "ARCH=" ($arch target)) "prefix=/usr" install-headers))))))))
+          build: `((cd ,(conc "musl-" *musl-version*))
+                   (make ,(conc "DESTDIR=/out/" ($sysroot target)) ,(conc "ARCH=" ($arch target)) "prefix=/usr" install-headers)))))))
 
 (define musl
   (lambda (conf)
@@ -90,14 +89,13 @@
       src:    *musl-src*
       tools:  (cc-for-target conf)
       inputs: '()
-      build: (make-recipe
-               ;; ./configure, but not autotools
-               script: `((cd ,(conc "musl-" *musl-version*))
-                         (if ((./configure --disable-shared --enable-static
-                                           --prefix=/usr ,@(splat conf CC: CFLAGS:)
-                                           --target ,($arch conf))))
-                         (if ((make ,@(kvargs ($make-overrides conf)))))
-                         (make DESTDIR=/out install))))))
+      build:
+      `((cd ,(conc "musl-" *musl-version*))
+        (if ((./configure --disable-shared --enable-static
+                          --prefix=/usr ,@(splat conf CC: CFLAGS:)
+                          --target ,($arch conf))))
+        (if ((make ,@(kvargs ($make-overrides conf)))))
+        (make DESTDIR=/out install)))))
 
 (define libssp-nonshared
   (lambda (conf)
@@ -110,12 +108,11 @@
                          void __attribute__((visibility ("hidden"))) __stack_chk_fail_local(void) { __stack_chk_fail(); }
 EOF
                          )
-      build: (make-recipe
-               script: `((cd ./src)
-                         (if ((,@($CC conf) ,@($CFLAGS conf) -c ssp-nonshared.c -o __stack_chk_fail_local.o)))
-                         (if ((,($AR conf) -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
-                         (if ((mkdir -p /out/usr/lib)))
-                         (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))))
+      build: `((cd ./src)
+               (if ((,@($CC conf) ,@($CFLAGS conf) -c ssp-nonshared.c -o __stack_chk_fail_local.o)))
+               (if ((,($AR conf) -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
+               (if ((mkdir -p /out/usr/lib)))
+               (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))
 
 ;; dependencies necessary to statically link an ordinary C executable
 (define libc (list musl libssp-nonshared))
@@ -232,12 +229,11 @@ EOF
         src:    leaf
         tools:  (cc-for-target conf)
         inputs: libc
-        build:  (make-recipe
-                  script: `((cd ,(conc "bzip2-" version))
-                            (make PREFIX=/out/usr ;; no DESTDIR supported
-                                  ,@(kvargs ($cc-env conf))
-                                  ,@(kvargs ($make-overrides conf))
-                                  install)))))))
+        build:  `((cd ,(conc "bzip2-" version))
+                  (make PREFIX=/out/usr ;; no DESTDIR supported
+                        ,@(kvargs ($cc-env conf))
+                        ,@(kvargs ($make-overrides conf))
+                        install))))))
 
 (define skalibs
   (let* ((version '2.9.2.0)
@@ -495,10 +491,9 @@ EOF
                          busybox-core)
             inputs: '()
             build: (let* ((outdir (filepath-join "/out" ($sysroot target))))
-                     (make-recipe
-                       script: `((cd ,(conc "fakemusl-" version))
-                                 (if ((make ,@(splat target AS: AR:) all)))
-                                 (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install))))))))))
+                     `((cd ,(conc "fakemusl-" version))
+                       (if ((make ,@(splat target AS: AR:) all)))
+                       (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
 
 (define gcc-for-target
   (memoize-eq
@@ -630,23 +625,22 @@ EOF
                     (cons bzip2 (cc-for-target conf))
                     (native-toolchain-for conf))
           inputs: (append libc extra-inputs)
-          build:  (make-recipe
-                    script: `((cd ,(conc "busybox-" version))
-                              (export KCONFIG_NOTIMESTAMP 1)
-                              ,@(script-apply-patches patches)
-                              (if ((mv /src/config.head .config)))
-                              (if ((make V=1
-                                         ,(conc "CROSS_COMPILE=" ($triple conf) "-")
-                                         ,(conc "CONFIG_SYSROOT=" ($sysroot conf))
-                                         ,(conc "CONFIG_EXTRA_CFLAGS=" (spaced ($CFLAGS conf)))
-                                         ,@(kvargs cc-env/for-kbuild) busybox)))
-                              (if ((make V=1 busybox.links)))
-                              (if ((install -D -m "755" busybox /out/bin/busybox)))
-                              (if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))
-                              (redirfd -r 0 busybox.links)
-                              (forstdin -o 0 link)
-                              (importas "-i" -u link link)
-                              (ln -s /bin/busybox "/out/${link}"))))))))
+          build: `((cd ,(conc "busybox-" version))
+                   (export KCONFIG_NOTIMESTAMP 1)
+                   ,@(script-apply-patches patches)
+                   (if ((mv /src/config.head .config)))
+                   (if ((make V=1
+                              ,(conc "CROSS_COMPILE=" ($triple conf) "-")
+                              ,(conc "CONFIG_SYSROOT=" ($sysroot conf))
+                              ,(conc "CONFIG_EXTRA_CFLAGS=" (spaced ($CFLAGS conf)))
+                              ,@(kvargs cc-env/for-kbuild) busybox)))
+                   (if ((make V=1 busybox.links)))
+                   (if ((install -D -m "755" busybox /out/bin/busybox)))
+                   (if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))
+                   (redirfd -r 0 busybox.links)
+                   (forstdin -o 0 link)
+                   (importas "-i" -u link link)
+                   (ln -s /bin/busybox "/out/${link}")))))))
 
 ;; busybox-core is just enough busybox to build packages;
 ;; it doesn't include system utilities that would require
@@ -772,18 +766,17 @@ EOF
       tools:  (append (list execline-tools busybox-core make xz-utils)
                       (native-toolchain))
       inputs: '()
-      build:  (make-recipe
-                script: `((cd ,(conc "linux-" *linux-major*))
-                          (if ((pipeline ((xzcat /src/linux.patch)))
-                               (patch -p1)))
-                          (if ((make ,(conc 'ARCH= (linux-arch-name ($arch conf)))
-                                     ,@(kvargs cc-env/for-kbuild)
-                                     headers)))
-                          ;; headers_install uses rsync, which is a
-                          ;; silly large dependency to pull in
-                          ;; at this stage...
-                          (if ((cp -r usr /out)))
-                          (find /out -type f ! -name "*.h" -delete))))))
+      build:  `((cd ,(conc "linux-" *linux-major*))
+                (if ((pipeline ((xzcat /src/linux.patch)))
+                     (patch -p1)))
+                (if ((make ,(conc 'ARCH= (linux-arch-name ($arch conf)))
+                           ,@(kvargs cc-env/for-kbuild)
+                           headers)))
+                ;; headers_install uses rsync, which is a
+                ;; silly large dependency to pull in
+                ;; at this stage...
+                (if ((cp -r usr /out)))
+                (find /out -type f ! -name "*.h" -delete)))))
 
 (define (installkernel* script)
   (interned "/sbin/installkernel" #o755
@@ -904,32 +897,31 @@ EOF
                                     YACC: 'yacc ;; not bison -y
                                     ARCH: (linux-arch-dir-name ($arch conf))
                                     HOST_LIBELF_LIBS: '(-lelf -lz)))))
-                 (make-recipe
-                   script: `((cd ,(conc "linux-" *linux-major*))
-                             (if ((pipeline ((xzcat /src/linux.patch)))
-                                  (patch -p1)))
-                             ,@(script-apply-patches patches)
-                             ,@(fix-dtc-script
-                                 fix-lex-options: 'scripts/kconfig/lexer.l
-                                 fix-yacc-cmdline: 'scripts/Makefile.host)
-                             ;; libelf is built with zlib, so -lelf should imply -lz
-                             (if ((find "." -type f -name "Make*"
-                                        -exec sed "-i" -e
-                                        "s/-lelf/-lelf -lz/g" "{}" ";")))
-                             (export KCONFIG_NOTIMESTAMP 1)
-                             (export KBUILD_BUILD_TIMESTAMP "@0")
-                             (export KBUILD_BUILD_USER distill)
-                             (export KBUILD_BUILD_HOST distill)
-                             (export CROSS_COMPILE ,(conc ($triple conf) "-"))
-                             (if ((make
-                                    V=1 KCONFIG_ALLCONFIG=/src/config
-                                    ,@make-args
-                                    allnoconfig)))
-                             (if ((make V=1 ,@make-args)))
-                             ,@(if dtb
-                                 `((if ((install -D -m "644" -t /out/boot ,dtb))))
-                                 '())
-                             (make V=1 ,@make-args install))))))))
+                 `((cd ,(conc "linux-" *linux-major*))
+                   (if ((pipeline ((xzcat /src/linux.patch)))
+                        (patch -p1)))
+                   ,@(script-apply-patches patches)
+                   ,@(fix-dtc-script
+                       fix-lex-options: 'scripts/kconfig/lexer.l
+                       fix-yacc-cmdline: 'scripts/Makefile.host)
+                   ;; libelf is built with zlib, so -lelf should imply -lz
+                   (if ((find "." -type f -name "Make*"
+                              -exec sed "-i" -e
+                              "s/-lelf/-lelf -lz/g" "{}" ";")))
+                   (export KCONFIG_NOTIMESTAMP 1)
+                   (export KBUILD_BUILD_TIMESTAMP "@0")
+                   (export KBUILD_BUILD_USER distill)
+                   (export KBUILD_BUILD_HOST distill)
+                   (export CROSS_COMPILE ,(conc ($triple conf) "-"))
+                   (if ((make
+                          V=1 KCONFIG_ALLCONFIG=/src/config
+                          ,@make-args
+                          allnoconfig)))
+                   (if ((make V=1 ,@make-args)))
+                   ,@(if dtb
+                       `((if ((install -D -m "644" -t /out/boot ,dtb))))
+                       '())
+                   (make V=1 ,@make-args install)))))))
 
 (define linux-virt-x86_64
   (linux/config-static "virt-x86_64" "FTMQoxE4ClKOWLDdcDVzWt8UuizXfMmR4duX8Z-5qlY="))
@@ -951,32 +943,31 @@ EOF
         build:  (let ((cflags (append ($CFLAGS conf)
                                       '(-D_GNU_SOURCE -DHAVE_CONFIG_H -I. -I.. -I../lib)))
                       (cc     ($CC conf)))
-                  (make-recipe
-                    ;; ALLLLRIGHTY THEN, here's what happening here...
-                    ;; elfultils' configure script is utterly broken
-                    ;; and also requires a bunch of libraries that
-                    ;; I don't want to package, so we're just building
-                    ;; libelf.a manually and ignoring everything else
-                    script: `((cd ,(conc "elfutils-" version))
-                              (if ((cp /src/config.h config.h)))
-                              (if ((find lib/ libelf/ -type f -name "*.[ch]"
-                                         -exec sed "-i"
-                                         -e "/#include <libintl.h>/d"
-                                         -e "/#include.*cdefs.h>/d"
-                                         "{}" ";")))
-                              (if ((find lib/ -type f -name "*.h"
-                                         -exec sed "-i" -e "s/<error.h>/<err.h>/g" "{}" ";")))
-                              (cd libelf)
-                              (if ((elglob -s csrc "*.c")
-                                   (if ((echo "cflags: " ,@cflags)))
-                                   (if ((echo "source: " $csrc)))
-                                   (,@cc ,@cflags -c $csrc)))
-                              (if ((elglob -s objs "*.o")
-                                   (,($AR conf) Dcr libelf.a $objs)))
-                              (if ((mkdir -p /out/usr/include /out/usr/lib)))
-                              (if ((cp gelf.h /out/usr/include/gelf.h)))
-                              (if ((cp libelf.h /out/usr/include/libelf.h)))
-                              (cp libelf.a /out/usr/lib/libelf.a))))))))
+                  ;; ALLLLRIGHTY THEN, here's what happening here...
+                  ;; elfultils' configure script is utterly broken
+                  ;; and also requires a bunch of libraries that
+                  ;; I don't want to package, so we're just building
+                  ;; libelf.a manually and ignoring everything else
+                  `((cd ,(conc "elfutils-" version))
+                    (if ((cp /src/config.h config.h)))
+                    (if ((find lib/ libelf/ -type f -name "*.[ch]"
+                               -exec sed "-i"
+                               -e "/#include <libintl.h>/d"
+                               -e "/#include.*cdefs.h>/d"
+                               "{}" ";")))
+                    (if ((find lib/ -type f -name "*.h"
+                               -exec sed "-i" -e "s/<error.h>/<err.h>/g" "{}" ";")))
+                    (cd libelf)
+                    (if ((elglob -s csrc "*.c")
+                         (if ((echo "cflags: " ,@cflags)))
+                         (if ((echo "source: " $csrc)))
+                         (,@cc ,@cflags -c $csrc)))
+                    (if ((elglob -s objs "*.o")
+                         (,($AR conf) Dcr libelf.a $objs)))
+                    (if ((mkdir -p /out/usr/include /out/usr/lib)))
+                    (if ((cp gelf.h /out/usr/include/gelf.h)))
+                    (if ((cp libelf.h /out/usr/include/libelf.h)))
+                    (cp libelf.a /out/usr/lib/libelf.a)))))))
 
 ;; perl packages a statically-linked perl binary
 ;;
@@ -1037,19 +1028,18 @@ EOF
                                   -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
                                   -Dman1ext=1 -Dman3ext=3pm -Ud_csh -Uusedl -Dusenm
                                   -Dusemallocwrap)))
-          (make-recipe
-            script: `((cd ,(conc "perl-" version))
-                      (export BUILD_ZLIB 0)
-                      (export BUILD_BZIP2 0)
-                      (export BZIP2_LIB ,(filepath-join ($sysroot conf) "/usr/lib"))
-                      (export BZIP2_INCLUDE ,(filepath-join ($sysroot conf) "/usr/include"))
-                      ;; force date(1) output to be stable
-                      (if ((ln -sf /bin/samedate /bin/date)))
-                      (if ((./Configure -des ,@configure-flags)))
-                      (if ((make ,@(kvargs ($make-overrides conf)))))
-                      (if ((make DESTDIR=/out install)))
-                      (if ((rm -rf /out/usr/share/man)))
-                      (find /out -name ".*" -delete))))))))
+          `((cd ,(conc "perl-" version))
+            (export BUILD_ZLIB 0)
+            (export BUILD_BZIP2 0)
+            (export BZIP2_LIB ,(filepath-join ($sysroot conf) "/usr/lib"))
+            (export BZIP2_INCLUDE ,(filepath-join ($sysroot conf) "/usr/include"))
+            ;; force date(1) output to be stable
+            (if ((ln -sf /bin/samedate /bin/date)))
+            (if ((./Configure -des ,@configure-flags)))
+            (if ((make ,@(kvargs ($make-overrides conf)))))
+            (if ((make DESTDIR=/out install)))
+            (if ((rm -rf /out/usr/share/man)))
+            (find /out -name ".*" -delete)))))))
 
 ;; busybox xxd doesn't recognize '-i'
 ;; but we can achieve a similar result
@@ -1110,22 +1100,21 @@ EOF
                      ;; setting the usual CFLAGS=..., LDFLAGS=... here,
                      ;; because those flags likely do not apply safely
                      ;; to building a freestanding bootloader
-                     (make-recipe
-                       script: `((cd ,(conc "u-boot-" version))
-                                 (importas -D 0 epoch SOURCE_DATE_EPOCH)
-                                 (backtick SOURCE_DATE_EPOCH
-                                           ((pipeline ((echo -n $epoch)))
-                                            (sed -e "s/@//")))
-                                 ,@(script-apply-patches patches)
-                                 (if ((cp /src/uboot-config .config)))
-                                 ,@(fix-dtc-script
-                                     fix-lex-options: 'scripts/kconfig/zconf.l
-                                     fix-yacc-cmdline: 'scripts/Makefile.lib)
-                                 ;; we're using yacc -d, so the zconf.tab.c needs to #include the generated definitions
-                                 (if ((sed "-i"
-                                           -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)))
-                                 (if ((make V=1 ,@make-args)))
-                                 (install -D -m 644 -t /out/boot u-boot.bin))))))))))
+                     `((cd ,(conc "u-boot-" version))
+                       (importas -D 0 epoch SOURCE_DATE_EPOCH)
+                       (backtick SOURCE_DATE_EPOCH
+                                 ((pipeline ((echo -n $epoch)))
+                                  (sed -e "s/@//")))
+                       ,@(script-apply-patches patches)
+                       (if ((cp /src/uboot-config .config)))
+                       ,@(fix-dtc-script
+                           fix-lex-options: 'scripts/kconfig/zconf.l
+                           fix-yacc-cmdline: 'scripts/Makefile.lib)
+                       ;; we're using yacc -d, so the zconf.tab.c needs to #include the generated definitions
+                       (if ((sed "-i"
+                                 -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)))
+                       (if ((make V=1 ,@make-args)))
+                       (install -D -m 644 -t /out/boot u-boot.bin)))))))))
 
 
 (define squashfs-tools
@@ -1146,17 +1135,16 @@ EOF
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list zstd lz4 xz-utils zlib musl libssp-nonshared)
-        build:  (make-recipe
-                  script: `((cd ,(conc "squashfs-tools-" version "/squashfs-tools"))
-                            ;; can't set CFLAGS= in the make invocation
-                            ;; because the Makefile is clever and toggles
-                            ;; a bunch of additional -DXXX flags based on configuration
-                            ,@(kvexport ($cc-env conf))
-                            (if ((make XZ_SUPPORT=1 LZO_SUPPORT=0
-                                       LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0
-                                       ,@(kvargs ($make-overrides conf)))))
-                            (if ((mkdir -p /out/usr/bin)))
-                            (cp mksquashfs unsquashfs /out/usr/bin)))))))
+        build:  `((cd ,(conc "squashfs-tools-" version "/squashfs-tools"))
+                  ;; can't set CFLAGS= in the make invocation
+                  ;; because the Makefile is clever and toggles
+                  ;; a bunch of additional -DXXX flags based on configuration
+                  ,@(kvexport ($cc-env conf))
+                  (if ((make XZ_SUPPORT=1 LZO_SUPPORT=0
+                             LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0
+                             ,@(kvargs ($make-overrides conf)))))
+                  (if ((mkdir -p /out/usr/bin)))
+                  (cp mksquashfs unsquashfs /out/usr/bin))))))
 
 (define lz4
   (let* ((version '1.9.2)
@@ -1169,13 +1157,12 @@ EOF
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
-        build:  (make-recipe
-                  script: `((cd ,(conc "lz4-" version))
-                            (if ((make DESTDIR=/out PREFIX=/usr
-                                       ,@(kvargs ($cc-env conf))
-                                       ,@(kvargs ($make-overrides conf))
-                                       install)))
-                            ,@(strip-binaries-script ($triple conf))))))))
+        build:  `((cd ,(conc "lz4-" version))
+                  (if ((make DESTDIR=/out PREFIX=/usr
+                             ,@(kvargs ($cc-env conf))
+                             ,@(kvargs ($make-overrides conf))
+                             install)))
+                  ,@(strip-binaries-script ($triple conf)))))))
 
 (define zstd
   (let* ((version '1.4.4)
@@ -1202,15 +1189,14 @@ EOF
                              HAVE_LZ4:  0
                              ZSTD_LEGACY_SUPPORT: 0
                              ZSTD_LIB_DEPRECATED: 0))))
-          (make-recipe
-            script: `((cd ,(conc "zstd-" version))
-                      (if ((cd lib/)
-                           (make PREFIX=/usr DESTDIR=/out
-                                 ,@makeflags install-static install-includes)))
-                      (if ((cd programs/)
-                           (make ,@makeflags zstd)))
-                      (install -D -m "755"
-                               programs/zstd /out/usr/bin/zstd))))))))
+          `((cd ,(conc "zstd-" version))
+            (if ((cd lib/)
+                 (make PREFIX=/usr DESTDIR=/out
+                       ,@makeflags install-static install-includes)))
+            (if ((cd programs/)
+                 (make ,@makeflags zstd)))
+            (install -D -m "755"
+                     programs/zstd /out/usr/bin/zstd)))))))
 
 (define libarchive
   (let* ((version '3.4.1)
@@ -1364,18 +1350,17 @@ EOF
           tools: (append (list byacc reflex)
                          (cc-for-target conf))
           inputs: (list linux-headers iptables libmnl libelf zlib musl libssp-nonshared)
-          build:  (make-recipe
-                    script: `((cd ,(conc "iproute2-" version))
-                              (if ((cp /src/config.mk config.mk)))
-                              ,@(script-apply-patches (list patch0 patch1))
-                              (if ((sed "-i" -e "/^SUBDIRS/s: netem::" Makefile)))
-                              (if ((make ,@(k=v* CCOPTS: ($CFLAGS conf))
-                                         SHARED_LIBS=n PREFIX=/usr all)))
-                              (if ((make SHARED_LIBS=n DESTDIR=/out PREFIX=/usr install)))
-                              (if ((rm -rf /out/usr/share/bash-completion)))
-                              (if ((rm -rf /out/var)))
-                              (if ((rm -rf /out/usr/share/man)))
-                              ,@(strip-binaries-script ($triple conf)))))))))
+          build:  `((cd ,(conc "iproute2-" version))
+                    (if ((cp /src/config.mk config.mk)))
+                    ,@(script-apply-patches (list patch0 patch1))
+                    (if ((sed "-i" -e "/^SUBDIRS/s: netem::" Makefile)))
+                    (if ((make ,@(k=v* CCOPTS: ($CFLAGS conf))
+                               SHARED_LIBS=n PREFIX=/usr all)))
+                    (if ((make SHARED_LIBS=n DESTDIR=/out PREFIX=/usr install)))
+                    (if ((rm -rf /out/usr/share/bash-completion)))
+                    (if ((rm -rf /out/var)))
+                    (if ((rm -rf /out/usr/share/man)))
+                    ,@(strip-binaries-script ($triple conf))))))))
 
 (define s6
   (let* ((version '2.9.0.1)
@@ -1426,11 +1411,10 @@ EOF
         src:    src
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
-        build:  (make-recipe
-                  script: `((cd ,(conc "hard-" version))
-                            (if ((make ,@(splat conf CC: CFLAGS: LDFLAGS:)
-                                       DESTDIR=/out install)))
-                            ,@(strip-binaries-script ($triple conf))))))))
+        build:  `((cd ,(conc "hard-" version))
+                  (if ((make ,@(splat conf CC: CFLAGS: LDFLAGS:)
+                             DESTDIR=/out install)))
+                  ,@(strip-binaries-script ($triple conf)))))))
 
 (define busybox-full
   (busybox/config

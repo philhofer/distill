@@ -42,10 +42,6 @@
     package-build
     package-prebuilt
 
-    make-recipe
-    recipe?
-    recipe-script
-
     $arch
     $sysroot
     $triple
