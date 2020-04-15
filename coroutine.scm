@@ -231,10 +231,13 @@ EOF
 ;; as chicken.process#process-wait, except that it
 ;; suspends the current coroutine while waiting
 (define (process-wait/yield pid)
-  (call/cc
-    (lambda (resume)
-      (hash-table-set! *wait-tab* pid resume)
-      (%yield))))
+  (let-values (((opid ok status) (process-wait pid #t)))
+    (if (= pid opid)
+      (values opid ok status)
+      (call/cc
+        (lambda (resume)
+          (hash-table-set! *wait-tab* pid resume)
+          (%yield))))))
 
 ;; proc-status is one of:
 ;;  'started (running or paused in a continuation)
@@ -282,7 +285,7 @@ EOF
                     "int64_t out; C_return(read(fd,&out,8)==8 ? out : -(int64_t)errno);")))
     (let loop ((n (getcount fd)))
       (cond
-        ((> n 0) ;; happy case
+        ((>= n 0) ;; happy case
          (let-values (((pid ok status) (process-wait -1 #t)))
            (cond
              ((= pid 0) (loop (getcount fd)))
@@ -293,8 +296,8 @@ EOF
                    (loop (- n 1))))
              (else
                (info "warning: pid not registered?" pid)
-               (loop (- n 1))))))
-        ((or (= n 0) (= n (- eintr)))
+               (loop 0)))))
+        ((= n (- eintr))
          (loop (getcount fd)))
         ((= n (- eagain))
          (begin
