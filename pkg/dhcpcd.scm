@@ -7,18 +7,17 @@
   (distill base))
 
 (define dhcpcd
-  (let* ((ver '9.0.0)
-         (src (remote-archive
-                (conc "https://roy.marples.name/downloads/dhcpcd/dhcpcd-" ver ".tar.xz")
-                "xbigG7WN0bju7nhpU3moMoiHlZRzu5PZAFOwZr2Xf6s=")))
+  (let ((src (source-template
+               "dhcpcd" "9.0.0"
+               "https://roy.marples.name/downloads/$name/$name-$version.tar.xz"
+               "xbigG7WN0bju7nhpU3moMoiHlZRzu5PZAFOwZr2Xf6s=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "dhcpcd-" ver "-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (list linux-headers musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "dhcpcd-" ver)
                   (kwith
                     ($gnu-build conf)
                     ;; do not install configuration;

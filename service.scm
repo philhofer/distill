@@ -119,6 +119,7 @@
         (make-package
           label:  "s6-rc-db"
           src:    artifacts
+          dir:    "/"
           tools:  (list busybox-core execline-tools s6 s6-rc)
           inputs: '()
           build:  `((if ((mkdir -p "/out/etc/s6-rc")))

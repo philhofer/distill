@@ -18,7 +18,7 @@
                (chicken keyword)
                (chicken module)
                (only (chicken syntax) define-for-syntax)
-               (only (chicken string) conc)
+               (only (chicken string) conc string-translate*)
                (only (chicken port)
                      with-output-to-string
                      call-with-output-string)
@@ -41,6 +41,9 @@
     package-inputs
     package-build
     package-prebuilt
+
+    source->package
+    source-template
 
     $arch
     $sysroot

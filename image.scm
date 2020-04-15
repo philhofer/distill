@@ -32,6 +32,7 @@
         raw-output: out-img
         label: "squashfs-image"
         src:   (pseudo-file)
+        dir:   "/"
         tools: (list execline-tools squashfs-tools)
         inputs: inputs
         build: (let ((opts `(-all-root
@@ -46,6 +47,7 @@
     (make-package
       raw-output: "initramfs.zst"
       src:    '()
+      dir:    ($sysroot conf)
       label:  "initramfs"
       tools:  (list execline-tools busybox-core zstd libarchive) ;; need bsdtar
       inputs: inputs
@@ -53,8 +55,7 @@
                                   ;; (see note above about compressor nondeterminism)
                                   ((zstd) '((zstd - -o /out/initramfs.zst)))
                                   (else (error "unrecognized compressor" compress)))))
-                `((cd ,($sysroot conf))
-                  ;; set mtime to 0, since bsdtar(1)
+                `(;; set mtime to 0, since bsdtar(1)
                   ;; does not have an option to override it
                   (if ((find "." -mindepth 1
                              -exec touch -hcd "@0" "{}" ";")))
@@ -76,6 +77,7 @@
     (let* ((outfile '/fs.img)
            (dst     (filepath-join '/out outfile)))
       (make-package
+        dir: "/"
         raw-output: outfile
         label:  name
         tools:  (list busybox-core execline-tools e2fsprogs)

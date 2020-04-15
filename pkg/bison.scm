@@ -1,6 +1,5 @@
 (import
   scheme
-  (only (chicken string) conc)
   (distill plan)
   (distill package)
   (distill kvector)
@@ -8,16 +7,15 @@
   (distill base))
 
 (define bison
-  (let* ((version '3.5.2)
-         (leaf    (remote-archive
-                    (conc "https://ftp.gnu.org/gnu/bison/bison-" version ".tar.gz")
-                    "RzNc3Yv-A6hUD9trf_dAdZRKF_Lhvwmpw6r_UAtVyY0=")))
+  (let ((src (source-template
+               "bison" "3.5.2"
+               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+               "RzNc3Yv-A6hUD9trf_dAdZRKF_Lhvwmpw6r_UAtVyY0=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "bison-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (append (list m4 perl) (cc-for-target conf))
         inputs: (list musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "bison-" version)
                   ($gnu-build conf))))))

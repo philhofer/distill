@@ -38,10 +38,10 @@
       (else     arch))))
 
 (define (%chicken-src name targets install)
-  (let* ((ver '5.2.0)
-         (src (remote-archive
-                (conc "https://code.call-cc.org/releases/" ver "/chicken-" ver ".tar.gz")
-                "M4edTDnvYOsgcWLxIoMpBTE0bXpG3wS3BmfiHiJ9_uA=")))
+  (let ((src (source-template
+               "chicken" "5.2.0"
+               "https://code.call-cc.org/releases/$version/$name-$version.tar.gz"
+               "M4edTDnvYOsgcWLxIoMpBTE0bXpG3wS3BmfiHiJ9_uA=")))
     (lambda (host)
       (let* ((copts     (append
                           (without
@@ -80,13 +80,12 @@
                            C_COMPILER_OPTIONS: (append (cdr ($CC host)) copts)
                            LINKER_OPTIONS: (append (cdr ($LD host)) ($LDFLAGS host)))))
 
-        (make-package
-          label:  (conc name "-" ver "-" ($arch host))
-          src:    src
+        (source->package
+          host
+          src
           tools:  (cc-for-target host)
           inputs: (list musl libssp-nonshared)
-          build:  `((cd ,(conc "chicken-" ver))
-                    (if ((make ,@mflags ,@kvflags chicken-config.h)))
+          build:  `((if ((make ,@mflags ,@kvflags chicken-config.h)))
                     (if ((make ,@mflags ,@kvflags ,@targets)))
                     (if ((make ,@mflags ,@kvflags ,@install)))
                     (rm -rf /out/usr/share)))))))
@@ -162,17 +161,18 @@
 ;; egg defines a package for the egg 'name-version'
 ;; that contains the static bits of the egg
 (define (egg name version hash . deps)
-  (let* ((url (conc "https://code.call-cc.org/egg-tarballs/5/" name "/" name "-" version ".tar.gz"))
-         (src (remote-archive url hash)))
+  (let ((src (source-template
+               name version
+               "https://code.call-cc.org/egg-tarballs/5/$name/$name-$version.tar.gz"
+               hash)))
     (lambda (conf)
       (let ((ckn-install (conc ($triple conf) '-chicken-install)))
-        (make-package
-          label:  (conc name "-" version "-egg-" ($arch conf))
-          src:    src
+        (source->package
+          conf
+          src
           tools:  (append (chicken-for-target conf) deps)
           inputs: (append (list libchicken musl libssp-nonshared) deps)
-          build:  `((cd ,(conc name "-" version))
-                    (backtick -n "-i" repo ((chicken-install -repository)))
+          build:  `((backtick -n "-i" repo ((chicken-install -repository)))
                     (importas "-i" -u repo repo)
                     (export TMP /tmp)
                     (export CHICKEN_INSTALL_REPOSITORY "/out/${repo}")
@@ -181,14 +181,14 @@
                     (,ckn-install -host -no-install-dependencies)))))))
 
 (define matchable-egg
-  (egg 'matchable '1.1 "rygA7BrZVhDdv2x9ksqaK0fgKIc-nYT9unDIHOYlQI4="))
+  (egg "matchable" "1.1" "rygA7BrZVhDdv2x9ksqaK0fgKIc-nYT9unDIHOYlQI4="))
 
 (define srfi-14-egg
-  (egg 'srfi-14 '1.4 "NwafERqp27VVghFvWoyqQooQdJ7-evsJVx-KA6Q3-7I="))
+  (egg "srfi-14" "1.4" "NwafERqp27VVghFvWoyqQooQdJ7-evsJVx-KA6Q3-7I="))
 
 (define srfi-13-egg
-  (egg 'srfi-13 '1.4 "ceY9c3sFKZVzpJZT4Z6uCqNgZAH81hbl0Di8OX3zAik="
+  (egg "srfi-13" "1.4" "ceY9c3sFKZVzpJZT4Z6uCqNgZAH81hbl0Di8OX3zAik="
        srfi-14-egg))
 
 (define srfi-69-egg
-  (egg 'srfi-69 '1.2 "aJQMPPCpKVg_53zI_5YzvK6w-ZWwGaeCORJtAjM_Fyc="))
+  (egg "srfi-69" "1.2" "aJQMPPCpKVg_53zI_5YzvK6w-ZWwGaeCORJtAjM_Fyc="))

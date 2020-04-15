@@ -1,24 +1,22 @@
 (import
   scheme
-  (only (chicken string) conc)
   (distill plan)
   (distill package)
   (distill kvector)
   (distill base))
 
 (define curl
-  (let* ((ver '7.69.1)
-         (src (remote-archive
-                (conc "https://curl.haxx.se/download/curl-" ver ".tar.xz")
-                "SE9rx8lnJG7UyJMz8kbJ8affBfFBp4YCMwLwNB_1ErE=")))
+  (let ((src (source-template
+               "curl" "7.69.1"
+               "https://curl.haxx.se/download/$name-$version.tar.xz"
+               "SE9rx8lnJG7UyJMz8kbJ8affBfFBp4YCMwLwNB_1ErE=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "curl-" ver "-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (cons perl (cc-for-target conf))
         inputs: (list libressl zlib musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "curl-" ver)
                   (kwith
                     ($gnu-build conf)
                     configure-args: (+= '(--without-libidn

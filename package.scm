@@ -16,23 +16,60 @@
     tools:
     inputs:
     prebuilt:
+    patches:
     build:
+    dir:
     raw-output:))
 
 (: package? (* -> boolean))
 (define package? (kvector-predicate <package>))
 
+(define raw-make-package (kvector-constructor <package>))
+
 (: make-package (#!rest * -> vector))
 (define make-package
   (kvector-constructor
     <package>
-    label:    #f   string?
-    src:      '()  (or/c artifact? (list-of artifact?))
-    tools:    '()  (list-of (or/c procedure? artifact?))
-    inputs:   '()  (list-of (or/c procedure? artifact?))
-    prebuilt: #f   (or/c false/c artifact?)
-    build:    #f   list?
-    raw-output: #f (or/c false/c string?)))
+    label:      #f  string?
+    src:        '() (or/c artifact? (list-of artifact?))
+    tools:      '() (list-of (or/c procedure? artifact?))
+    inputs:     '() (list-of (or/c procedure? artifact?))
+    prebuilt:   #f  (or/c false/c artifact?)
+    patches:    '() list?
+    build:      #f  list?
+    dir:        "/" string?
+    raw-output: #f  (or/c false/c string?)))
+
+(define (source-template name version urlfmt hash #!optional (patchlst '()))
+  (let* ((url (string-translate* urlfmt `(("$name" . ,name)
+                                          ("$version" . ,version))))
+         (src (remote-archive url hash)))
+    (lambda (conf)
+      (raw-make-package
+        patches: patchlst
+        label:   (conc name "-" version "-" ($arch conf))
+        src:     (cons src patchlst)
+        dir:     (conc name "-" version)))))
+
+;; temporary hack
+(define (source->package conf src . rest)
+  (apply kupdate (src conf) rest))
+
+(define (integrate template . extensions)
+  (lambda (conf)
+    (let* ((root (template conf))
+           (kwl  (vector-ref root 0)))
+      (let loop ((lst extensions))
+        (if (null? lst)
+          root
+          (let ((subl ((car lst) conf)))
+            (let inner ((kwlst subl))
+              (if (null? kwlst)
+                (loop (cdr lst))
+                (let ((idx  (kidx kwl (car subl)))
+                      (proc (cadr subl)))
+                  (vector-set! root idx (proc (vector-ref root idx)))
+                  (inner (cddr subl)))))))))))
 
 (: update-package (vector #!rest * -> vector))
 (define (update-package pkg . args)
@@ -55,6 +92,10 @@
 (define package-build (kvector-getter <package> build:))
 (: package-raw-output (vector --> (or string false)))
 (define package-raw-output (kvector-getter <package> raw-output:))
+(: package-dir (vector --> (or string false)))
+(define package-dir (kvector-getter <package> dir:))
+(: package-patches (vector --> list))
+(define package-patches (kvector-getter <package> patches:))
 
 (: <config> vector)
 (define <config>
@@ -364,24 +405,31 @@
                               input
                               (package->plan input build host))))
                  (tools  (package-tools pkg))
-                 (inputs (package-inputs pkg))
-                 (recipe (package-build pkg)))
+                 (inputs (package-inputs pkg)))
             (make-plan
               raw-output: (package-raw-output pkg)
               name:   (package-label pkg)
               inputs: (list
                         (cons "/" (flatten
-                                    (recipe-buildfile recipe)
+                                    (package-buildfile pkg)
                                     (package-src pkg) (map ->tool tools)))
                         ;; build headers+libraries live here
                         (cons ($sysroot host) (map ->input inputs)))))))))
 
-(: recipe-buildfile (list -> vector))
-(define (recipe-buildfile r)
+(: package-buildfile (vector -> vector))
+(define (package-buildfile r)
   (interned
     "/build" #x744
     (lambda ()
-      (write-exexpr r))))
+      (write-exexpr
+        (let ((dir (package-dir r))
+              (patches (or (package-patches r) '())))
+          (unless dir "error: no dir specified" r)
+          (cons
+            `(cd ,dir)
+            (append
+              (script-apply-patches patches)
+              (package-build r))))))))
 
 ;; generator for an execline sequence that strips binaries
 (define (strip-binaries-script triple)
@@ -472,23 +520,19 @@
         ($configure-args (kvector-getter <gnu-build> configure-args:))
         ($triple         (kvector-getter <gnu-build> triple:))
         (gnu?            (kvector-predicate <gnu-build>)))
-    (lambda (dir v)
-      (unless (gnu? v)
-        (error "gnu-recipe called on non-<gnu-build> object:" v))
-      `((cd ,dir)
-        ,@($pre-configure v)
+    (lambda (v)
+      `(,@($pre-configure v)
         ,@(exports->script ($exports v))
         ,@(if ($out-of-tree v)
-            `((if ((mkdir -p "/builddir")))
-              (cd "/builddir")
-              (if ((,(conc "/" dir "/configure")
+            `((if ((mkdir -p "distill-builddir")))
+              (cd "distill-builddir")
+              (if (("../configure"
                      ,@($configure-args v)))))
             `((if ((./configure ,@($configure-args v))))))
         (if ((make ,@($make-flags v))))
         (if ((make ,@($install-flags v))))
         ,@($post-install v)
-        (foreground ((rm -rf /out/usr/share/man)))
-        (foreground ((rm -rf /out/usr/share/info)))
+        (foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
         (foreground ((find /out -type f -name "*.la" -delete)))
         ,@(strip-binaries-script ($triple v))))))
 
@@ -517,18 +561,17 @@
                      --disable-shared --enable-static)
           make-args: (kvargs ($make-overrides conf)))))))
 
-(: ska-recipe (string vector --> list))
+(: ska-recipe (vector --> list))
 (define ska-recipe
   (let (($exports        (kvector-getter <ska-build> exports:))
         ($configure-args (kvector-getter <ska-build> configure-args:))
         ($make-args      (kvector-getter <ska-build> make-args:))
         ($triple         (kvector-getter <ska-build> triple:))
         (ska?            (kvector-predicate <ska-build>)))
-    (lambda (dir bld)
+    (lambda (bld)
       (unless (ska? bld)
         (error "ska-recipe given a non-<ska-build> object:" bld))
-      `((cd ,dir)
-        ,@(exports->script ($exports bld))
+      `(,@(exports->script ($exports bld))
         ;; don't let the configure script override our CFLAGS selections
         (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
         (if ((./configure ,@($configure-args bld))))

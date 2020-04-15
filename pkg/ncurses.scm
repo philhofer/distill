@@ -8,17 +8,17 @@
   (only (chicken string) conc))
 
 (define ncurses
-  (let* ((version  '6.2)
-         (src      (remote-archive
-                     (conc "https://invisible-mirror.net/archives/ncurses/ncurses-" version ".tar.gz")
-                     "yMw83zJIGrC7h2uhSt_NgbUA2Rx8nn8gX6Wncy1NEek="))
+  (let* ((src (source-template
+                "ncurses" "6.2"
+                "https://invisible-mirror.net/archives/$name/$name-$version.tar.gz"
+                "yMw83zJIGrC7h2uhSt_NgbUA2Rx8nn8gX6Wncy1NEek="))
          (cc-build (cc-env/build (lambda (kw)
                                    (string->keyword
                                      (string-append "BUILD_" (keyword->string kw)))))))
     (lambda (conf)
-      (make-package
-        label:  (conc "ncurses-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (+cross
                   conf
                   (append
@@ -29,7 +29,6 @@
                   (list ncurses))
         inputs: (list musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "ncurses-" version)
                   (kwith
                     ($gnu-build conf)
                     configure-args: (+= `(--without-ada --without-tests

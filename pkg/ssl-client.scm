@@ -19,7 +19,7 @@
                 #o644)
       tools:  (cc-for-target conf)
       inputs: (list libressl musl libssp-nonshared)
-      build:  `((cd /src)
-                (if ((,@($CC conf) ,@($CFLAGS conf) ssl_client.c -ltls -lssl -lcrypto -o ssl_client)))
+      dir: "/src"
+      build:  `((if ((,@($CC conf) ,@($CFLAGS conf) ssl_client.c -ltls -lssl -lcrypto -o ssl_client)))
                 (install -D -m "755" ssl_client /out/usr/bin/ssl_client)))))
 

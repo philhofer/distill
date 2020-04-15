@@ -417,21 +417,22 @@ EOF
 )
 
 (define python3
-  (let* ((ver '3.8.2)
-         (src (remote-archive
-                (conc "https://www.python.org/ftp/python/" ver "/Python-" ver ".tar.xz")
-                "Fz7sjZlaw3LqjDO4K3IViMKGscHMEH2_7UTIvSmKxfM=")))
+  (let ((src (source-template
+               "Python" "3.8.2"
+               "https://www.python.org/ftp/python/$version/$name-$version.tar.xz"
+               "Fz7sjZlaw3LqjDO4K3IViMKGscHMEH2_7UTIvSmKxfM=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "python-" ver "-" ($arch conf))
-        src:    (list (interned "/src/py-setup" #o644 py-setup) src)
-        tools:  (+cross conf (cc-for-target conf) (list python3))
+      (source->package
+        conf
+        src
+        tools:  (cons
+                  (interned "/src/py-setup" #o644 py-setup)
+                  (+cross conf (cc-for-target conf) (list python3)))
         inputs: (list
                   musl libssp-nonshared ncurses
                   libexpat libressl zlib bzip2 xz-utils
                   libffi linux-headers gdbm libreadline)
         build:  (gnu-recipe
-                  (conc "Python-" ver)
                   (kwith ($gnu-build conf)
                          pre-configure: (+= '((export ac_cv_file__dev_ptmx yes)
                                               (export ac_cv_file__dev_ptc no)

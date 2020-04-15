@@ -18,12 +18,12 @@
 (define (raw-vmlinuz kernpkg)
   (lambda (conf)
     (make-package
+      dir: "/"
       raw-output: "/boot/vmlinuz"
       label:  (conc "raw-vmlinuz-" ($arch conf))
       inputs: (list kernpkg)
       tools:  (list execline-tools busybox-core)
-      build:  (make-recipe
-                script: `((cp -r ,(filepath-join ($sysroot conf) "/boot") /out))))))
+      build:  `((cp -r ,(filepath-join ($sysroot conf) "/boot") /out)))))
 
 (define (qemu-system arch kernel
                      #!key

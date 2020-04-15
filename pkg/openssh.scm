@@ -4,28 +4,28 @@
   (distill package)
   (distill kvector)
   (distill base)
-  (only (chicken string) conc)
   (pkg libedit)
   (pkg ncurses))
 
 (define openssh
-  (let* ((version '8.2p1)
-         (src     (remote-archive
-                    (conc "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-" version ".tar.gz")
-                    "Q1b0Y6r5EMr46lYDaN-BW_WFyVptktRHSdnW9o05z5o="))
-         (patch0  (remote-file
-                    "https://git.alpinelinux.org/aports/plain/main/openssh/fix-verify-dns-segfault.patch"
-                    "Q4tNRrMwqrWYUf4WdcNkZPOmxGBnwQfd2da-34HX9wQ="
-                    "/src/patch0.patch"
-                    #o644)))
+  (let ((src (source-template
+               "openssh" "8.2p1"
+               "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/$name-$version.tar.gz"
+               "Q1b0Y6r5EMr46lYDaN-BW_WFyVptktRHSdnW9o05z5o="
+               (list
+                 ; patches:
+                 (remote-file
+                   "https://git.alpinelinux.org/aports/plain/main/openssh/fix-verify-dns-segfault.patch"
+                   "Q4tNRrMwqrWYUf4WdcNkZPOmxGBnwQfd2da-34HX9wQ="
+                   "/src/patch0.patch"
+                   #o644)))))
     (lambda (conf)
-      (make-package
-        label:  (conc "openssh-" version "-" ($arch conf))
-        src:    (list src patch0)
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (list linux-headers libedit ncurses zlib libressl musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "openssh-" version)
                   (kwith
                     ($gnu-build conf)
                     configure-args: (+= '(--with-pid-dir=/run
@@ -41,7 +41,6 @@
                                            --with-privsep-user=sshd
                                            --with-md5-passwords
                                            --with-libedit))
-                    pre-configure: (+= (script-apply-patches (list patch0)))
                     post-install:  (+= `(;; do NOT keep config files;
                                          ;; those are inserted via overlay
                                          (if ((rm -rf /out/var)))

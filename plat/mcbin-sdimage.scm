@@ -140,32 +140,31 @@ EOF
                                  ,(conc "BL33=" ($sysroot conf) "/boot/u-boot.bin")))
                       (bflags `(V=1 ,@(splat cc-env/for-kbuild HOSTCC: HOSTLD:)
                                     ,(conc "HOSTCCFLAGS=" (spaced (kref cc-env/for-kbuild HOSTCFLAGS:))))))
-                  (make-recipe
-                    script: `((cd ,(conc 'arm-trusted-firmware- ver))
-                              (unexport MAKEFLAGS) ;; parallel build is busted
-                              (export CROSS_COMPILE ,(conc ($triple conf) "-"))
-                              (if ((mkdir drivers/marvell/mv_ddr)))
-                              ;; copy mv-ddr-marvell into the ATF source tree;
-                              ;; the marvell makefiles expect it to be here
-                              (if ((elglob files ,(conc "/mv-ddr-marvell-" mv-ddr-ver "/*"))
-                                   (cp -r $files drivers/marvell/mv_ddr)))
-                              ;; for mv-ddr-localversion:
-                              (if ((cp /src/mv_ddr_build_message.c drivers/marvell/mv_ddr/)))
-                              ,@(script-apply-patches patches)
-                              ;; do not force a clean:
-                              (if ((sed "-i" -e "/^mrvl_clean:/,+3d" plat/marvell/marvell.mk)))
-                              (if ((sed "-i" -e "s/mrvl_clean//g" plat/marvell/marvell.mk)))
-                              ;; the top-level makefile doesn't invoke these sub-makes
-                              ;; correctly, so invoke them ahead of time with
-                              ;; the right overrides...
-                              (if ((make ,@bflags
-                                         ,(conc "LDLIBS=" (spaced '(-static-pie -lcrypto)))
-                                         -C tools/fiptool all)))
-                              (if ((make ,@bflags
-                                         ,(conc "DOIMAGE_LD_FLAGS=" (spaced '(-static-pie)))
-                                         -C tools/marvell/doimage all)))
-                              (if ((make ,@mflags "SCP_BL2=/src/mrvl_scp_bl2.img" all fip)))
-                              (install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin))))))))
+                  `((cd ,(conc 'arm-trusted-firmware- ver))
+                    (unexport MAKEFLAGS) ;; parallel build is busted
+                    (export CROSS_COMPILE ,(conc ($triple conf) "-"))
+                    (if ((mkdir drivers/marvell/mv_ddr)))
+                    ;; copy mv-ddr-marvell into the ATF source tree;
+                    ;; the marvell makefiles expect it to be here
+                    (if ((elglob files ,(conc "/mv-ddr-marvell-" mv-ddr-ver "/*"))
+                         (cp -r $files drivers/marvell/mv_ddr)))
+                    ;; for mv-ddr-localversion:
+                    (if ((cp /src/mv_ddr_build_message.c drivers/marvell/mv_ddr/)))
+                    ,@(script-apply-patches patches)
+                    ;; do not force a clean:
+                    (if ((sed "-i" -e "/^mrvl_clean:/,+3d" plat/marvell/marvell.mk)))
+                    (if ((sed "-i" -e "s/mrvl_clean//g" plat/marvell/marvell.mk)))
+                    ;; the top-level makefile doesn't invoke these sub-makes
+                    ;; correctly, so invoke them ahead of time with
+                    ;; the right overrides...
+                    (if ((make ,@bflags
+                               ,(conc "LDLIBS=" (spaced '(-static-pie -lcrypto)))
+                               -C tools/fiptool all)))
+                    (if ((make ,@bflags
+                               ,(conc "DOIMAGE_LD_FLAGS=" (spaced '(-static-pie)))
+                               -C tools/marvell/doimage all)))
+                    (if ((make ,@mflags "SCP_BL2=/src/mrvl_scp_bl2.img" all fip)))
+                    (install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin)))))))
 
 (define (mcbin-sdimage-platform conf kernel)
   (lambda (rootpkgs)

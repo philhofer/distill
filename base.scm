@@ -57,10 +57,11 @@
         execline-tools
         busybox-core))
 
-(define *musl-version* '1.2.0)
-(define *musl-src*    (remote-archive
-                        (conc "https://www.musl-libc.org/releases/musl-" *musl-version* ".tar.gz")
-                        "-DtKaw1hxYkV_hURoMR-00bA9TPByU0RITAnt9ELLls="))
+(define *musl-src*
+  (source-template
+    "musl" "1.2.0"
+    "https://www.musl-libc.org/releases/musl-$version.tar.gz"
+    "-DtKaw1hxYkV_hURoMR-00bA9TPByU0RITAnt9ELLls="))
 
 ;; when building a cross-compiler,
 ;; we need headers for the target system
@@ -71,27 +72,26 @@
   (memoize-eq
     (lambda (target)
       (lambda (host)
-        (make-package
-          label: (conc "musl-headers-" *musl-version* "-" ($arch target))
-          src:   *musl-src*
+        (source->package
+          host
+          *musl-src*
+          label: (conc "musl-headers-" ($arch target))
           tools: (list make execline-tools busybox-core)
           inputs: '()
-          build: `((cd ,(conc "musl-" *musl-version*))
-                   (make ,(conc "DESTDIR=/out/" ($sysroot target)) ,(conc "ARCH=" ($arch target)) "prefix=/usr" install-headers)))))))
+          build: `((make ,(conc "DESTDIR=/out/" ($sysroot target)) ,(conc "ARCH=" ($arch target)) "prefix=/usr" install-headers)))))))
 
 (define musl
   (lambda (conf)
     ;; note: musl is compiled as -ffreestanding, so
     ;; the gcc that builds it does *not* need to know
     ;; how to find a libc.a or crt*.o, and so forth
-    (make-package
-      label:  (conc "musl-" *musl-version* "-" ($arch conf))
-      src:    *musl-src*
+    (source->package
+      conf
+      *musl-src*
       tools:  (cc-for-target conf)
       inputs: '()
       build:
-      `((cd ,(conc "musl-" *musl-version*))
-        (if ((./configure --disable-shared --enable-static
+      `((if ((./configure --disable-shared --enable-static
                           --prefix=/usr ,@(splat conf CC: CFLAGS:)
                           --target ,($arch conf))))
         (if ((make ,@(kvargs ($make-overrides conf)))))
@@ -103,13 +103,13 @@
       label:   (conc "libssp-nonshared-" ($arch conf))
       tools:   (cc-for-target conf)
       inputs:  '()
+      dir:     "/src"
       src:     (interned "/src/ssp-nonshared.c" #o644 #<<EOF
                          extern void __stack_chk_fail(void);
                          void __attribute__((visibility ("hidden"))) __stack_chk_fail_local(void) { __stack_chk_fail(); }
 EOF
                          )
-      build: `((cd ./src)
-               (if ((,@($CC conf) ,@($CFLAGS conf) -c ssp-nonshared.c -o __stack_chk_fail_local.o)))
+      build: `((if ((,@($CC conf) ,@($CFLAGS conf) -c ssp-nonshared.c -o __stack_chk_fail_local.o)))
                (if ((,($AR conf) -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
                (if ((mkdir -p /out/usr/lib)))
                (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))
@@ -118,18 +118,17 @@ EOF
 (define libc (list musl libssp-nonshared))
 
 (define gawk
-  (let* ((version '5.0.1)
-         (leaf    (remote-archive
-                    (conc "https://ftp.gnu.org/gnu/gawk/gawk-" version ".tar.xz")
-                    "R3Oyp6YDumBd6v06rLYd5U5vEOpnq0Ie1MjwINSmX-4=")))
+  (let ((src (source-template
+               "gawk" "5.0.1"
+               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
+               "R3Oyp6YDumBd6v06rLYd5U5vEOpnq0Ie1MjwINSmX-4=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "gawk-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: libc
         build:  (gnu-recipe
-                  (conc "gawk-" version)
                   (kwith
                     ($gnu-build conf)
                     ;; we don't want the awk symlink;
@@ -148,20 +147,19 @@ EOF
     (list native-gcc native-binutils musl libssp-nonshared)))
 
 (define libgmp
-  (let* ((version '6.2.0)
-         (leaf    (remote-archive
-                    (conc "https://gmplib.org/download/gmp/gmp-" version ".tar.xz")
-                    "YQMYgwK95PJL5gS5-l_Iw59tc1O31Kx3X2XFdWm8t6M=")))
+  (let ((src (source-template
+               "gmp" "6.2.0"
+               "https://gmplib.org/download/gmp/gmp-$version.tar.xz"
+               "YQMYgwK95PJL5gS5-l_Iw59tc1O31Kx3X2XFdWm8t6M=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "gmp-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (append
                   (cons m4 (cc-for-target conf))
                   (native-toolchain-for conf))
         inputs: libc
         build:  (gnu-recipe
-                  (conc "gmp-" version)
                   ;; gmp's configure script is silly and
                   ;; only looks at CC_FOR_BUILD, but doesn't
                   ;; know anything about CFLAGS_FOR_BUILD, etc
@@ -175,97 +173,93 @@ EOF
                       exports: (+= (list (cons 'CC_FOR_BUILD cc-for-build))))))))))
 
 (define libmpfr
-  (let* ((version '4.0.2)
-         (leaf    (remote-archive
-                    (conc "https://www.mpfr.org/mpfr-current/mpfr-" version ".tar.bz2")
-                    "wKuAJV_JEeh560Jgqo8Iub6opUuqOKFfQATGEJ2F3ek=")))
+  (let ((src (source-template
+               "mpfr" "4.0.2"
+               "https://www.mpfr.org/mpfr-current/$name-$version.tar.bz2"
+               "wKuAJV_JEeh560Jgqo8Iub6opUuqOKFfQATGEJ2F3ek=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "mpfr-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (cons libgmp libc)
-        build:  (gnu-recipe (conc "mpfr-" version) ($gnu-build conf))))))
+        build:  (gnu-recipe ($gnu-build conf))))))
 
 (define libmpc
-  (let* ((version '1.1.0)
-         (leaf    (remote-archive
-                    (conc "https://ftp.gnu.org/gnu/mpc/mpc-" version ".tar.gz")
-                    "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc=")))
+  (let ((src (source-template
+               "mpc" "1.1.0"
+               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+               "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "mpc-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (cons* libgmp libmpfr libc)
-        build:  (gnu-recipe (conc "mpc-" version) ($gnu-build conf))))))
+        build:  (gnu-recipe ($gnu-build conf))))))
 
 (define m4
-  (let* ((version '1.4.18)
-         (leaf    (remote-archive
-                    (conc "https://ftp.gnu.org/gnu/m4/m4-" version ".tar.gz")
-                    "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0=")))
+  (let ((src (source-template
+               "m4" "1.4.18"
+               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+               "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "m4-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: libc
         build:  (gnu-recipe
-                  (conc "m4-" version)
                   (kwith
                     ($gnu-build conf)
                     ;; m4 sticks a file in /usr/lib/charset.alias
                     post-install: (+= '((if ((rm -rf /out/usr/lib)))))))))))
 
 (define bzip2
-  (let* ((version '1.0.8)
-         (leaf    (remote-archive
-                    (conc "https://sourceware.org/pub/bzip2/bzip2-" version ".tar.gz")
-                    "pZGXjBOF4VYQnwdDp2UYObANElrjShQaRbMDj5yef1A=")))
+  (let ((src (source-template
+               "bzip2" "1.0.8"
+               "https://sourceware.org/pub/$name/$name-$version.tar.gz"
+               "pZGXjBOF4VYQnwdDp2UYObANElrjShQaRbMDj5yef1A=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "bzip2-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: libc
-        build:  `((cd ,(conc "bzip2-" version))
-                  (make PREFIX=/out/usr ;; no DESTDIR supported
+        build:  `((make PREFIX=/out/usr ;; no DESTDIR supported
                         ,@(kvargs ($cc-env conf))
                         ,@(kvargs ($make-overrides conf))
                         install))))))
 
 (define skalibs
-  (let* ((version '2.9.2.0)
-         (leaf    (remote-archive
-                    (conc "https://skarnet.org/software/skalibs/skalibs-" version ".tar.gz")
-                    "s_kjqv340yaXpye_on0w-h8_PR0M6t8Agb4dPqAMWIs=")))
+  (let ((src (source-template
+               "skalibs" "2.9.2.0"
+               "https://skarnet.org/software/$name/$name-$version.tar.gz"
+               "s_kjqv340yaXpye_on0w-h8_PR0M6t8Agb4dPqAMWIs=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "skalibs-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: libc
         build:  (ska-recipe
-                  (conc "skalibs-" version)
                   (kwith
                     ($ska-build conf)
                     configure-args: (+= '(--with-sysdep-devurandom=yes))))))))
 
 (define execline-tools
-  (let* ((version '2.6.0.0)
-         (leaf    (remote-archive
-                    (conc "https://skarnet.org/software/execline/execline-" version ".tar.gz")
-                    "KLkA2uCEV2wf2sOEbSzdE7NAiJpolLFh6HrgohLAGFo=")))
+  (let ((src (source-template
+               "execline" "2.6.0.0"
+               "https://skarnet.org/software/$name/$name-$version.tar.gz"
+               "KLkA2uCEV2wf2sOEbSzdE7NAiJpolLFh6HrgohLAGFo=")))
     (lambda (conf)
-      (make-package
+      (source->package
+        conf
+        src
         prebuilt: (maybe-prebuilt conf 'execline)
-        label:    (conc "execline-" version "-" ($arch conf))
-        src:      leaf
         tools:    (cc-for-target conf)
         inputs:   (cons skalibs libc)
         build:    (ska-recipe
-                    (conc "execline-" version)
                     (kwith
                       ($ska-build conf)
                       configure-args: (+= `(,(conc "--with-sysdeps=" ($sysroot conf) "/lib/skalibs/sysdeps")
@@ -273,20 +267,17 @@ EOF
                                              --enable-static-libc))))))))
 
 (define byacc
-  (let* ((version '20200330)
-         (leaf    (remote-archive
-                    ;; XXX this isn't a stable tarball path;
-                    ;; this will fail when upstream changes...
-                    (conc "https://invisible-mirror.net/archives/byacc/byacc-" version ".tgz")
-                    "FTAMi_kKoQy3LVJS7qBVMo-rrgG5IlzUK10JGTUaq7c=")))
+  (let ((src (source-template
+               "byacc" "20200330"
+               "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
+               "FTAMi_kKoQy3LVJS7qBVMo-rrgG5IlzUK10JGTUaq7c=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "byacc-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: libc
         build:  (gnu-recipe
-                  (conc "byacc-" version)
                   ($gnu-build
                     (kwith conf
                            ;; --enable-btyacc enables %destructor
@@ -294,18 +285,17 @@ EOF
                            configure-flags: (+= '(--enable-btyacc)))))))))
 
 (define reflex
-  (let* ((version '20191123)
-         (leaf    (remote-archive
-                    (conc "https://invisible-mirror.net/archives/reflex/reflex-" version ".tgz")
-                    "SsgYKYUlYwedhJWxTvBAO2hdfrAMJ8mNpFjuIveGpSo=")))
+  (let ((src (source-template
+               "reflex" "20191123"
+               "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
+               "SsgYKYUlYwedhJWxTvBAO2hdfrAMJ8mNpFjuIveGpSo=")))
     (lambda (conf)
-      (make-package
-        label:   (conc "reflex-" version "-" ($arch conf))
-        src:     leaf
+      (source->package
+        conf
+        src
         tools:   (cons byacc (cc-for-target conf))
         inputs:  libc
         build:   (gnu-recipe
-                   (conc "reflex-" version)
                    (kwith
                      ($gnu-build conf)
                      ;; install the lex(1)+flex(1) symlinks
@@ -317,19 +307,18 @@ EOF
                          (if ((ln -s reflex++ /out/usr/bin/flex++)))))))))))
 
 (define zlib
-  (let* ((version '1.2.11)
-         (leaf    (remote-archive
-                    (conc "https://zlib.net/zlib-" version ".tar.gz")
-                    "K3Q8ig9qMtClPdpflHwS8OkSMrLVItBzEu5beP_szJA=")))
+  (let ((src (source-template
+               "zlib" "1.2.11"
+               "https://zlib.net/$name-$version.tar.gz"
+               "K3Q8ig9qMtClPdpflHwS8OkSMrLVItBzEu5beP_szJA=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "zlib-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: libc
         ;; not autoconf, but this works fine
         build:  (gnu-recipe
-                  (conc "zlib-" version)
                   (kwith
                     ($gnu-build conf)
                     configure-args: (:= '(--static --prefix=/usr --libdir=/lib))))))))
@@ -338,18 +327,17 @@ EOF
   ;; NOTE: the latest version of isl is 0.22.1, but
   ;; it is not available through any HTTPS mirror that I have found...
   ;; the gcc infrastructure mirror only includes up to 0.18
-  (let* ((version '0.18)
-         (leaf    (remote-archive
-                    (conc "https://gcc.gnu.org/pub/gcc/infrastructure/isl-" version ".tar.bz2")
-                    "bFSNjbp4fE4N5xcaqSGTnNfLPVv7QhnEb2IByFGBZUY=")))
+  (let ((src (source-template
+               "isl" "0.18"
+               "https://gcc.gnu.org/pub/gcc/infrastructure/$name-$version.tar.bz2"
+               "bFSNjbp4fE4N5xcaqSGTnNfLPVv7QhnEb2IByFGBZUY=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "isl-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (cons libgmp libc)
         build:  (gnu-recipe
-                  (conc "isl-" version)
                   ($gnu-build conf))))))
 
 ;; include a file as literal text at compile time
@@ -362,37 +350,31 @@ EOF
         (with-input-from-file arg read-string)))))
 
 (define make
-  (let* ((version '4.3)
-         (leaf    (remote-archive
-                    (conc "https://ftp.gnu.org/gnu/make/make-" version ".tar.gz")
-                    "HaL2VGA5mzktijZa2L_IyOv2OTKTGkf8D-AVI_wvARc=")))
+  (let ((src (source-template
+               "make" "4.3"
+               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+               "HaL2VGA5mzktijZa2L_IyOv2OTKTGkf8D-AVI_wvARc=")))
     (lambda (conf)
-      (make-package
+      (source->package
+        conf
+        src
         prebuilt: (maybe-prebuilt conf 'make)
-        label:    (conc "make-" version "-" ($arch conf))
-        src:      leaf
         tools:    (cc-for-target conf)
         inputs:   libc
         build:    (gnu-recipe
-                    (conc "make-" version)
                     (kwith
                       ($gnu-build conf)
                       ;; can't call exit(3) inside a procedure registered with atexit(3);
                       ;; just exit promptly
                       pre-configure: (+= '((if ((sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c)))))))))))
 
-(define *binutils-version* '2.34)
-(define *gcc-version* '9.3.0)
-
-(define *binutils-src*
-  (remote-archive
-    (conc "https://ftp.gnu.org/gnu/binutils/binutils-" *binutils-version* ".tar.gz")
-    "laZMIwGW3GAXUFMyvWCaHwBwgnojWVXGE94gWH164A4="))
-
+(define *gcc-version* "9.3.0")
 (define *gcc-src*
-  (remote-archive
-    (conc "https://ftp.gnu.org/gnu/gcc/gcc-" *gcc-version* "/gcc-" *gcc-version* ".tar.gz")
-    "Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="))
+  (source-template
+    "gcc" *gcc-version*
+    "https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
+    "Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="
+    (patch* (include-file-text "patches/gcc/pie-gcc.patch"))))
 
 (define (gcc-target-flags conf)
   (case ($arch conf)
@@ -417,6 +399,12 @@ EOF
     (+foreign
       (+cross all))))
 
+(define *binutils-src*
+  (source-template
+    "binutils" "2.34"
+    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+    "laZMIwGW3GAXUFMyvWCaHwBwgnojWVXGE94gWH164A4="))
+
 (define binutils-for-target
   (memoize-eq
     (lambda (target)
@@ -425,13 +413,10 @@ EOF
               (target-arch   ($arch target))
               (target-triple ($triple target))
               (host-triple   ($triple host)))
-          (make-package
+          (source->package
+            host
+            *binutils-src*
             prebuilt: (and (eq? host target) (maybe-prebuilt host 'binutils))
-            label:    (conc "binutils-" *binutils-version* "-" ($arch target) "-"
-                            (if (eq? host-arch target-arch)
-                              "native"
-                              host-arch))
-            src:      *binutils-src*
             tools:    (triplet-depends host-arch target-arch
                                        ;; always depends on:
                                        (cons* byacc reflex (cc-for-target host))
@@ -441,7 +426,6 @@ EOF
                                        (list (musl-headers-for-target target)))
             inputs:   (cons zlib libc)
             build:    (gnu-recipe
-                        (conc "binutils-" *binutils-version*)
                         (kwith
                           ($gnu-build host)
                           exports: (+= (list cc-env/for-build))
@@ -485,14 +469,14 @@ EOF
           (make-package
             label: (conc "fakemusl-" version "-" ($arch host) "-" ($arch target))
             src:   leaf
+            dir:   (conc "fakemusl-" version)
             tools: (list (binutils-for-target target)
                          make
                          execline-tools
                          busybox-core)
             inputs: '()
             build: (let* ((outdir (filepath-join "/out" ($sysroot target))))
-                     `((cd ,(conc "fakemusl-" version))
-                       (if ((make ,@(splat target AS: AR:) all)))
+                     `((if ((make ,@(splat target AS: AR:) all)))
                        (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
 
 (define gcc-for-target
@@ -502,16 +486,11 @@ EOF
         (let ((target-arch   ($arch target))
               (host-arch     ($arch host))
               (target-triple ($triple target))
-              (host-triple   ($triple host))
-              (patches       (patch*
-                               (include-file-text "patches/gcc/pie-gcc.patch"))))
-          (make-package
+              (host-triple   ($triple host)))
+          (source->package
+            host
+            *gcc-src*
             prebuilt: (and (eq? host target) (maybe-prebuilt host 'gcc))
-            label: (conc "gcc-" *gcc-version* "-" ($arch target) "-"
-                         (if (eq? host-arch target-arch)
-                           "native"
-                           host-arch))
-            src:   (cons *gcc-src* patches)
             ;; TODO: when build!=host!=target, need (cc-for-target target)
             ;; and the appropriate cc-env needs to be exported
             tools: (triplet-depends host-arch target-arch
@@ -531,7 +510,6 @@ EOF
                           ;; will compile as if it is a cross-compiler
                           CFLAGS: (+= '(-DCROSS_DIRECTORY_STRUCTURE)))))
               (gnu-recipe
-                (conc "gcc-" *gcc-version*)
                 (kwith
                   ($gnu-build conf)
                   out-of-tree: (:= #t)
@@ -545,7 +523,6 @@ EOF
                                  '(gcc_cv_c_no_pie . no)
                                  '(gcc_cv_c_no_fpie . no)))
                   pre-configure: (+=
-                                   (script-apply-patches patches)
                                    `(;; some makefile templates don't set AR+ARFLAGS correctly;
                                      ;; just let them take the values from the environment
                                      (if ((find "." -name Makefile.in -exec sed "-i"
@@ -609,38 +586,36 @@ EOF
     ((binutils-for-target build) build)))
 
 (define (busybox/config config-hash extra-inputs)
-  (let* ((version '1.31.1)
-         (leaf    (remote-archive
-                    (conc "https://busybox.net/downloads/busybox-" version ".tar.bz2")
-                    "JqkfZAknGWBuXj1sPLwftVaH05I5Hb2WusYrYuO-sJk=")))
+  (let ((src (source-template
+               "busybox" "1.31.1"
+               "https://busybox.net/downloads/$name-$version.tar.bz2"
+               "JqkfZAknGWBuXj1sPLwftVaH05I5Hb2WusYrYuO-sJk="
+               (patch* (include-file-text "patches/busybox/busybox-bc.patch"))))
+        (config (remote-file
+                  #f config-hash "/src/config.head" #o644)))
     (lambda (conf)
-      (let* ((config       (remote-file
-                             #f config-hash "/src/config.head" #o644))
-             (patches      (patch*
-                             (include-file-text "patches/busybox/busybox-bc.patch"))))
-        (make-package
-          label:  (conc "busybox-" version "-" ($arch conf))
-          src:    (cons* config leaf patches)
-          tools:  (append
-                    (cons bzip2 (cc-for-target conf))
-                    (native-toolchain-for conf))
-          inputs: (append libc extra-inputs)
-          build: `((cd ,(conc "busybox-" version))
-                   (export KCONFIG_NOTIMESTAMP 1)
-                   ,@(script-apply-patches patches)
-                   (if ((mv /src/config.head .config)))
-                   (if ((make V=1
-                              ,(conc "CROSS_COMPILE=" ($triple conf) "-")
-                              ,(conc "CONFIG_SYSROOT=" ($sysroot conf))
-                              ,(conc "CONFIG_EXTRA_CFLAGS=" (spaced ($CFLAGS conf)))
-                              ,@(kvargs cc-env/for-kbuild) busybox)))
-                   (if ((make V=1 busybox.links)))
-                   (if ((install -D -m "755" busybox /out/bin/busybox)))
-                   (if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))
-                   (redirfd -r 0 busybox.links)
-                   (forstdin -o 0 link)
-                   (importas "-i" -u link link)
-                   (ln -s /bin/busybox "/out/${link}")))))))
+      (source->package
+        conf
+        src
+        tools:  (append
+                  (list bzip2 config)
+                  (cc-for-target conf)
+                  (native-toolchain-for conf))
+        inputs: (append libc extra-inputs)
+        build: `((export KCONFIG_NOTIMESTAMP 1)
+                 (if ((mv /src/config.head .config)))
+                 (if ((make V=1
+                            ,(conc "CROSS_COMPILE=" ($triple conf) "-")
+                            ,(conc "CONFIG_SYSROOT=" ($sysroot conf))
+                            ,(conc "CONFIG_EXTRA_CFLAGS=" (spaced ($CFLAGS conf)))
+                            ,@(kvargs cc-env/for-kbuild) busybox)))
+                 (if ((make V=1 busybox.links)))
+                 (if ((install -D -m "755" busybox /out/bin/busybox)))
+                 (if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))
+                 (redirfd -r 0 busybox.links)
+                 (forstdin -o 0 link)
+                 (importas "-i" -u link link)
+                 (ln -s /bin/busybox "/out/${link}"))))))
 
 ;; busybox-core is just enough busybox to build packages;
 ;; it doesn't include system utilities that would require
@@ -703,23 +678,21 @@ EOF
           (keyword->string kw))))))
 
 (define e2fsprogs
-  (let* ((version '1.45.5)
-         (src     (remote-archive
-                    (conc "https://kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v" version "/e2fsprogs-" version ".tar.xz")
-                    "w7R6x_QX6QpTEtnNihjwlHLBBtfo-r9RrWVjt9Nc818="))
-         (patches (patch* mke2fs-repro-patch)))
+  (let ((src (source-template
+                    "e2fsprogs" "1.45.5"
+                    "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
+                    "w7R6x_QX6QpTEtnNihjwlHLBBtfo-r9RrWVjt9Nc818="
+                    (patch* mke2fs-repro-patch))))
     (lambda (conf)
-      (make-package
-        label:  (conc "e2fsprogs-" version "-" ($arch conf))
-        src:    (cons src patches)
+      (source->package
+        conf
+        src
         tools:  (append (cc-for-target conf)
                         (native-toolchain-for conf))
         inputs: (list linux-headers musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "e2fsprogs-" version)
                   (kwith
                     ($gnu-build conf)
-                    pre-configure: (+= (script-apply-patches patches))
                     configure-args: (+=
                                       `(--enable-symlink-install
                                          --enable-libuuid
@@ -730,7 +703,7 @@ EOF
                     install-flags: (:= '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))))))
 
 (define *linux-major* 5.4)
-(define *linux-patch* 28)
+(define *linux-patch* 32)
 
 (define *linux-source*
   (list
@@ -739,7 +712,7 @@ EOF
       "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
     (remote-file
       (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" *linux-major* "." *linux-patch* ".xz")
-      "17NPZlCjiaK9xOv8DnN_ctOypA5ur3cLNafcArF9gks="
+      "RY7siin1qy78SLD_ALjgQvNgL6y0CRRqqVL3a9NiXIc="
       "/src/linux.patch"
       #o644)))
 
@@ -762,12 +735,12 @@ EOF
   (lambda (conf)
     (make-package
       src:    *linux-source*
+      dir:    (conc "linux-" *linux-major*)
       label:  (conc "linux-headers-" *linux-major* "." *linux-patch* "-" ($arch conf))
       tools:  (append (list execline-tools busybox-core make xz-utils)
                       (native-toolchain))
       inputs: '()
-      build:  `((cd ,(conc "linux-" *linux-major*))
-                (if ((pipeline ((xzcat /src/linux.patch)))
+      build:  `((if ((pipeline ((xzcat /src/linux.patch)))
                      (patch -p1)))
                 (if ((make ,(conc 'ARCH= (linux-arch-name ($arch conf)))
                            ,@(kvargs cc-env/for-kbuild)
@@ -886,6 +859,7 @@ EOF
     (lambda (conf)
       (make-package
         src:   (append (list install config) *linux-source* patches)
+        dir:   (conc "linux-" *linux-major*)
         label: (conc "linux-" *linux-major* "." *linux-patch* "-" name)
         tools: (append (list perl xz-utils reflex byacc libelf zlib linux-headers)
                        (native-toolchain-for conf)
@@ -897,8 +871,7 @@ EOF
                                     YACC: 'yacc ;; not bison -y
                                     ARCH: (linux-arch-dir-name ($arch conf))
                                     HOST_LIBELF_LIBS: '(-lelf -lz)))))
-                 `((cd ,(conc "linux-" *linux-major*))
-                   (if ((pipeline ((xzcat /src/linux.patch)))
+                 `((if ((pipeline ((xzcat /src/linux.patch)))
                         (patch -p1)))
                    ,@(script-apply-patches patches)
                    ,@(fix-dtc-script
@@ -928,17 +901,17 @@ EOF
 
 ;; libelf is just a subset of elfutils (just the bit we need in order to build kbuild's objtool)
 (define libelf
-  (let* ((version '0.178)
-         (leaf    (remote-archive
-                    (conc "https://sourceware.org/elfutils/ftp/" version "/elfutils-" version ".tar.bz2")
-                    "ibDvVn8CMIhlIQAZGAsl7Yf13fm42qO7NJDctqLd2Hc="))
+  (let ((src (source-template
+                "elfutils" "0.178"
+                "https://sourceware.org/$name/ftp/$version/$name-$version.tar.bz2"
+                "ibDvVn8CMIhlIQAZGAsl7Yf13fm42qO7NJDctqLd2Hc="))
          (config  (remote-file
                     #f "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
     (lambda (conf)
-      (make-package
-        label:  (conc "libelf-" version "-" ($arch conf))
-        src:    (list leaf config)
-        tools:  (cc-for-target conf)
+      (source->package
+        conf
+        src
+        tools:  (cons config (cc-for-target conf))
         inputs: (list zlib musl libssp-nonshared)
         build:  (let ((cflags (append ($CFLAGS conf)
                                       '(-D_GNU_SOURCE -DHAVE_CONFIG_H -I. -I.. -I../lib)))
@@ -948,8 +921,7 @@ EOF
                   ;; and also requires a bunch of libraries that
                   ;; I don't want to package, so we're just building
                   ;; libelf.a manually and ignoring everything else
-                  `((cd ,(conc "elfutils-" version))
-                    (if ((cp /src/config.h config.h)))
+                  `((if ((cp /src/config.h config.h)))
                     (if ((find lib/ libelf/ -type f -name "*.[ch]"
                                -exec sed "-i"
                                -e "/#include <libintl.h>/d"
@@ -977,10 +949,10 @@ EOF
 ;; code would have to learn *a lot* about perl build configuration internals
 ;; in order to make cross-compilation work
 (define perl
-  (let* ((version '5.30.1)
-         (leaf    (remote-archive
-                    (conc "https://www.cpan.org/src/5.0/perl-" version ".tar.gz")
-                    "EBvfwKXjX_aaet0AXxwJKJGpGy4RnUrrYjh-qLeZ8ts=")))
+  (let ((src (source-template
+               "perl" "5.30.1"
+               "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
+               "EBvfwKXjX_aaet0AXxwJKJGpGy4RnUrrYjh-qLeZ8ts=")))
     (lambda (conf)
       ;; TODO: really, this test should be even tighter:
       ;; you can't build perl on a machine that can't run
@@ -997,9 +969,9 @@ EOF
                     (write-exexpr
                       '((echo "Fri Apr 3 20:09:47 UTC 2020"))
                       shebang: "#!/bin/execlineb -s0"))))
-      (make-package
-        label:  (conc "perl-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cons samedate (cc-for-target conf))
         inputs: (list zlib bzip2 musl libssp-nonshared)
         build:
@@ -1028,8 +1000,7 @@ EOF
                                   -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
                                   -Dman1ext=1 -Dman3ext=3pm -Ud_csh -Uusedl -Dusenm
                                   -Dusemallocwrap)))
-          `((cd ,(conc "perl-" version))
-            (export BUILD_ZLIB 0)
+          `((export BUILD_ZLIB 0)
             (export BUILD_BZIP2 0)
             (export BZIP2_LIB ,(filepath-join ($sysroot conf) "/usr/lib"))
             (export BZIP2_INCLUDE ,(filepath-join ($sysroot conf) "/usr/include"))
@@ -1068,24 +1039,24 @@ EOF
 ;;  - bootargs: the default kernel argument list
 ;;  - bootcmd: the default kernel boot command for u-boot (i.e. booti, etc.)
 (define uboot/config
-  (let* ((version '2020.04-rc3)
-         (src     (remote-archive
-                    (conc "https://ftp.denx.de/pub/u-boot/u-boot-" version ".tar.bz2")
-                    "-se2Ch0_yG0gCjtkTSEUmOYrle8860Gg887w3f7I8yI=")))
+  (let ((src (source-template
+               "u-boot" "2020.04-rc3"
+               "https://ftp.denx.de/pub/$name/$name-$version.tar.bz2"
+               "-se2Ch0_yG0gCjtkTSEUmOYrle8860Gg887w3f7I8yI="
+               (patch* no-xxd-patch portable-lexer-patch))))
     (lambda (name h env bootargs bootcmd)
-      (let ((patches (patch* no-xxd-patch portable-lexer-patch))
-            (envfile (interned
+      (let ((envfile (interned
                        "/src/uboot-env"
                        #o644
                        (lines/s (list->seq env))))
             (dotconf (remote-file
                        #f h "/src/uboot-config" #o644)))
         (lambda (conf)
-          (make-package
-            label: (conc "uboot-" version "-" name)
-            src:   (cons* src envfile dotconf patches)
+          (source->package
+            conf
+            src
             tools: (append
-                     (list reflex byacc)
+                     (list reflex byacc envfile dotconf)
                      (cc-for-target conf)
                      (native-toolchain-for conf))
             inputs: '()
@@ -1100,12 +1071,10 @@ EOF
                      ;; setting the usual CFLAGS=..., LDFLAGS=... here,
                      ;; because those flags likely do not apply safely
                      ;; to building a freestanding bootloader
-                     `((cd ,(conc "u-boot-" version))
-                       (importas -D 0 epoch SOURCE_DATE_EPOCH)
+                     `((importas -D 0 epoch SOURCE_DATE_EPOCH)
                        (backtick SOURCE_DATE_EPOCH
                                  ((pipeline ((echo -n $epoch)))
                                   (sed -e "s/@//")))
-                       ,@(script-apply-patches patches)
                        (if ((cp /src/uboot-config .config)))
                        ,@(fix-dtc-script
                            fix-lex-options: 'scripts/kconfig/zconf.l
@@ -1120,23 +1089,20 @@ EOF
 (define squashfs-tools
   ;; NOTE: mksquashfs before 4.4 does not honor SOURCE_DATE_EPOCH
   ;; nor does it produce reproducible images (without a lot of additional trouble)
-  (let* ((version '4.4)
-         (src     (remote-archive
-                    (conc "https://github.com/plougher/squashfs-tools/archive/" version ".tar.gz")
-                    "o-ja9XdUjDj8KcrNOfKi7jQ1z37f7dtf3YUFgqRTIuo="))
-         (patch0   (remote-file
-                     "https://git.alpinelinux.org/aports/plain/main/squashfs-tools/fix-compat.patch"
-                     "JnWyi6aoL93ZiPQNOEelZ1BMkuwo7JCQe1PXddsrO_Y="
-                     "/src/patch0.patch"
-                     #o644)))
+  (let* ((ver "4.4")
+         (src (source-template
+                "squashfs-tools" "4.4"
+                "https://github.com/plougher/$name/archive/$version.tar.gz"
+                "o-ja9XdUjDj8KcrNOfKi7jQ1z37f7dtf3YUFgqRTIuo=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "squashfs-tools-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
+        ;; non-standard directory
+        dir:    (conc "squashfs-tools-" ver "/squashfs-tools")
         tools:  (cc-for-target conf)
         inputs: (list zstd lz4 xz-utils zlib musl libssp-nonshared)
-        build:  `((cd ,(conc "squashfs-tools-" version "/squashfs-tools"))
-                  ;; can't set CFLAGS= in the make invocation
+        build:  `(;; can't set CFLAGS= in the make invocation
                   ;; because the Makefile is clever and toggles
                   ;; a bunch of additional -DXXX flags based on configuration
                   ,@(kvexport ($cc-env conf))
@@ -1147,34 +1113,31 @@ EOF
                   (cp mksquashfs unsquashfs /out/usr/bin))))))
 
 (define lz4
-  (let* ((version '1.9.2)
-         (src     (remote-archive
-                    (conc "https://github.com/lz4/lz4/archive/v" version ".tar.gz")
-                    "uwHhgT74Tk7ds0TQeFZTodoI1_5IZsRnVRNNHi7ywlc=")))
+  (let ((src (source-template
+               "lz4" "1.9.2"
+               "https://github.com/lz4/$name/archive/v$version.tar.gz"
+               "uwHhgT74Tk7ds0TQeFZTodoI1_5IZsRnVRNNHi7ywlc=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "lz4-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
-        build:  `((cd ,(conc "lz4-" version))
-                  (if ((make DESTDIR=/out PREFIX=/usr
+        build:  `((if ((make DESTDIR=/out PREFIX=/usr
                              ,@(kvargs ($cc-env conf))
                              ,@(kvargs ($make-overrides conf))
                              install)))
                   ,@(strip-binaries-script ($triple conf)))))))
 
 (define zstd
-  (let* ((version '1.4.4)
-         (src     (remote-archive
-                    (conc "https://github.com/facebook/zstd/archive/v"
-                          version
-                          ".tar.gz")
-                    "PKNr93GxvtI1hA4Oia-Ut7HNNGjAcxlvfSr3TYdpdX4=")))
+  (let ((src (source-template
+               "zstd" "1.4.4"
+               "https://github.com/facebook/$name/archive/v$version.tar.gz"
+               "PKNr93GxvtI1hA4Oia-Ut7HNNGjAcxlvfSr3TYdpdX4=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "zstd-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
         build:
@@ -1189,8 +1152,7 @@ EOF
                              HAVE_LZ4:  0
                              ZSTD_LEGACY_SUPPORT: 0
                              ZSTD_LIB_DEPRECATED: 0))))
-          `((cd ,(conc "zstd-" version))
-            (if ((cd lib/)
+          `((if ((cd lib/)
                  (make PREFIX=/usr DESTDIR=/out
                        ,@makeflags install-static install-includes)))
             (if ((cd programs/)
@@ -1199,129 +1161,124 @@ EOF
                      programs/zstd /out/usr/bin/zstd)))))))
 
 (define libarchive
-  (let* ((version '3.4.1)
-         (src     (remote-archive
-                    (conc "https://github.com/libarchive/libarchive/releases/download/v" version "/libarchive-" version ".tar.gz")
-                    "dfot337ydQKCCABhpdrALARa6QFrjqzYxFSAPSiflFk=")))
+  (let ((src (source-template
+               "libarchive" "3.4.1"
+               "https://github.com/libarchive/$name/releases/download/v$version/$name-$version.tar.gz"
+               "dfot337ydQKCCABhpdrALARa6QFrjqzYxFSAPSiflFk=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "libarchive-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (list bzip2 zlib xz-utils lz4 libressl zstd musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "libarchive-" version)
                   (kwith
                     ($gnu-build conf)
                     configure-args: (+= '(--without-xml2 --without-acl --without-attr --without-expat))))))))
 
 (define libressl
-  (let* ((version '3.0.2)
-         (leaf    (remote-archive
-                    (conc "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-" version ".tar.gz")
-                    "klypcg5zlwvSTOzTQZ7M-tBZgcb3tPe72gtWn6iMTR8=")))
+  (let ((src (source-template
+               "libressl" "3.0.2"
+               "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
+               "klypcg5zlwvSTOzTQZ7M-tBZgcb3tPe72gtWn6iMTR8=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "libressl-" version "-" ($arch conf))
-        src:    leaf
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "libressl-" version)
                   (kwith
                     ($gnu-build conf)
                     post-install: (+= `((if ((ln -s openssl /out/usr/bin/libressl)))))))))))
 
 (define xz-utils
-  (let* ((version '5.2.4)
-         (src     (remote-archive
-                    (conc "https://tukaani.org/xz/xz-" version ".tar.xz")
-                    "xbmRDrGbBvg_6BxpAPsQGBrFFAgpb0FrU3Yu1zOf4k8=")))
+  (let ((src (source-template
+               "xz" "5.2.4"
+               "https://tukaani.org/$name/$name-$version.tar.xz"
+               "xbmRDrGbBvg_6BxpAPsQGBrFFAgpb0FrU3Yu1zOf4k8=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "xz-utils-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "xz-" version)
                   ($gnu-build conf))))))
 
 (define libmnl
-  (let* ((version '1.0.4)
-         (src     (remote-archive
-                    (conc "https://netfilter.org/projects/libmnl/files/libmnl-" version ".tar.bz2")
-                    "kUOLXuIdscWD_5WHBvAIuytyuy-gGm_LXen3TWodgNs=")))
+  (let ((src (source-template
+               "libmnl" "1.0.4"
+               "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
+               "kUOLXuIdscWD_5WHBvAIuytyuy-gGm_LXen3TWodgNs=")))
     (lambda (conf)
-      (make-package
-        label:   (conc "libmnl-" version "-" ($arch conf))
-        src:     src
+      (source->package
+        conf
+        src
         tools:   (cc-for-target conf)
         inputs:  (list linux-headers musl libssp-nonshared)
         build:   (gnu-recipe
-                   (conc "libmnl-" version)
                    ($gnu-build conf))))))
 
 (define libnftnl
-  (let* ((version '1.1.5)
-         (src     (remote-archive
-                    (conc "https://netfilter.org/projects/libnftnl/files/libnftnl-" version ".tar.bz2")
-                    "R3Dq9wvV2TNUcXSy_KDTNcR4G8fm_ypLB9xLc0OfEBc=")))
+  (let ((src (source-template
+               "libnftnl" "1.1.5"
+               "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
+               "R3Dq9wvV2TNUcXSy_KDTNcR4G8fm_ypLB9xLc0OfEBc=")))
     (lambda (conf)
-      (let ()
-        (make-package
-          label:  (conc "libnftnl-" version "-" ($arch conf))
-          src:    src
-          tools:  (cc-for-target conf)
-          inputs: (list linux-headers libmnl musl libssp-nonshared)
-          build:  (gnu-recipe
-                    (conc "libnftnl-" version)
-                    (kwith
-                      ($gnu-build conf)
-                      ;; LIBMNL_CFLAGS needs to be set
-                      ;; to make the configure script happy,
-                      ;; but there isn't actually a value
-                      ;; we'd like to set...
-                      configure-args: (+= '(LIBMNL_CFLAGS=-lmnl
-                                              LIBMNL_LIBS=-lmnl))
-                      make-flags: (+= '(V=1)))))))))
+      (source->package
+        conf
+        src
+        tools:  (cc-for-target conf)
+        inputs: (list linux-headers libmnl musl libssp-nonshared)
+        build:  (gnu-recipe
+                  (kwith
+                    ($gnu-build conf)
+                    ;; LIBMNL_CFLAGS needs to be set
+                    ;; to make the configure script happy,
+                    ;; but there isn't actually a value
+                    ;; we'd like to set...
+                    configure-args: (+= '(LIBMNL_CFLAGS=-lmnl
+                                           LIBMNL_LIBS=-lmnl))
+                    make-flags: (+= '(V=1))))))))
 
 (define iptables
-  (let* ((version '1.8.4)
-         (src     (remote-archive
-                    (conc "https://netfilter.org/projects/iptables/files/iptables-" version ".tar.bz2")
-                    "hBWYiIU2PYebYoMF6_n_anAFXGfruGBmAXU94ge9DQo=")))
+  (let ((src (source-template
+               "iptables" "1.8.4"
+               "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
+               "hBWYiIU2PYebYoMF6_n_anAFXGfruGBmAXU94ge9DQo=")))
     (lambda (conf)
       (let ((conf (kwith conf CFLAGS: (+= '(-D_GNU_SOURCE)))))
-        (make-package
-          label:  (conc "iptables-" version "-" ($arch conf))
-          src:    src
+        (source->package
+          conf
+          src
           tools:  (append (list byacc reflex) (cc-for-target conf))
           inputs: (list linux-headers libnftnl libmnl musl libssp-nonshared)
           build:  (gnu-recipe
-                    (conc "iptables-" version)
                     (kwith
                       ($gnu-build conf)
                       configure-args: (+= '(libmnl_CFLAGS=-lmnl
-                                              libmnl_LIBS=-lmnl
-                                              libnftnl_CFLAGS=-lnftnl
-                                              libnftnl_LIBS=-lnftnl)))))))))
+                                             libmnl_LIBS=-lmnl
+                                             libnftnl_CFLAGS=-lnftnl
+                                             libnftnl_LIBS=-lnftnl)))))))))
 
 (define iproute2
-  (let* ((version '5.5.0)
-         (src     (remote-archive
-                    (conc "https://kernel.org/pub/linux/utils/net/iproute2/iproute2-" version ".tar.xz")
-                    "zVeW6PtWecKE9Qlx9l4NrfnQcIZNAW4HocbzuLiJOpo="))
-         (patch0  (remote-file
-                    "https://git.alpinelinux.org/aports/plain/main/iproute2/musl-fixes.patch"
-                    "K4srcIY08guTgXv7DeGR6InxsXUKFV76vmeLao7Y0Cw="
-                    "/src/musl-fixes.patch"
-                    #o644))
-         (patch1  (remote-file
-                    "https://git.alpinelinux.org/aports/plain/main/iproute2/fix-install-errors.patch"
-                    "jUzhNv5c3_lyQZ6omNKQaBvZNbpHZVkyeMuG15uq1sA="
-                    "/src/fix-install-errors.patch"
-                    #o644)))
+  (let ((src (source-template
+               "iproute2" "5.5.0"
+               "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
+               "zVeW6PtWecKE9Qlx9l4NrfnQcIZNAW4HocbzuLiJOpo="
+               ;; patches:
+               (list
+                 (remote-file
+                   "https://git.alpinelinux.org/aports/plain/main/iproute2/musl-fixes.patch"
+                   "K4srcIY08guTgXv7DeGR6InxsXUKFV76vmeLao7Y0Cw="
+                   "/src/musl-fixes.patch"
+                   #o644)
+                 (remote-file
+                   "https://git.alpinelinux.org/aports/plain/main/iproute2/fix-install-errors.patch"
+                   "jUzhNv5c3_lyQZ6omNKQaBvZNbpHZVkyeMuG15uq1sA="
+                   "/src/fix-install-errors.patch"
+                   #o644)))))
     (lambda (conf)
       ;; the configure script isn't autoconf and
       ;; doesn't work without pkgconfig, but luckily
@@ -1344,15 +1301,13 @@ EOF
                                  "LDLIBS += -lelf -lmnl -lz"
                                  "%.o: %.c"
                                  "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
-        (make-package
-          label: (conc "iproute2-" version "-" ($arch conf))
-          src:   (list src patch0 patch1 config.mk)
-          tools: (append (list byacc reflex)
+        (source->package
+          conf
+          src
+          tools: (append (list config.mk byacc reflex)
                          (cc-for-target conf))
           inputs: (list linux-headers iptables libmnl libelf zlib musl libssp-nonshared)
-          build:  `((cd ,(conc "iproute2-" version))
-                    (if ((cp /src/config.mk config.mk)))
-                    ,@(script-apply-patches (list patch0 patch1))
+          build:  `((if ((cp /src/config.mk config.mk)))
                     (if ((sed "-i" -e "/^SUBDIRS/s: netem::" Makefile)))
                     (if ((make ,@(k=v* CCOPTS: ($CFLAGS conf))
                                SHARED_LIBS=n PREFIX=/usr all)))
@@ -1363,35 +1318,33 @@ EOF
                     ,@(strip-binaries-script ($triple conf))))))))
 
 (define s6
-  (let* ((version '2.9.0.1)
-         (src     (remote-archive
-                    (conc "https://skarnet.org/software/s6/s6-" version ".tar.gz")
-                    "uwnwdcxfc7i3LTjeNPcnouhShXzpMPIG0I2AbQfjL_I=")))
+  (let ((src (source-template
+               "s6" "2.9.0.1"
+               "https://skarnet.org/software/$name/$name-$version.tar.gz"
+               "uwnwdcxfc7i3LTjeNPcnouhShXzpMPIG0I2AbQfjL_I=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "s6-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (list skalibs execline-tools musl libssp-nonshared)
         build:  (ska-recipe
-                  (conc "s6-" version)
                   (kwith
                     ($ska-build conf)
                     configure-args: (+= `(,(conc '--with-sysdeps= ($sysroot conf) "/lib/skalibs/sysdeps")
                                            --enable-static-libc))))))))
 (define s6-rc
-  (let* ((version '0.5.1.1)
-         (src     (remote-archive
-                    (conc "https://skarnet.org/software/s6-rc/s6-rc-" version ".tar.gz")
-                    "KCvqdFSKEUNPkHQuCBfs86zE9JvLrNHU2ZhEzLYY5RY=")))
+  (let ((src (source-template
+               "s6-rc" "0.5.1.1"
+               "https://skarnet.org/software/$name/$name-$version.tar.gz"
+               "KCvqdFSKEUNPkHQuCBfs86zE9JvLrNHU2ZhEzLYY5RY=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "s6-rc-" version "-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (cc-for-target conf)
         inputs: (list s6 skalibs execline-tools musl libssp-nonshared)
         build:  (ska-recipe
-                  (conc "s6-rc-" version)
                   (kwith
                     ($ska-build conf)
                     configure-args: (+= `(,(conc '--with-sysdeps= ($sysroot conf) "/lib/skalibs/sysdeps")
@@ -1409,10 +1362,10 @@ EOF
       (make-package
         label:  (conc "hard-" version "-" ($arch conf))
         src:    src
+        dir:    (conc "hard-" version)
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
-        build:  `((cd ,(conc "hard-" version))
-                  (if ((make ,@(splat conf CC: CFLAGS: LDFLAGS:)
+        build:  `((if ((make ,@(splat conf CC: CFLAGS: LDFLAGS:)
                              DESTDIR=/out install)))
                   ,@(strip-binaries-script ($triple conf)))))))
 

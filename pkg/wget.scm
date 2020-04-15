@@ -7,18 +7,17 @@
   (distill base))
 
 (define wget
-  (let* ((ver '1.20.3)
-         (src (remote-archive
-                (conc "https://ftp.gnu.org/gnu/wget/wget-" ver ".tar.gz")
-                "G3jWdBQ-_4BxoX6NpCl6-mbpV_NH0BEOZZRMLKqlTrs=")))
+  (let ((src (source-template
+               "wget" "1.20.3"
+               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+               "G3jWdBQ-_4BxoX6NpCl6-mbpV_NH0BEOZZRMLKqlTrs=")))
     (lambda (conf)
-      (make-package
-        label:  (conc "wget-" ver "-" ($arch conf))
-        src:    src
+      (source->package
+        conf
+        src
         tools:  (cons perl (cc-for-target conf))
         inputs: (list libressl musl libssp-nonshared)
         build:  (gnu-recipe
-                  (conc "wget-" ver)
                   (kwith
                     ($gnu-build conf)
                     pre-configure: (+= '((export OPENSSL_LIBS "-lssl -lcrypto")

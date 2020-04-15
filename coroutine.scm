@@ -53,8 +53,8 @@ again:
     ret = poll(pfd, nrfd+nwfd, block ? -1 : 0);
     if (!ret) goto done;
     if (ret < 0) {
-        if (errno == EAGAIN || errno == EINTR) goto again;
-        ret = -errno;
+        if ((errno == EAGAIN || errno == EINTR) && block) goto again;
+        ret = block ? -errno : 0;
         goto done;
     }
     for (i=0; i<nrfd; i++) {
@@ -278,19 +278,12 @@ EOF
 ;; and then calls wait() repeatedly until there are no
 ;; child processes outstanding
 (define (%pid-poll fd)
-  ;; process-wait throws when wnohang is set
-  ;; and no processes are available; just continue looping
-  (define (wait-all otherwise)
-    (parameterize ((current-exception-handler
-                     (lambda (exn)
-                       (otherwise))))
-      (process-wait -1 #t)))
   (let ((getcount (foreign-lambda* integer64 ((int fd))
                     "int64_t out; C_return(read(fd,&out,8)==8 ? out : -(int64_t)errno);")))
     (let loop ((n (getcount fd)))
       (cond
         ((> n 0) ;; happy case
-         (let-values (((pid ok status) (wait-all loop)))
+         (let-values (((pid ok status) (process-wait -1 #t)))
            (cond
              ((= pid 0) (loop (getcount fd)))
              ((hash-table-ref/default *wait-tab* pid #f)

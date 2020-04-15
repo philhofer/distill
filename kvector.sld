@@ -1,5 +1,6 @@
 (define-library (distill kvector)
   (export
+    kidx
     kref
     kref*
     kref/default
