@@ -18,11 +18,11 @@
                (chicken keyword)
                (chicken module)
                (only (chicken syntax) define-for-syntax)
-               (only (chicken string) conc string-translate*)
+               (only (chicken string) conc string-translate* string-split)
                (only (chicken port)
                      with-output-to-string
                      call-with-output-string)
-               (only (chicken base) include error flatten unless))))
+               (only (chicken base) include error flatten unless o disjoin))))
   (export
     *this-machine*
     patch*
@@ -33,6 +33,8 @@
     default-config
     config->builder
 
+    make-meta-package
+    meta-package?
     package?
     make-package
     update-package
@@ -48,6 +50,8 @@
     $arch
     $sysroot
     $triple
+    triple->arch
+    triple->sysroot
     $make-overrides
     $cc-env
     build-triple
@@ -63,6 +67,7 @@
     $READELF
     $gnu-build
     +cross
+    +gnu-ccflags
     gnu-recipe
     $ska-build
     ska-recipe

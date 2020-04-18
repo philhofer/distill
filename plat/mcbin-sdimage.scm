@@ -130,9 +130,7 @@ EOF
         label:  (conc "atf-" ver "-mcbin")
         src:    (append (list src mv-ddr-src mv-ddr-localversion marvell-scp-bl2-blob)
                         patches)
-        tools:  (append (native-toolchain-for conf)
-                        (cc-for-target conf)
-                        (list libressl)) ;; for fiptool
+        tools:  (cons libressl (cc-for-target conf #t))
         inputs: (list uboot-mcbin)
         build:  (let ((mflags `(V=1
                                  SCP_BL2=/src/mrvl_scp_bl2.img

@@ -47,13 +47,10 @@
     hard
 
     ; helper package lists:
-    binutils-for-target
-    gcc-for-target
+    binutils-for-triple
+    gcc-for-triple
     cc-for-target
-    native-toolchain-for
     native-toolchain
-    native-binutils
-    native-gcc
 
     ; skaware
     skalibs

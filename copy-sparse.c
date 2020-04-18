@@ -14,6 +14,8 @@
 #define SEEK_HOLE 4
 #endif
 
+#define really(expr) while ((expr)<0 && errno == EINTR)
+
 /* copy_file_sparse() either renames 'from' to
  * 'to,' or copies a sparse file and takes care
  * to preserve holes in the file */
@@ -27,46 +29,50 @@ copy_file_sparse(const char *from, const char *to, bool canrename)
         off_t off, off2, end, sz;
         ssize_t ln;
 
-        /* easy case: just rename */
-        if (canrename && rename(from, to) == 0)
-                return 0;
-        fdfrom = open(from, O_RDONLY|O_CLOEXEC);
+	/* easy case: just rename */
+	if (canrename) {
+	        really(err = rename(from, to));
+		if (!err) return 0;
+		err = 0;
+	}
+
+	really(fdfrom = open(from, O_RDONLY|O_CLOEXEC));
         if (fdfrom == -1)
                 return -errno;
-        fdto = open(to, O_CREAT|O_CLOEXEC|O_WRONLY|O_EXCL);
+
+	really(fdto = open(to, O_CREAT|O_CLOEXEC|O_WRONLY|O_EXCL));
         if (fdto == -1) {
+                err = errno;
                 close(fdfrom);
-                return -errno;
+                return -err;
         }
 
-        if (fstat(fdfrom, &stbuf) < 0) {
-                err = -errno;
-                goto end;
-        }
+        really(err = fstat(fdfrom, &stbuf));
+	if (err) { err = -errno; goto end; }
+
         sz = stbuf.st_size;
-        if (ftruncate(fdto, sz) < 0) {
-                err = -errno;
-                goto end;
-        }
+        really(err = ftruncate(fdto, sz));
+	if (err) { err = -errno; goto end; }
+
         off = 0;
         /* for each section of actual data in the file,
          * use copy_file_range to move the data into the new file */
         while (off < sz) {
-                off = lseek(fdfrom, off, SEEK_DATA);
+	        really(off = lseek(fdfrom, off, SEEK_DATA));
                 if (off < 0) {
                         err = -errno;
                         goto end;
                 }
                 if (off == sz)
                         break;
-                end = lseek(fdfrom, off, SEEK_HOLE);
+                really(end = lseek(fdfrom, off, SEEK_HOLE));
                 if (end < 0) {
                         err = -errno;
                         goto end;
                 }
                 off2 = off;
                 while (off < end) {
-                        ln = copy_file_range(fdfrom, &off, fdto, &off2, end-off, 0);
+		        really(ln = copy_file_range(fdfrom, &off, fdto, &off2, end-off, 0));
                         if (ln < 0) {
                                 err = -errno;
                                 goto end;

@@ -41,7 +41,7 @@
   (let ((idx (kidx (vector-ref vec 0) kw)))
     (if idx
       (vector-ref vec idx)
-      (error "kvector doesn't use keyword" kw))))
+      (error "kref: kvector doesn't use keyword" kw))))
 
 (: kref/default (vector keyword * --> *))
 (define (kref/default vec kw val)
@@ -58,7 +58,7 @@
   (let ((idx (kidx (vector-ref vec 0) kw)))
     (if idx
       (begin (vector-set! vec idx arg) vec)
-      (error "kvector doesn't use keyword" kw))))
+      (error "kset!: kvector doesn't use keyword" kw))))
 
 ;; kupdate performs a functional update of 'vec'
 ;; by producing a copy with the arguments in
@@ -74,7 +74,7 @@
             (begin
               (vector-set! cp idx (cadr args))
               (loop (cddr args)))
-            (error "kvector doesn't use keyword" (car args))))))))
+            (error "kupdate: kvector doesn't use keyword" (car args))))))))
 
 (define (+= . args)
   (lambda (prev)
@@ -282,7 +282,7 @@
               (begin
                 (vector-set! vec idx (cadr args))
                 (loop (cddr args)))
-              (error "keyword not part of kvector:" (car args))))))))))
+              (error "kvector-constructor: keyword not part of kvector:" (car args))))))))))
 
 ;; subvector-constructor takes a kvector type
 ;; and a list of keywords and produces a function

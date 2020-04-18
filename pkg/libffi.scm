@@ -7,16 +7,16 @@
 
 (define libffi
   (let ((src (source-template
-               "libffi" "3.3"
-               "https://github.com/libffi/$name/releases/download/v$version/$name-$version.tar.gz"
-               "D5qxr8A4qKcecQUxZOf_kYJNvwVv64my5oB_bnJyy7M=")))
+	      "libffi" "3.3"
+	      "https://github.com/libffi/$name/releases/download/v$version/$name-$version.tar.gz"
+	      "D5qxr8A4qKcecQUxZOf_kYJNvwVv64my5oB_bnJyy7M=")))
     (lambda (conf)
       (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (list musl libssp-nonshared)
-        build:  (gnu-recipe
-                  ($gnu-build (kwith
-                                conf
-                                configure-flags: (+= '(--disable-docs)))))))))
+       conf
+       src
+       tools:  (cc-for-target conf)
+       inputs: (list musl libssp-nonshared)
+       build:  (gnu-recipe
+		(kwith
+		 ($gnu-build conf)
+		 configure-args: (+= '(--disable-docs))))))))

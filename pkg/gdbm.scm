@@ -17,7 +17,6 @@
         tools:  (cc-for-target conf)
         inputs: (list musl libssp-nonshared)
         build:  (gnu-recipe
-                  ($gnu-build
-                    (kwith
-                      conf
-                      configure-flags: (+= '(--disable-dependency-tracking --enable-fast-install)))))))))
+		 (kwith
+                  ($gnu-build conf)
+                  configure-args: (+= '(--disable-dependency-tracking --enable-fast-install))))))))

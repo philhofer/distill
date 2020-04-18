@@ -14,11 +14,14 @@
       (fatal "usage:" (program-name) "<arch>")
       (string->symbol (car args)))))
 
-(define build! (config->builder (default-config arch)))
+(define conf (default-config arch))
+(define build! (config->builder conf))
 
 (let ((alist (map cons
                   '(make execline busybox binutils gcc)
-                  (build! make execline-tools busybox-core native-binutils native-gcc))))
+                  (build! make execline-tools busybox-core
+			  (binutils-for-triple ($triple conf))
+			  (gcc-for-triple ($triple conf))))))
   (with-output-to-file
     (conc "prebuilt-"  arch ".scm")
     (lambda ()

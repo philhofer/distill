@@ -21,12 +21,10 @@
         src
         tools:  (+cross
                   conf
-                  (append
-                    (cc-for-target conf)
-                    (native-toolchain-for conf))
+                 (cc-for-target conf #t)
                   ;; yes, ncurses depends on a native version of itself
                   ;; for cross-builds... need tic(1)
-                  (list ncurses))
+                 (list ncurses))
         inputs: (list musl libssp-nonshared)
         build:  (gnu-recipe
                   (kwith

@@ -95,6 +95,8 @@
        (%artifact kind (with-interned-output contents) #f))
       (else (error "bad argument to plan#interned")))))
 
+;; interned-symlink creates a link at 'abspath'
+;; that points to 'lnk'
 (: interned-symlink (string string --> vector))
 (define (interned-symlink abspath lnk)
   (%artifact
@@ -552,7 +554,11 @@
       (run "tar" comp "-xkf" infile "-C" dst)))
 
   (define (unpack-symlink dst abspath lnk)
-    (create-symbolic-link lnk (filepath-join dst abspath)))
+    (let ((target (filepath-join dst abspath)))
+      (when (file-exists? target)
+	    (error "conflicting symlink for" abspath))
+      (create-directory (dirname target) #t)
+      (create-symbolic-link lnk target)))
 
   (define (unpack-dir dst abspath mode)
     (let ((dir (filepath-join dst abspath)))
@@ -735,7 +741,7 @@
 
 (: build-graph! ((list-of vector) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
-  (loop-check lst)
+  ;(loop-check lst)
   (let* ((plan->proc     (make-hash-table test: eq? hash: eq?-hash))
          (hash->plan     (make-hash-table test: string=? hash: string-hash))
          (err            #f)

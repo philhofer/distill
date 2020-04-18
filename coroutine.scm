@@ -231,13 +231,10 @@ EOF
 ;; as chicken.process#process-wait, except that it
 ;; suspends the current coroutine while waiting
 (define (process-wait/yield pid)
-  (let-values (((opid ok status) (process-wait pid #t)))
-    (if (= pid opid)
-      (values opid ok status)
-      (call/cc
-        (lambda (resume)
-          (hash-table-set! *wait-tab* pid resume)
-          (%yield))))))
+  (call/cc
+   (lambda (resume)
+     (hash-table-set! *wait-tab* pid resume)
+     (%yield))))
 
 ;; proc-status is one of:
 ;;  'started (running or paused in a continuation)
@@ -277,46 +274,53 @@ EOF
                                       (%procexit box 'exn exn))))
                      (apply proc args)))))))
 
+(define (wait-any-nohang)
+  (call/cc
+   (lambda (ret)
+     (parameterize ((current-exception-handler (lambda (exn) (ret 0 #f #f))))
+       (process-wait -1 #t)))))
+
 ;; %pid-poll reads from the chldfd eventfd
 ;; and then calls wait() repeatedly until there are no
 ;; child processes outstanding
 (define (%pid-poll fd)
-  (let ((getcount (foreign-lambda* integer64 ((int fd))
-                    "int64_t out; C_return(read(fd,&out,8)==8 ? out : -(int64_t)errno);")))
-    (let loop ((n (getcount fd)))
+  (let ((getcount (foreign-lambda* int ((int fd) (s64vector buf))
+		    "C_return(read(fd,(int64_t *)buf,8)==8 ? 0 : errno);"))
+	(buf      (make-s64vector 1 0)))
+    (let loop ((err (getcount fd buf)))
       (cond
-        ((>= n 0) ;; happy case
-         (let-values (((pid ok status) (process-wait -1 #t)))
-           (cond
-             ((= pid 0) (loop (getcount fd)))
-             ((hash-table-ref/default *wait-tab* pid #f)
-              => (lambda (cont)
-                   (hash-table-delete! *wait-tab* pid)
-                   (pushcont! (lambda () (cont pid ok status)))
-                   (loop (- n 1))))
-             (else
-               (info "warning: pid not registered?" pid)
-               (loop 0)))))
-        ((= n (- eintr))
-         (loop (getcount fd)))
-        ((= n (- eagain))
-         (begin
-           (queue-wait!
-             (hash-table-update!/default
-               *readfd-tab*
-               fd
-               identity
-               (cons '() '())))
-           (loop (getcount fd))))
-        (else
-          (error "fatal errno from read(eventfd):" n))))))
+       ((= err 0) ;; happy case (note that we're ignoring the counter ...)
+	(let-values (((pid ok status) (wait-any-nohang)))
+	  (cond
+	   ((= pid 0) (loop (getcount fd buf)))
+	   ((hash-table-ref/default *wait-tab* pid #f)
+	    => (lambda (cont)
+		 (hash-table-delete! *wait-tab* pid)
+		 (pushcont! (lambda () (cont pid ok status)))
+		 (loop 0)))
+	   (else
+	    (info "warning: pid not registered?" pid)
+	    (loop 0)))))
+       ((= err eintr)
+	(loop (getcount fd buf)))
+       ((= err eagain)
+	(begin
+	  (queue-wait!
+	   (hash-table-update!/default
+	    *readfd-tab*
+	    fd
+	    identity
+	    (cons '() '())))
+	  (loop (getcount fd buf))))
+       (else
+	(error "fatal errno from read(eventfd)" fd err (s64vector-ref buf 0)))))))
 
 (: %poll (-> undefined))
 (define (%poll)
   (if (eq? (proc-status pid-poller-proc) 'exn)
     (begin
       (print-error-message (proc-return pid-poller-proc))
-      (fatal "pid poller exited"))
+      (fatal "pid poller exited!"))
     (%poll-fds)))
 
 ;; join/value waits for a coroutine to exit,

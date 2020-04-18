@@ -1,25 +1,42 @@
 (: *this-machine* symbol)
 (define *this-machine*
   (cond-expand
-    (x86-64 'x86_64)
-    (arm64  'aarch64)
-    ;; TODO: additional verification that this is armv7-a
-    (arm    'armv7)
-    ((and ppc64 little-endian) 'ppc64le)
-    ((and ppc64 big-endian) 'ppc64)))
+   (x86-64 'x86_64)
+   (arm64  'aarch64)
+   ;; TODO: additional verification that this is armv7-a
+   (arm    'armv7)
+   ((and ppc64 little-endian) 'ppc64le)
+   ((and ppc64 big-endian) 'ppc64)))
 
 (: <package> vector)
 (define <package>
   (make-kvector-type
-    label:
-    src:
-    tools:
-    inputs:
-    prebuilt:
-    patches:
-    build:
-    dir:
-    raw-output:))
+   label:
+   src:
+   tools:
+   inputs:
+   prebuilt:
+   patches:
+   build:
+   dir:
+   raw-output:))
+
+(define <meta-package> (list 'meta-package))
+
+;; make-metapackage is an alternative for
+;; make-package that simply returns a list
+;; of other packages and/or artifacts
+(define (make-meta-package proc)
+  (vector <meta-package> proc))
+
+(: meta-package? (* -> boolean))
+(define (meta-package? arg)
+  (and (vector? arg)
+       (= (vector-length arg) 2)
+       (eq? (vector-ref arg 0) <meta-package>)))
+
+(define-memoized (meta-expand mp conf)
+  ((vector-ref mp 1) conf))
 
 (: package? (* -> boolean))
 (define package? (kvector-predicate <package>))
@@ -29,16 +46,16 @@
 (: make-package (#!rest * -> vector))
 (define make-package
   (kvector-constructor
-    <package>
-    label:      #f  string?
-    src:        '() (or/c artifact? (list-of artifact?))
-    tools:      '() (list-of (or/c procedure? artifact?))
-    inputs:     '() (list-of (or/c procedure? artifact?))
-    prebuilt:   #f  (or/c false/c artifact?)
-    patches:    '() list?
-    build:      #f  list?
-    dir:        "/" string?
-    raw-output: #f  (or/c false/c string?)))
+   <package>
+   label:      #f  string?
+   src:        '() (or/c artifact? (list-of artifact?))
+   tools:      '() (list-of (or/c meta-package? procedure? artifact?))
+   inputs:     '() (list-of (or/c meta-package? procedure? artifact?))
+   prebuilt:   #f  (or/c false/c artifact?)
+   patches:    '() list?
+   build:      #f  list?
+   dir:        "/" string?
+   raw-output: #f  (or/c false/c string?)))
 
 (define (source-template name version urlfmt hash #!optional (patchlst '()))
   (let* ((url (string-translate* urlfmt `(("$name" . ,name)
@@ -46,37 +63,46 @@
          (src (remote-archive url hash)))
     (lambda (conf)
       (raw-make-package
-        patches: patchlst
-        label:   (conc name "-" version "-" ($arch conf))
-        src:     (cons src patchlst)
-        dir:     (conc name "-" version)))))
+       patches: patchlst
+       label:   (conc name "-" version "-" ($arch conf))
+       src:     (cons src patchlst)
+       dir:     (conc name "-" version)))))
 
 ;; temporary hack
 (define (source->package conf src . rest)
   (apply kupdate (src conf) rest))
 
+(define (package-mutator . args)
+  (let* ((vec (list->vector args))
+         (len (vector-length vec)))
+    (let loop ((i 0))
+      (or (= i len)
+          (begin
+            (vector-set! vec i (kidx <package> (vector-ref vec i)))
+            (loop (+ i 2)))))
+    (lambda (pkg conf)
+      (let loop ((i 0))
+        (or (= i len)
+            (begin
+              (vector-set! pkg i ((vector-ref vec (+ i 1)) conf (vector-ref pkg i)))
+              (loop (+ i 2))))))))
+
 (define (integrate template . extensions)
   (lambda (conf)
-    (let* ((root (template conf))
-           (kwl  (vector-ref root 0)))
+    (let ((root (template conf)))
       (let loop ((lst extensions))
         (if (null? lst)
-          root
-          (let ((subl ((car lst) conf)))
-            (let inner ((kwlst subl))
-              (if (null? kwlst)
-                (loop (cdr lst))
-                (let ((idx  (kidx kwl (car subl)))
-                      (proc (cadr subl)))
-                  (vector-set! root idx (proc (vector-ref root idx)))
-                  (inner (cddr subl)))))))))))
+	    root
+	    (begin
+	      ((car lst) root conf)
+	      (loop (cdr extensions))))))))
 
 (: update-package (vector #!rest * -> vector))
 (define (update-package pkg . args)
   (apply make-package
          (append
-           (kvector->list pkg)
-           args)))
+	  (kvector->list pkg)
+	  args)))
 
 (: package-label (vector --> string))
 (define package-label (kvector-getter <package> label:))
@@ -100,74 +126,107 @@
 (: <config> vector)
 (define <config>
   (make-kvector-type
-    arch:
-    configure-flags:
-    sysroot:
-    triple:
-    AR:
-    AS:
-    CC:
-    LD:
-    NM:
-    CXX:
-    CBUILD:
-    CHOST:
-    CFLAGS:
-    ARFLAGS:
-    CXXFLAGS:
-    LDFLAGS:
-    RANLIB:
-    STRIP:
-    READELF:
-    OBJCOPY:))
+   arch:
+   triple:
+   cc-toolchain:
+   native-cc-toolchain:))
+
+(: <cc-toolchain> vector)
+(define <cc-toolchain>
+  (make-kvector-type
+   tools:
+   libc:
+   env:))
+
+(: <cc-env> vector)
+(define <cc-env>
+  (make-kvector-type
+   AR:
+   AS:
+   CC:
+   LD:
+   NM:
+   CXX:
+   CBUILD:
+   CHOST:
+   CFLAGS:
+   ARFLAGS:
+   CXXFLAGS:
+   LDFLAGS:
+   RANLIB:
+   STRIP:
+   READELF:
+   OBJCOPY:))
+
+(define cc-env? (kvector-predicate <cc-env>))
+(define make-cc-env (kvector-constructor <cc-env>))
+
+(define make-cc-toolchain
+  (kvector-constructor
+   <cc-toolchain>
+   tools: '() (list-of (disjoin procedure? vector?))
+   libc:  '() (list-of (disjoin procedure? vector?))
+   env:   #f  cc-env?))
 
 (: config? (* -> boolean))
 (define config? (kvector-predicate <config>))
 
 (: $arch (vector --> symbol))
 (define $arch    (kvector-getter <config> arch:))
-(: $triple (vector --> string))
+(: $triple (vector --> symbol))
 (define $triple  (kvector-getter <config> triple:))
-(: $sysroot (vector --> string))
-(define $sysroot (kvector-getter <config> sysroot:))
-(: $configure-flags (vector --> list))
-(define $configure-flags (kvector-getter <config> configure-flags:))
 
-(: $CC (vector --> list))
-(define $CC (kvector-getter <config> CC:))
-(: $CXX (vector --> list))
-(define $CXX (kvector-getter <config> CXX:))
+(: $cc-env (vector --> vector))
+(define $cc-env (o (kvector-getter <cc-toolchain> env:)
+		   (kvector-getter <config> cc-toolchain:)))
+
+(define (cenv kw)
+  (o (kvector-getter <cc-env> kw) $cc-env))
+
+(: $CC (vector --> string))
+(define $CC (cenv CC:))
+(: $CXX (vector --> string))
+(define $CXX (cenv CXX:))
 (: $AR (vector --> string))
-(define $AR (kvector-getter <config> AR:))
+(define $AR (cenv AR:))
 (: $NM (vector --> string))
-(define $NM (kvector-getter <config> NM:))
-(: $LD (vector --> list))
-(define $LD (kvector-getter <config> LD:))
+(define $NM (cenv NM:))
+(: $LD (vector --> string))
+(define $LD (cenv LD:))
 (: $ARFLAGS (vector --> *))
-(define $ARFLAGS (kvector-getter <config> ARFLAGS:))
+(define $ARFLAGS (cenv ARFLAGS:))
 (: $CFLAGS (vector --> list))
-(define $CFLAGS (kvector-getter <config> CFLAGS:))
+(define $CFLAGS (cenv CFLAGS:))
 (: $CXXFLAGS (vector --> list))
-(define $CXXFLAGS (kvector-getter <config> CXXFLAGS:))
+(define $CXXFLAGS (cenv CXXFLAGS:))
 (: $LDFLAGS (vector --> list))
-(define $LDFLAGS (kvector-getter <config> LDFLAGS:))
+(define $LDFLAGS (cenv LDFLAGS:))
 (: $RANLIB (vector --> string))
-(define $RANLIB  (kvector-getter <config> RANLIB:))
+(define $RANLIB  (cenv RANLIB:))
 (: $READELF (vector --> string))
-(define $READELF (kvector-getter <config> READELF:))
+(define $READELF (cenv READELF:))
 
 (: build-triple symbol)
 (define build-triple
   (string->symbol
-    (conc *this-machine* "-linux-musl")))
+   (conc *this-machine* "-linux-musl")))
 
 (define (+cross conf normal extra)
-  (if (eq? ($arch conf) *this-machine*)
-    normal
-    (append extra normal)))
+  (if (eq? build-triple ($triple conf))
+      normal
+      (append extra normal)))
 
 (: %make-config (#!rest * -> vector))
 (define %make-config (kvector-constructor <config>))
+
+(define (triple->sysroot trip)
+  (string-append "/sysroot/" (symbol->string trip)))
+
+(define ($sysroot conf)
+  (triple->sysroot ($triple conf)))
+
+(define (triple->arch trip)
+  (string->symbol (car (string-split (symbol->string trip) "-"))))
 
 (define (config* #!key
                  (arch     *this-machine*)
@@ -175,97 +234,83 @@
                  (CXXFLAGS '(-pipe -Os -fstack-protector-strong))
                  (LDFLAGS  '())
                  (sysroot  #f))
-  (let* ((triple  (conc arch "-linux-musl"))
-         (sysroot (or sysroot
-                      (filepath-join "/sysroot/" triple)))
-         (sysflag (conc "--sysroot=" sysroot)))
+  (let* ((triple  (string->symbol (conc arch "-linux-musl")))
+         (sysflag (conc "--sysroot=" (triple->sysroot triple)))
+	 (plat    (lambda (prog) (string-append (symbol->string triple) "-" prog))))
     (%make-config
-      arch:    arch
-      triple:  triple
-      sysroot: sysroot
-      configure-flags: `(--disable-shared --disable-nls
-                                          --enable-static
-                                          --enable-pie
-                                          --with-pic
-                                          --prefix=/usr
-                                          --sysconfdir=/etc
-                                          --build ,build-triple
-                                          --host ,triple)
-      CC:      (list (conc triple "-gcc") sysflag)
-      CXX:     (list (conc triple "-g++") sysflag)
-      LD:      (list (conc triple "-ld") sysflag)
-      AS:      (conc triple "-as")
-      CBUILD:  build-triple
-      CHOST:   triple
-      CFLAGS:  (append
-                 '(-fPIE -static-pie) CFLAGS)
-      LDFLAGS: (append
-                 '(-static-pie) LDFLAGS)
-      CXXFLAGS: (append
-                  '(-fPIE -static-pie) CXXFLAGS)
-      AR:      (conc triple "-ar")
-      ARFLAGS: '-Dcr
-      NM:      (conc triple "-nm")
-      RANLIB:  (conc triple "-ranlib")
-      STRIP:   (conc triple "-strip")
-      READELF: (conc triple "-readelf")
-      OBJCOPY: (conc triple "-objcopy"))))
-
-;; $cc-env is the subset of <config>
-;; that is relevant to ordinary C compilation
-;; (see also $make-overrides)
-(define $cc-env
-  (memoize-one-eq
-    (subvector-constructor
-      <config>
-      CC: AR: LD: AS: CXX: CBUILD: CHOST: CFLAGS: CXXFLAGS: LDFLAGS:)))
+     arch:    arch
+     triple:  triple
+     cc-toolchain: (make-cc-toolchain
+		    ;; TODO: tools: libc:
+		    env:
+		    (make-cc-env
+		     CC:       (plat "gcc")
+		     CXX:      (plat "g++")
+		     LD:       (plat "ld")
+		     AS:       (plat "as")
+		     CBUILD:   build-triple
+		     CHOST:    triple
+		     CFLAGS:   (flatten sysflag '(-fPIE -static-pie) CFLAGS)
+		     LDFLAGS:  (flatten sysflag '(-static-pie) LDFLAGS)
+		     CXXFLAGS: (flatten sysflag '(-fPIE -static-pie) CXXFLAGS)
+		     AR:       (plat "ar")
+		     ARFLAGS:  '-Dcr
+		     NM:       (plat "nm")
+		     RANLIB:   (plat "ranlib")
+		     STRIP:    (plat "strip")
+		     READELF:  (plat "readelf")
+		     OBJCOPY:  (plat "objcopy"))))))
 
 ;; $make-overrides is the subset of <config>
 ;; that is supplied as k=v arguments to invocations
 ;; of $MAKE (in order to override assignments in the Makefile)
 (define $make-overrides
   (memoize-one-eq
+   (o
     (subvector-constructor
-      <config>
-      RANLIB: STRIP: NM: READELF: OBJCOPY: AR: ARFLAGS:)))
+     <cc-env>
+     RANLIB: STRIP: NM: READELF: OBJCOPY: AR: ARFLAGS:)
+    $cc-env)))
 
-;; native-config is the config used for packages
-;; that need to build binaries for the *build*
-;; system in order to complete a cross-build
-;; (for example, Kbuild builds itself before
-;; performing the "real" build)
-;;
-;; this differs in a subtle but important way
-;; from ordinary build configs: sysroot is actually "/"
-(define native-config
-  (config*
-    arch:     *this-machine*
-    sysroot:  "/"
-    CFLAGS:   '(-pipe -O2)
-    CXXFLAGS: '(-pipe -O2)))
+;; when packages need CC_FOR_BUILD, etc.,
+;; these are the environment variables that are set
+;; (see also the 'native-gcc' wrappers in base.scm)
+(define buildcc
+  (kvector*
+   CC: "gcc"
+   LD: "ld"
+   AS: "as"
+   AR: "ar"
+   NM: "nm"
+   CXX: "g++"
+   ;; sadness: pretty much everything
+   ;; assumes $CC $CFLAGS <foo> will link
+   ;; a binary (i.e. without $LDFLAGS) so
+   ;; any super-important linker flags really
+   ;; need to be part of CFLAGS
+   CFLAGS:   '(-fPIE -static-pie -pipe -O2)
+   CXXFLAGS: '(-fPIE -static-pie -pipe -O2)
+   LDFLAGS:  '(-static-pie)
+   ARFLAGS: "-Dcr"
+   OBJCOPY: "objcopy"
+   READELF: "readelf"
+   STRIP: "strip"
+   RANLIB: "ranlib"))
 
 ;; cc-env/build produces a C environment
 ;; by transforming the usual CC, LD, etc.
 ;; variables using (frob-kw key) for each keyword
 (: cc-env/build ((keyword -> keyword) -> vector))
-(define cc-env/build
-  (let ((sub (subvector-constructor
-               <config>
-               ;; a conservative guess at what sort of configuration
-               ;; one would need for native tool builds; GCC is the worst
-               ;; offender here: it needs very specific stuff like RANLIB, etc.
-               CC: CFLAGS: LD: LDFLAGS: CXX: CXXFLAGS: AS:
-               RANLIB: STRIP: NM: READELF: OBJCOPY: AR: ARFLAGS:)))
-    (lambda (frob-kw)
-      (let ((folder (lambda (kw arg lst)
-                      (cons
-                        (frob-kw kw)
-                        (cons arg lst)))))
-        (list->kvector
-          (kvector-foldl
-            (sub native-config)
-            folder
-            '()))))))
+(define (cc-env/build frob-kw)
+  (let ((folder (lambda (kw arg lst)
+		  (cons
+		   (frob-kw kw)
+		   (cons arg lst)))))
+    (list->kvector
+     (kvector-foldl
+      buildcc
+      folder
+      '()))))
 
 ;; cc-env/for-build is a C environment
 ;; with CC_FOR_BUILD, CFLAGS_FOR_BUILD, etc.
@@ -273,9 +318,9 @@
 (define cc-env/for-build
   (cc-env/build (lambda (kw)
                   (string->keyword
-                    (string-append
-                      (keyword->string kw)
-                      "_FOR_BUILD")))))
+		   (string-append
+		    (keyword->string kw)
+		    "_FOR_BUILD")))))
 
 ;; cc-env/for-kbuild is a C environment
 ;; with HOSTCC, HOSTCFLAGS, etc.
@@ -283,25 +328,25 @@
 (define cc-env/for-kbuild
   (cc-env/build (lambda (kw)
                   (string->keyword
-                    (string-append
-                      "HOST"
-                      (keyword->string kw))))))
+		   (string-append
+		    "HOST"
+		    (keyword->string kw))))))
 
 (: spaced (* -> string))
 (define (spaced lst)
   (let ((out (open-output-string)))
     (if (list? lst)
-      (let loop ((lst lst))
-        (or (null? lst)
-            (let ((head (car lst))
-                  (rest (cdr lst)))
-              (if (list? head)
-                (loop head)
-                (display head out))
-              (unless (null? rest)
-                (display " " out))
-              (loop rest))))
-      (display lst out))
+	(let loop ((lst lst))
+	  (or (null? lst)
+	      (let ((head (car lst))
+		    (rest (cdr lst)))
+		(if (list? head)
+		    (loop head)
+		    (display head out))
+		(unless (null? rest)
+			(display " " out))
+		(loop rest))))
+	(display lst out))
     (let ((s (get-output-string out)))
       (close-output-port out)
       s)))
@@ -313,11 +358,11 @@
 (: k=v (keyword * --> string))
 (define (k=v k v)
   (unless (keyword? k)
-    (error "k=v expected a keyword but got" k))
+	  (error "k=v expected a keyword but got" k))
   (string-append
-    (##sys#symbol->string k)
-    "="
-    (spaced v)))
+   (##sys#symbol->string k)
+   "="
+   (spaced v)))
 
 ;; k=v* takes an arbitrary set of keyword: value forms
 ;; and converts them into a list of strings of the form keyword=value
@@ -328,10 +373,10 @@
              (rest rest))
     (cons (k=v k v)
           (if (null? rest)
-            '()
-            (let ((k  (car rest))
-                  (vp (cdr rest)))
-              (loop k (car vp) (cdr vp)))))))
+	      '()
+	      (let ((k  (car rest))
+		    (vp (cdr rest)))
+		(loop k (car vp) (cdr vp)))))))
 
 ;; kvargs takes a kvector
 ;; and produces a list of strings
@@ -347,9 +392,9 @@
 (: splat (vector #!rest keyword --> (list-of string)))
 (define (splat conf . keywords)
   (map
-    (lambda (k)
-      (k=v k (kref conf k)))
-    keywords))
+   (lambda (k)
+     (k=v k (kref conf k)))
+   keywords))
 
 ;; kvexport produces a list of non-terminal
 ;; execline expressions of the form
@@ -360,9 +405,9 @@
 (: kvexport (vector --> list))
 (define (kvexport kvec)
   (kvector-map
-    kvec
-    (lambda (k v)
-      `(export ,(##sys#symbol->string k) ,(spaced v)))))
+   kvec
+   (lambda (k v)
+     `(export ,(##sys#symbol->string k) ,(spaced v)))))
 
 (define (default-config arch)
   (config* arch: arch))
@@ -372,64 +417,98 @@
 (define build-config
   (make-parameter (default-config *this-machine*)))
 
+;; recursively apply 'proc' to items of lst
+;; while the results are lists, and deduplicate
+;; precisely-equivalent items along the way
+;;
+;; this is used to expand package#tools and package#inputs
+;; so that meta-packages are recursively unpacked into a single
+;; list of packages and artifacts
+(define (expandl proc lst)
+  (let loop ((in  lst)
+	     (out '()))
+    (if (null? in)
+	out
+	(let ((head (car in))
+	      (rest (cdr in)))
+	  (if (memq head rest)
+	      (loop rest out)
+	      (let ((h (proc head)))
+		(loop (cdr in)
+		      (cond
+		       ((list? h) (loop h out))
+		       ;; deduplicate 'eq?'-equivalent items
+		       ((memq h out) out)
+		       (else (cons h out))))))))))
+
 ;; config->builder takes a configuration (as an alist or conf-lambda)
 ;; and returns a function that builds the package
 ;; and yields its output artifact
 (define (config->builder env)
   (let* ((host  (conform config? env))
          (build (build-config))
-         (->pln (lambda (pl)
-                  (package->plan pl build host)))
+	 (->plan/art (lambda (in)
+		       (cond
+			((artifact? in) in)
+			((meta-package? in) (meta-expand in host))
+			((procedure? in) (package->plan in build host))
+			(else "bad item provided to plan builder" in))))
          (->out (lambda (pln)
-                  (if (artifact? pln) pln (plan-outputs pln)))))
+		  (cond
+		   ((artifact? pln) pln)
+		   ((procedure? pln) (let ((plan (package->plan pln build host)))
+				       (if (artifact? plan) plan (plan-outputs plan))))
+		   ;; TODO: meta-packages
+		   (else #f)))))
     (lambda args
-      (let ((plans (map ->pln args)))
+      (let ((plans (expandl ->plan/art args)))
         (unless (null? plans)
-          (build-graph! plans))
-        (map ->out plans)))))
+		(build-graph! plans))
+        (map ->out args)))))
+
 
 ;; package->plan is the low-level package expansion code;
 ;; it recursively simplifies packges into plans, taking care
 ;; to only expand packges once for each (build, host) configuration tuple
 (define package->plan
   (memoize-lambda
-    (pkg-proc build host)
-    (let ((pkg (pkg-proc host)))
-      (or (package-prebuilt pkg)
-          (let* ((->tool (lambda (tool)
-                           (if (artifact? tool)
-                             tool
-                             (package->plan tool build build))))
-                 (->input (lambda (input)
-                            (if (artifact? input)
-                              input
-                              (package->plan input build host))))
-                 (tools  (package-tools pkg))
-                 (inputs (package-inputs pkg)))
-            (make-plan
-              raw-output: (package-raw-output pkg)
-              name:   (package-label pkg)
-              inputs: (list
-                        (cons "/" (flatten
-                                    (package-buildfile pkg)
-                                    (package-src pkg) (map ->tool tools)))
-                        ;; build headers+libraries live here
-                        (cons ($sysroot host) (map ->input inputs)))))))))
+   (pkg-proc build host)
+   (let ((pkg (pkg-proc host)))
+     (or (package-prebuilt pkg)
+	 (let* ((expander (lambda (conf)
+			    (lambda (in)
+			      (cond
+			       ((artifact? in) in)
+			       ((meta-package? in) (meta-expand in conf))
+			       (else (package->plan in build conf))))))
+		(->tool  (expander build))
+		(->input (expander host))
+		(tools   (package-tools pkg))
+		(inputs  (package-inputs pkg)))
+	   (make-plan
+	    raw-output: (package-raw-output pkg)
+	    name:   (package-label pkg)
+	    inputs: (list
+		     (cons "/" (cons*
+				(package-buildfile pkg)
+				(expandl ->tool (flatten (package-src pkg) tools))))
+		     ;; build headers+libraries live here
+		     (cons ($sysroot host) (expandl ->input inputs)))))))))
 
 (: package-buildfile (vector -> vector))
 (define (package-buildfile r)
   (interned
-    "/build" #x744
-    (lambda ()
-      (write-exexpr
-        (let ((dir (package-dir r))
-              (patches (or (package-patches r) '())))
-          (unless dir "error: no dir specified" r)
-          (cons
-            `(cd ,dir)
-            (append
-              (script-apply-patches patches)
-              (package-build r))))))))
+   "/build" #o744
+   (lambda ()
+     (write-exexpr
+      (let ((dir (package-dir r))
+	    (patches (or (package-patches r) '())))
+	(unless dir "error: no dir specified" r)
+	(cons
+	 `(cd ,dir)
+	 (append
+	  (script-apply-patches patches)
+	  (package-build r))))))))
 
 ;; generator for an execline sequence that strips binaries
 (define (strip-binaries-script triple)
@@ -448,32 +527,32 @@
 ;; from a collection of verbatim strings
 (define (patch* . patches)
   (if (null? patches)
-    '()
-    (let loop ((n 0)
-               (head (car patches))
-               (rest (cdr patches)))
-      (cons
-        (interned (conc "/src/patch-" n ".patch") #o644 head)
-        (if (null? rest) '() (loop (+ n 1) (car rest) (cdr rest)))))))
+      '()
+      (let loop ((n 0)
+		 (head (car patches))
+		 (rest (cdr patches)))
+	(cons
+	 (interned (conc "/src/patch-" n ".patch") #o644 head)
+	 (if (null? rest) '() (loop (+ n 1) (car rest) (cdr rest)))))))
 
 ;; script-apply-patches produces the execline expressions
 ;; for applying a series of patches from artifact files
 (define (script-apply-patches lst)
   (map
-    (lambda (pf)
-      `(if ((patch -p1 "-i" ,(vector-ref (vector-ref pf 0) 1)))))
-    lst))
+   (lambda (pf)
+     `(if ((patch -p1 "-i" ,(vector-ref (vector-ref pf 0) 1)))))
+   lst))
 
 (define <gnu-build>
   (make-kvector-type
-    triple:
-    pre-configure:
-    exports:
-    post-install:
-    make-flags:
-    install-flags:
-    out-of-tree:
-    configure-args:))
+   triple:
+   pre-configure:
+   exports:
+   post-install:
+   make-flags:
+   install-flags:
+   out-of-tree:
+   configure-args:))
 
 ;; $gnu-build fetches the default <gnu-build> object
 ;; for a configuration
@@ -482,31 +561,50 @@
     ;; cache one copy of this since it's likely to be
     ;; the same result in most invocations
     (memoize-one-eq
-      (lambda (conf)
-        (%make
-          triple:         ($triple conf)
-          pre-configure:  '()
-          exports:        (list ($cc-env conf))
-          post-install:   '()
-          make-flags:     (kvargs ($make-overrides conf))
-          install-flags:  '(DESTDIR=/out install)
-          out-of-tree:    #f
-          configure-args: ($configure-flags conf))))))
+     (lambda (conf)
+       (%make
+	triple:         ($triple conf)
+	pre-configure:  '()
+	exports:        (list ($cc-env conf))
+	post-install:   '()
+	make-flags:     (kvargs ($make-overrides conf))
+	install-flags:  '(DESTDIR=/out install)
+	out-of-tree:    #f
+	configure-args: `(--disable-shared --disable-nls
+					    --enable-static
+					    --enable-pie
+					    --with-pic
+					    --prefix=/usr
+					    --sysconfdir=/etc
+					    --build ,build-triple
+					    --host ,($triple conf)))))))
 
 (define (exports->script lst)
   (if (null? lst)
-    '()
-    (let ((head (car lst))
-          (rest (cdr lst)))
-      (cond
-        ((pair? head)
-         (cons `(export ,(car head) ,(cdr head))
-               (exports->script rest)))
-        ((kvector? head)
-         (append (kvexport head)
-                 (exports->script rest)))
-        (else
-         (error "unexpected export value:" lst))))))
+      '()
+      (let ((head (car lst))
+	    (rest (cdr lst)))
+	(cond
+	 ((pair? head)
+	  (cons `(export ,(car head) ,(cdr head))
+		(exports->script rest)))
+	 ((kvector? head)
+	  (append (kvexport head)
+		  (exports->script rest)))
+	 (else
+	  (error "unexpected export value:" lst))))))
+
+
+(define (+gnu-ccflags gr lst)
+  (kwith
+   gr
+   exports: (lambda (old)
+	      (map
+	       (lambda (ex)
+		 (if (cc-env? ex)
+		     (kwith ex CFLAGS: (+= lst) CXXFLAGS: (+= lst))
+		     ex))
+	       old))))
 
 ;; gnu-recipe takes the result of ($gnu-build conf)
 ;; and turns it into a recipe
@@ -524,11 +622,11 @@
       `(,@($pre-configure v)
         ,@(exports->script ($exports v))
         ,@(if ($out-of-tree v)
-            `((if ((mkdir -p "distill-builddir")))
-              (cd "distill-builddir")
-              (if (("../configure"
-                     ,@($configure-args v)))))
-            `((if ((./configure ,@($configure-args v))))))
+	      `((if ((mkdir -p "distill-builddir")))
+		(cd "distill-builddir")
+		(if (("../configure"
+		      ,@($configure-args v)))))
+	      `((if ((./configure ,@($configure-args v))))))
         (if ((make ,@($make-flags v))))
         (if ((make ,@($install-flags v))))
         ,@($post-install v)
@@ -539,10 +637,10 @@
 (: <ska-build> vector)
 (define <ska-build>
   (make-kvector-type
-    triple:
-    exports:
-    configure-args:
-    make-args:))
+   triple:
+   exports:
+   configure-args:
+   make-args:))
 
 (: $ska-build (vector --> vector))
 (define $ska-build
@@ -550,16 +648,16 @@
     (lambda (conf)
       (let ((sysroot ($sysroot conf)))
         (%make
-          triple:  ($triple conf)
-          exports: (list ($cc-env conf))
-          configure-args:
-          `(--target ,($triple conf) --prefix=/ --libdir=/usr/lib
-                     ,(conc "--with-include=" (filepath-join sysroot "/include"))
-                     ,(conc "--with-include=" (filepath-join sysroot "/usr/include"))
-                     ,(conc "--with-lib=" (filepath-join sysroot "/lib"))
-                     ,(conc "--with-lib=" (filepath-join sysroot "/usr/lib"))
-                     --disable-shared --enable-static)
-          make-args: (kvargs ($make-overrides conf)))))))
+	 triple:  ($triple conf)
+	 exports: (list ($cc-env conf))
+	 configure-args:
+	 `(--target ,($triple conf) --prefix=/ --libdir=/usr/lib
+		    ,(conc "--with-include=" (filepath-join sysroot "/include"))
+		    ,(conc "--with-include=" (filepath-join sysroot "/usr/include"))
+		    ,(conc "--with-lib=" (filepath-join sysroot "/lib"))
+		    ,(conc "--with-lib=" (filepath-join sysroot "/usr/lib"))
+		    --disable-shared --enable-static)
+	 make-args: (kvargs ($make-overrides conf)))))))
 
 (: ska-recipe (vector --> list))
 (define ska-recipe
@@ -570,7 +668,7 @@
         (ska?            (kvector-predicate <ska-build>)))
     (lambda (bld)
       (unless (ska? bld)
-        (error "ska-recipe given a non-<ska-build> object:" bld))
+	      (error "ska-recipe given a non-<ska-build> object:" bld))
       `(,@(exports->script ($exports bld))
         ;; don't let the configure script override our CFLAGS selections
         (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))

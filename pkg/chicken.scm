@@ -73,12 +73,12 @@
                             "LINKER_EXECUTABLE_OPTIONS=-static-pie -L."))
              (kvflags    (k=v*
                            ARCH: (chicken-arch host)
-                           C_COMPILER: (car ($CC host))
-                           CXX_COMPILER: (car ($CXX host))
+                           C_COMPILER: ($CC host)
+                           CXX_COMPILER: ($CXX host)
                            LIBRARIAN: ($AR host)
                            LIBRARIAN_OPTIONS: ($ARFLAGS host)
-                           C_COMPILER_OPTIONS: (append (cdr ($CC host)) copts)
-                           LINKER_OPTIONS: (append (cdr ($LD host)) ($LDFLAGS host)))))
+                           C_COMPILER_OPTIONS: copts
+                           LINKER_OPTIONS: ($LDFLAGS host))))
 
         (source->package
           host
@@ -127,11 +127,9 @@
                                lst
                                (cons flag (cons (car lst)
                                                 (loop (cdr lst))))))))
-         (csc-opts       `(-cc ,(car ($CC conf))
-                               ,@(splat* '-C (cdr ($CC conf)))
+         (csc-opts       `(-cc ,($CC conf)
                                ,@(splat* '-C ($CFLAGS conf))
-                               -ld ,(car ($CC conf)) ;; chicken wants LD=CC
-                               ,@(splat* '-L (cdr ($LD conf)))
+                               -ld ,($CC conf) ;; chicken wants LD=CC
                                ,@(splat* '-L ($LDFLAGS conf))
                                ,@(splat* '-no-feature (without real-features clear-features))
                                ,@(splat* '-feature real-features)))
