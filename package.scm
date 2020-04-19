@@ -175,49 +175,32 @@
 (define $arch    (kvector-getter <config> arch:))
 (: $triple (vector --> symbol))
 (define $triple  (kvector-getter <config> triple:))
+(: $cc-toolchain (vector --> vector))
+(define $cc-toolchain (kvector-getter <config> cc-toolchain:))
+(define $native-toolchain (kvector-getter <config> native-cc-toolchain:))
+(: cc-toolchain-env (vector --> vector))
+(define cc-toolchain-env (kvector-getter <cc-toolchain> env:))
+(define cc-toolchain-tools (kvector-getter <cc-toolchain> tools:))
+(define cc-toolchain-libc (kvector-getter <cc-toolchain> libc:))
 
 (: $cc-env (vector --> vector))
-(define $cc-env (o (kvector-getter <cc-toolchain> env:)
-		   (kvector-getter <config> cc-toolchain:)))
+(define $cc-env (o cc-toolchain-env $cc-toolchain))
 
-(define (cenv kw)
-  (o (kvector-getter <cc-env> kw) $cc-env))
-
-(: $CC (vector --> string))
-(define $CC (cenv CC:))
-(: $CXX (vector --> string))
-(define $CXX (cenv CXX:))
-(: $AR (vector --> string))
-(define $AR (cenv AR:))
-(: $NM (vector --> string))
-(define $NM (cenv NM:))
-(: $LD (vector --> string))
-(define $LD (cenv LD:))
-(: $ARFLAGS (vector --> *))
-(define $ARFLAGS (cenv ARFLAGS:))
-(: $CFLAGS (vector --> list))
-(define $CFLAGS (cenv CFLAGS:))
-(: $CXXFLAGS (vector --> list))
-(define $CXXFLAGS (cenv CXXFLAGS:))
-(: $LDFLAGS (vector --> list))
-(define $LDFLAGS (cenv LDFLAGS:))
-(: $RANLIB (vector --> string))
-(define $RANLIB  (cenv RANLIB:))
-(: $READELF (vector --> string))
-(define $READELF (cenv READELF:))
-
-(: build-triple symbol)
-(define build-triple
-  (string->symbol
-   (conc *this-machine* "-linux-musl")))
+;; sort of a hack to keep a circular dependency
+;; between base.scm and package.scm from creeping in:
+;; have package.scm declare the 'build-config'
+;; parameter, but have 'base.scm' set it as soon
+;; as it declares default-config
+(: build-triple (-> symbol))
+(define (build-triple) ($triple (build-config)))
 
 (define (+cross conf normal extra)
-  (if (eq? build-triple ($triple conf))
+  (if (eq? (build-triple) ($triple conf))
       normal
       (append extra normal)))
 
-(: %make-config (#!rest * -> vector))
-(define %make-config (kvector-constructor <config>))
+(: make-config (#!rest * -> vector))
+(define make-config (kvector-constructor <config>))
 
 (define (triple->sysroot trip)
   (string-append "/sysroot/" (symbol->string trip)))
@@ -228,7 +211,22 @@
 (define (triple->arch trip)
   (string->symbol (car (string-split (symbol->string trip) "-"))))
 
-(define (config* #!key
+(define (cenv v) (o (kvector-getter <cc-env> v) $cc-env))
+
+(define $CC (cenv CC:))
+(define $CXX (cenv CXX:))
+(define $CFLAGS (cenv CFLAGS:))
+(define $CXXFLAGS (cenv CXXFLAGS:))
+(define $LD (cenv LD:))
+(define $LDFLAGS (cenv LDFLAGS:))
+(define $AR (cenv AR:))
+(define $ARFLAGS (cenv ARFLAGS:))
+(define $RANLIB (cenv RANLIB:))
+(define $READELF (cenv READELF:))
+(define $OBJCOPY (cenv OBJCOPY:))
+(define $NM (cenv NM:))
+
+#;(define (config* #!key
                  (arch     *this-machine*)
                  (CFLAGS   '(-pipe -Os -fstack-protector-strong))
                  (CXXFLAGS '(-pipe -Os -fstack-protector-strong))
@@ -241,14 +239,14 @@
      arch:    arch
      triple:  triple
      cc-toolchain: (make-cc-toolchain
-		    ;; TODO: tools: libc:
+		    ;; TODO: tools: libc: ;
 		    env:
 		    (make-cc-env
 		     CC:       (plat "gcc")
 		     CXX:      (plat "g++")
 		     LD:       (plat "ld")
 		     AS:       (plat "as")
-		     CBUILD:   build-triple
+		     CBUILD:   (build-triple)
 		     CHOST:    triple
 		     CFLAGS:   (flatten sysflag '(-fPIE -static-pie) CFLAGS)
 		     LDFLAGS:  (flatten sysflag '(-static-pie) LDFLAGS)
@@ -317,7 +315,7 @@
 ;; (this is typical for autotools-based configure scripts)
 (define cc-env/for-build
   (cc-env/build (lambda (kw)
-                  (string->keyword
+		  (string->keyword
 		   (string-append
 		    (keyword->string kw)
 		    "_FOR_BUILD")))))
@@ -327,7 +325,7 @@
 ;; (this is typical for Kbuild-based build systems)
 (define cc-env/for-kbuild
   (cc-env/build (lambda (kw)
-                  (string->keyword
+		  (string->keyword
 		   (string-append
 		    "HOST"
 		    (keyword->string kw))))))
@@ -369,10 +367,10 @@
 (: k=v* (keyword * #!rest * --> (list-of string)))
 (define (k=v* k v . rest)
   (let loop ((k k)
-             (v v)
-             (rest rest))
+	     (v v)
+	     (rest rest))
     (cons (k=v k v)
-          (if (null? rest)
+	  (if (null? rest)
 	      '()
 	      (let ((k  (car rest))
 		    (vp (cdr rest)))
@@ -409,13 +407,10 @@
    (lambda (k v)
      `(export ,(##sys#symbol->string k) ,(spaced v)))))
 
-(define (default-config arch)
-  (config* arch: arch))
-
 ;; build-config is the configuration
 ;; for artifacts produced for *this* machine (tools, etc)
 (define build-config
-  (make-parameter (default-config *this-machine*)))
+  (make-parameter #f))
 
 ;; recursively apply 'proc' to items of lst
 ;; while the results are lists, and deduplicate
@@ -446,14 +441,14 @@
 ;; and yields its output artifact
 (define (config->builder env)
   (let* ((host  (conform config? env))
-         (build (build-config))
+	 (build (build-config))
 	 (->plan/art (lambda (in)
 		       (cond
 			((artifact? in) in)
 			((meta-package? in) (meta-expand in host))
 			((procedure? in) (package->plan in build host))
 			(else "bad item provided to plan builder" in))))
-         (->out (lambda (pln)
+	 (->out (lambda (pln)
 		  (cond
 		   ((artifact? pln) pln)
 		   ((procedure? pln) (let ((plan (package->plan pln build host)))
@@ -462,9 +457,9 @@
 		   (else #f)))))
     (lambda args
       (let ((plans (expandl ->plan/art args)))
-        (unless (null? plans)
+	(unless (null? plans)
 		(build-graph! plans))
-        (map ->out args)))))
+	(map ->out args)))))
 
 
 ;; package->plan is the low-level package expansion code;
@@ -570,14 +565,12 @@
 	make-flags:     (kvargs ($make-overrides conf))
 	install-flags:  '(DESTDIR=/out install)
 	out-of-tree:    #f
-	configure-args: `(--disable-shared --disable-nls
-					    --enable-static
-					    --enable-pie
-					    --with-pic
-					    --prefix=/usr
-					    --sysconfdir=/etc
-					    --build ,build-triple
-					    --host ,($triple conf)))))))
+	configure-args: `(--disable-shared
+			  --disable-nls --enable-static
+			  --enable-pie --with-pic
+			  --prefix=/usr --sysconfdir=/etc
+			  --build ,(build-triple)
+			  --host ,($triple conf)))))))
 
 (define (exports->script lst)
   (if (null? lst)
@@ -610,29 +603,29 @@
 ;; and turns it into a recipe
 (define gnu-recipe
   (let (($pre-configure  (kvector-getter <gnu-build> pre-configure:))
-        ($exports        (kvector-getter <gnu-build> exports:))
-        ($post-install   (kvector-getter <gnu-build> post-install:))
-        ($make-flags     (kvector-getter <gnu-build> make-flags:))
-        ($install-flags  (kvector-getter <gnu-build> install-flags:))
-        ($out-of-tree    (kvector-getter <gnu-build> out-of-tree:))
-        ($configure-args (kvector-getter <gnu-build> configure-args:))
-        ($triple         (kvector-getter <gnu-build> triple:))
-        (gnu?            (kvector-predicate <gnu-build>)))
+	($exports        (kvector-getter <gnu-build> exports:))
+	($post-install   (kvector-getter <gnu-build> post-install:))
+	($make-flags     (kvector-getter <gnu-build> make-flags:))
+	($install-flags  (kvector-getter <gnu-build> install-flags:))
+	($out-of-tree    (kvector-getter <gnu-build> out-of-tree:))
+	($configure-args (kvector-getter <gnu-build> configure-args:))
+	($triple         (kvector-getter <gnu-build> triple:))
+	(gnu?            (kvector-predicate <gnu-build>)))
     (lambda (v)
       `(,@($pre-configure v)
-        ,@(exports->script ($exports v))
-        ,@(if ($out-of-tree v)
+	,@(exports->script ($exports v))
+	,@(if ($out-of-tree v)
 	      `((if ((mkdir -p "distill-builddir")))
 		(cd "distill-builddir")
 		(if (("../configure"
 		      ,@($configure-args v)))))
 	      `((if ((./configure ,@($configure-args v))))))
-        (if ((make ,@($make-flags v))))
-        (if ((make ,@($install-flags v))))
-        ,@($post-install v)
-        (foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
-        (foreground ((find /out -type f -name "*.la" -delete)))
-        ,@(strip-binaries-script ($triple v))))))
+	(if ((make ,@($make-flags v))))
+	(if ((make ,@($install-flags v))))
+	,@($post-install v)
+	(foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
+	(foreground ((find /out -type f -name "*.la" -delete)))
+	,@(strip-binaries-script ($triple v))))))
 
 (: <ska-build> vector)
 (define <ska-build>
@@ -647,7 +640,7 @@
   (let ((%make (kvector-constructor <ska-build>)))
     (lambda (conf)
       (let ((sysroot ($sysroot conf)))
-        (%make
+	(%make
 	 triple:  ($triple conf)
 	 exports: (list ($cc-env conf))
 	 configure-args:
@@ -662,18 +655,18 @@
 (: ska-recipe (vector --> list))
 (define ska-recipe
   (let (($exports        (kvector-getter <ska-build> exports:))
-        ($configure-args (kvector-getter <ska-build> configure-args:))
-        ($make-args      (kvector-getter <ska-build> make-args:))
-        ($triple         (kvector-getter <ska-build> triple:))
-        (ska?            (kvector-predicate <ska-build>)))
+	($configure-args (kvector-getter <ska-build> configure-args:))
+	($make-args      (kvector-getter <ska-build> make-args:))
+	($triple         (kvector-getter <ska-build> triple:))
+	(ska?            (kvector-predicate <ska-build>)))
     (lambda (bld)
       (unless (ska? bld)
 	      (error "ska-recipe given a non-<ska-build> object:" bld))
       `(,@(exports->script ($exports bld))
-        ;; don't let the configure script override our CFLAGS selections
-        (if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
-        (if ((./configure ,@($configure-args bld))))
-        (if ((make ,@($make-args bld))))
-        (if ((make DESTDIR=/out install)))
-        ,@(strip-binaries-script ($triple bld))))))
+	;; don't let the configure script override our CFLAGS selections
+	(if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
+	(if ((./configure ,@($configure-args bld))))
+	(if ((make ,@($make-args bld))))
+	(if ((make DESTDIR=/out install)))
+	,@(strip-binaries-script ($triple bld))))))
 

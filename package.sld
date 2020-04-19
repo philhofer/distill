@@ -23,15 +23,17 @@
                      with-output-to-string
                      call-with-output-string)
                (only (chicken base) include error flatten unless o disjoin))))
+  (cond-expand
+    (chicken (import-for-syntax
+               (chicken keyword))))
   (export
     *this-machine*
     patch*
-    config*
     script-apply-patches
     strip-binaries-script
     build-config
-    default-config
     config->builder
+    make-config
 
     make-meta-package
     meta-package?
@@ -50,6 +52,13 @@
     $arch
     $sysroot
     $triple
+    $cc-toolchain
+    $native-toolchain
+    make-cc-toolchain
+    cc-toolchain-env
+    make-cc-env
+    cc-toolchain-tools
+    cc-toolchain-libc
     triple->arch
     triple->sysroot
     $make-overrides

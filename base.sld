@@ -27,6 +27,10 @@
     musl
     libssp-nonshared
 
+    ; config:
+    default-config
+    gcc+musl-static-config
+
     ; gcc deps:
     libgmp
     libmpfr

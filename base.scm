@@ -49,6 +49,134 @@
             (lambda ()
               (write (list 'quote stage-1)))))))))
 
+;; for a triple, create the ordinary gcc, ld, as, etc.
+;; binaries that are either symlinks or thin wrappers
+;; for the actual binaries (i.e. x86_64-linux-musl-gcc, etc.)
+(define (native-gcc-toolchain-wrappers triple)
+  (let* ((plat (lambda (name) (conc triple "-" name)))
+	 (wrap (lambda (name)
+		 (interned
+		  (string-append "/usr/bin/" name)
+		  #o755
+		  (string-append
+		   "#!/bin/execlineb -s0\n"
+		   (plat name) " --sysroot=/ $@\n"))))
+	 (ln   (lambda (name)
+		 (interned-symlink
+		  (string-append "/usr/bin/" name)
+		  (string-append "/usr/bin/" (plat name))))))
+    (cons*
+     (wrap "gcc")
+     (wrap "g++")
+     (wrap "ld")
+     (map ln '("as" "ar" "ranlib" "strip" "readelf" "objcopy")))))
+
+;; native-toolchain is a meta-package
+;; for "native" C/C++ tools (e.g. a regular gcc(1) with --sysroot=/)
+(define native-toolchain
+  (make-meta-package
+   (lambda (conf)
+     (let ((tc ($native-toolchain conf)))
+       (flatten
+	(cc-toolchain-tools tc)
+	(cc-toolchain-libc tc))))))
+
+(define *default-build-triple*
+  (string->symbol (conc *this-machine* "-linux-musl")))
+
+;; gcc+musl-toolchain is a toolchain that produces
+;; statically-linked PIE binaries using gcc and musl libc
+(define (gcc+musl-toolchain triple #!key (CFLAGS '()) (CXXFLAGS '()) (LDFLAGS '()))
+  (let* ((plat   (lambda (bin)
+		   (conc triple "-" bin)))
+	 ;; n.b.: we configure our gcc toolchain --with-sysroot=<sysroot>
+	 ;; so it should automatically use the right one anyway
+	 (sysf   (conc "--sysroot=" (triple->sysroot triple)))
+	 (cflags (cons sysf '(-fPIE -static-pie -pipe)))
+	 (lflags (cons sysf '(-static-pie))))
+    (make-cc-toolchain
+     tools: (list (gcc-for-triple triple)
+		  (binutils-for-triple triple)
+		  make
+		  execline-tools
+		  busybox-core)
+     libc: (list musl libssp-nonshared)
+     env: (make-cc-env
+	   ;; there's a circular dependency issue here:
+	   ;; (build-triple) calls (build-config) which
+	   ;; can be constructed using gcc+musl-toolchain ...
+	   CBUILD:   (let ((bld (build-config))) (if bld ($triple bld) *default-build-triple*))
+	   CHOST:    triple
+	   CC:       (plat "gcc")
+	   CFLAGS:   (append cflags CFLAGS)
+	   CXX:      (plat "g++")
+	   CXXFLAGS: (append cflags CXXFLAGS)
+	   LD:       (plat "ld")
+	   LDFLAGS:  (append lflags LDFLAGS)
+	   AS:       (plat "as")
+	   AR:       (plat "ar")
+	   NM:       (plat "nm")
+	   ARFLAGS:  "-Dcr"
+	   RANLIB:   (plat "ranlib")
+	   STRIP:    (plat "strip")
+	   READELF:  (plat "readelf")
+	   OBJCOPY:  (plat "objcopy")))))
+
+(define (gcc+musl-native-toolchain triple)
+  (make-cc-toolchain
+   tools: (cons* (gcc-for-triple triple)
+		 (binutils-for-triple triple)
+		 (native-gcc-toolchain-wrappers triple))
+   libc: (list musl libssp-nonshared)
+   env: (make-cc-env
+	 CBUILD:   triple
+	 CHOST:    triple
+	 CC:       "gcc"
+	 CFLAGS:   '(-fPIE -static-pie -pipe -O2)
+	 CXX:      "g++"
+	 CXXFLAGS: '(-fPIE -static-pie -pipe -O2)
+	 LD:       "ld"
+	 LDFLAGS:  '(-static-pie)
+	 AS:       "as"
+	 AR:       "ar"
+	 ARFLAGS:  "-Dcr"
+	 RANLIB:   "ranlib"
+	 STRIP:    "strip"
+	 READELF:  "readelf"
+	 OBJCOPY:  "objcopy")))
+
+;; gcc+musl-static-config produces a config that uses
+;; gcc and musl libc for static linking
+;;
+;; 'optflag:' can be used to override the default optimization level,
+;; and 'sspflag:' can be used to override the stack protector flag
+;;
+;; presently, this is the only config/toolchain option,
+;; but at some point a clang alternative may be introduced...
+(define (gcc+musl-static-config arch
+				#!key
+				(optflag '-O2)
+				(sspflag '-fstack-protector-strong)
+				(extra-cflags '()))
+  (let ((badfl  '(-march=native -mtune=native -mcpu=native))
+	(triple (string->symbol (conc arch "-linux-musl")))
+	(cflags (cons*
+		 (or optflag '-Og)
+		 (or sspflag '-fno-stack-protector)
+		 extra-cflags)))
+    ;; don't allow CFLAGS that we know will
+    ;; break reproducibility (so far just -march=native and equivalents)
+    (let loop ((fl badfl))
+      (or (null? fl)
+	  (if (memq (car fl) extra-cflags)
+	      (error "CFLAGS breaks reproducibility" (car fl))
+	      (loop (cdr fl)))))
+    (make-config
+     arch: arch
+     triple: triple
+     cc-toolchain: (gcc+musl-toolchain triple CFLAGS: cflags CXXFLAGS: cflags)
+     native-cc-toolchain: (gcc+musl-native-toolchain triple))))
+
 ;; cc-for-target produces a list of packages
 ;; that together constitute a C/C++ toolchain
 ;; for a particular target; if native is supplied
@@ -60,16 +188,11 @@
 ;; need a C/C++ compiler in order to compile tools
 ;; that are run as part of the overall build process.)
 (define (cc-for-target conf #!optional (native #f))
-  (let* ((tri ($triple conf))
-	 (lst (list
-	       (gcc-for-triple tri)
-	       (binutils-for-triple tri)
-	       make
-	       execline-tools
-	       busybox-core)))
+  (let* ((tc    ($cc-toolchain conf))
+	 (tools (cc-toolchain-tools tc)))
     (if native
-	(cons native-toolchain lst)
-	lst)))
+	(cons native-toolchain tools)
+	tools)))
 
 (define *musl-src*
   (source-template
@@ -150,43 +273,6 @@ EOF
                     ;; we don't want the awk symlink;
                     ;; it conflicts with busybox
                     post-install: (+= '((foreground ((rm -f /out/usr/bin/awk)))))))))))
-
-;; for a triple, create the ordinary gcc, ld, as, etc.
-;; binaries that are either symlinks or thin wrappers
-;; for the actual binaries (i.e. x86_64-linux-musl-gcc, etc.)
-(define (native-gcc-toolchain-wrappers triple)
-  (let* ((plat (lambda (name) (conc triple "-" name)))
-	 (wrap (lambda (name)
-		 (interned
-		  (string-append "/usr/bin/" name)
-		  #o755
-		  (string-append
-		   "#!/bin/execlineb -s0\n"
-		   (plat name) " --sysroot=/ $@\n"))))
-	 (ln   (lambda (name)
-		 (interned-symlink
-		  (string-append "/usr/bin/" name)
-		  (string-append "/usr/bin/" (plat name))))))
-    (cons*
-     (wrap "gcc")
-     (wrap "g++")
-     (wrap "ld")
-     (map ln '("as" "ar" "ranlib" "strip" "readelf" "objcopy")))))
-
-;; native-toolchain is a metapackage that imports
-;; gcc, binutils, a libc, and symlinks and wrappers
-;; to make /usr/bin/gcc behave as if --sysroot=/
-(define native-toolchain
-  (let ((lst (list libssp-nonshared musl)))
-    (make-meta-package
-     (lambda (conf)
-       (let ((tri ($triple conf)))
-	 (cons*
-	  (gcc-for-triple tri)
-	  (binutils-for-triple tri)
-	  libssp-nonshared
-	  musl
-	  (native-gcc-toolchain-wrappers tri)))))))
 
 (define libgmp
   (let ((src (source-template
@@ -467,21 +553,22 @@ EOF
 		      ;; so remove 'doc' and 'po' from subdirs
 		      pre-configure: (+= '((if ((sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in)))))
 		      configure-args:
-		      (:= `(--disable-nls --disable-shared --enable-static
-					  --disable-multilib --enable-gold=yes --with-ppl=no
-					  --disable-install-libiberty --enable-relro
-					  --disable-plugins --enable-deterministic-archives
-					  --with-pic --with-mmap --enable-ld=default
-					  --with-system-zlib --enable-64-bit-bfd
-					  --disable-install-libbfd
-					  --prefix=/usr
-					  ;; no libdir, etc. because we discard any
-					  ;; libraries and headers produced
-					  ,(conc "--program-prefix=" target-triple "-")
-					  ,(conc "--build=" build-triple)
-					  ,(conc "--target=" target-triple)
-					  ,(conc "--host=" host-triple)
-					  ,(conc "--with-sysroot=" (triple->sysroot target-triple))))
+		      (:= `(--disable-nls
+			    --disable-shared --enable-static
+			    --disable-multilib --enable-gold=yes --with-ppl=no
+			    --disable-install-libiberty --enable-relro
+			    --disable-plugins --enable-deterministic-archives
+			    --with-pic --with-mmap --enable-ld=default
+			    --with-system-zlib --enable-64-bit-bfd
+			    --disable-install-libbfd
+			    --prefix=/usr
+			    ;; no libdir, etc. because we discard any
+			    ;; libraries and headers produced
+			    ,(conc "--program-prefix=" target-triple "-")
+			    ,(conc "--build=" (build-triple))
+			    ,(conc "--target=" target-triple)
+			    ,(conc "--host=" host-triple)
+			    ,(conc "--with-sysroot=" (triple->sysroot target-triple))))
 		      post-install:
 		      (+= `((if ((rm -rf /out/usr/include)))
 			    (if ((rm -rf /out/include)))
@@ -597,7 +684,7 @@ EOF
 					 --with-system-zlib
 					 "--enable-languages=c,c++"
 					 ,(conc "--with-sysroot=" (triple->sysroot target-triple))
-					 ,(conc "--build=" build-triple)
+					 ,(conc "--build=" (build-triple))
 					 ,(conc "--target=" target-triple)
 					 ,(conc "--host=" host-triple)))
 		     ;; installing compilers for different targets will
@@ -1064,7 +1151,7 @@ EOF
                "u-boot" "2020.04-rc3"
                "https://ftp.denx.de/pub/$name/$name-$version.tar.bz2"
                "-se2Ch0_yG0gCjtkTSEUmOYrle8860Gg887w3f7I8yI="
-               (patch* no-xxd-patch portable-lexer-patch))))
+              (patch* no-xxd-patch portable-lexer-patch))))
     (lambda (name h env bootargs bootcmd)
       (let ((envfile (interned
                        "/src/uboot-env"
@@ -1393,3 +1480,18 @@ EOF
     "kHCLlhEuZrIcR3vjYENuNyI1a0eGB1B6APiyWjvkvok="
     (list linux-headers)))
 
+;; keep everything down here at the bottom of the file;
+;; we need all the base packages to be declared in order
+;; for gcc+musl-static-config not to reference unbound variables
+
+;; default-config produces the default config for 'arch'
+;; which should be one of '(x86_64 aarch64)
+(define (default-config arch)
+  (or (memq arch '(x86_64 aarch64))
+      (info "WARNING: un-tested architecture" arch))
+  (gcc+musl-static-config arch optflag: '-Os sspflag: '-fstack-protector-strong))
+
+;; set package#build-config to
+;; the default config for this machine
+(build-config
+ (default-config *this-machine*))

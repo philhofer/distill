@@ -184,10 +184,16 @@ EOF
 ;; must be 32MB and 1GB, respectively
 (define mcbin-sdimage
   (mcbin-sdimage-platform
-    (config*
-      arch:     'aarch64
-      CFLAGS:   '(-pipe -O2 -mcpu=cortex-a72 -fstack-protector-strong)
-      CXXFLAGS: '(-pipe -O2 -mcpu=cortex-a72 -fstack-protector-strong))
+   (gcc+musl-static-config 'aarch64
+			   optflag: '-O2
+			   sspflag: '-fstack-protector-strong
+			   ;; compiling with -mcpu=... helps us get some
+			   ;; additional coverage on our GCC recipe with
+			   ;; cross-compilation, because this is an illegal
+			   ;; flag for any compiler/architecture except aarch64,
+			   ;; so builds will fail if this flag leaks into the
+			   ;; wrong CFLAGS arguments
+			   extra-cflags: '(-mcpu=cortex-a72))
     (linux/config-static "mcbin" "7T9BGGKMOBpAtgHatOv8gRA2Nf92jDWptxrJLV9T3ms="
                          dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
 
