@@ -4,7 +4,7 @@
     (aarch64 . ,(include "prebuilt-aarch64.scm"))))
 
 (define (maybe-prebuilt conf ref)
-  (and-let* ((_ (eq? conf (build-config)))
+  (and-let* ((_ (eq? conf default-build-config))
              (c (assq *this-machine* *prebuilts*))
              (c (assq ref (cdr c))))
     (cdr c)))
@@ -129,8 +129,8 @@
 		 (native-gcc-toolchain-wrappers triple))
    libc: (list musl libssp-nonshared)
    env: (make-cc-env
-	 CBUILD:   triple
-	 CHOST:    triple
+	 CBUILD:   #f
+	 CHOST:    #f
 	 CC:       "gcc"
 	 CFLAGS:   '(-fPIE -static-pie -pipe -O2)
 	 CXX:      "g++"
@@ -139,6 +139,7 @@
 	 LDFLAGS:  '(-static-pie)
 	 AS:       "as"
 	 AR:       "ar"
+	 NM:       "nm"
 	 ARFLAGS:  "-Dcr"
 	 RANLIB:   "ranlib"
 	 STRIP:    "strip"
@@ -290,9 +291,9 @@ EOF
 		;; only looks at CC_FOR_BUILD, but doesn't
 		;; know anything about CFLAGS_FOR_BUILD, etc
 		(let ((cc-for-build (spaced
-				     (list (kref cc-env/for-build
+				     (list (kref (cc-env/for-build)
 						 CC_FOR_BUILD:)
-					   (kref cc-env/for-build
+					   (kref (cc-env/for-build)
 						 CFLAGS_FOR_BUILD:)))))
 		  (kwith
 		   ($gnu-build conf)
@@ -548,7 +549,7 @@ EOF
 	  build:    (gnu-recipe
 		     (kwith
 		      ($gnu-build host)
-		      exports: (+= (list cc-env/for-build))
+		      exports: (+= (list (cc-env/for-build)))
 		      ;; 2.34: even with MAKEINFO=/bin/true, binutils refuses to build without makeinfo,
 		      ;; so remove 'doc' and 'po' from subdirs
 		      pre-configure: (+= '((if ((sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in)))))
@@ -632,7 +633,7 @@ EOF
 		     out-of-tree: (:= #t)
 		     exports: (+= (list
 				   ($make-overrides host)
-				   cc-env/for-build
+				   (cc-env/for-build)
 				   ;; ordinarily gcc refuses to build as PIE
 				   ;; because that breaks pre-compiled headers (?),
 				   ;; but we don't care because we disable those anyway
@@ -718,7 +719,7 @@ EOF
 		       ,(conc "CROSS_COMPILE=" ($triple conf) "-")
 		       ,(conc "CONFIG_SYSROOT=" ($sysroot conf))
 		       ,(conc "CONFIG_EXTRA_CFLAGS=" (spaced ($CFLAGS conf)))
-		       ,@(kvargs cc-env/for-kbuild) busybox)))
+		       ,@(kvargs (cc-env/for-kbuild)) busybox)))
 		(if ((make V=1 busybox.links)))
 		(if ((install -D -m "755" busybox /out/bin/busybox)))
 		(if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))
@@ -779,7 +780,7 @@ EOF
 
 ;; e2fsprogs is weird and uses BUILD_CC, BUILD_CFLAGS, etc.
 ;; in order to indicate which CC to use for building tools
-(define buildcc-env
+(define (buildcc-env)
   (cc-env/build
     (lambda (kw)
       (string->keyword
@@ -808,7 +809,7 @@ EOF
                                          --enable-libblkid
                                          --disable-uuidd
                                          --disable-fsck
-                                         ,@(kvargs buildcc-env)))
+                                         ,@(kvargs (buildcc-env))))
                     install-flags: (:= '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))))))
 
 (define *linux-major* 5.4)
@@ -851,7 +852,7 @@ EOF
       build:  `((if ((pipeline ((xzcat /src/linux.patch)))
                      (patch -p1)))
                 (if ((make ,(conc 'ARCH= (linux-arch-name ($arch conf)))
-                           ,@(kvargs cc-env/for-kbuild)
+                           ,@(kvargs (cc-env/for-kbuild))
                            headers)))
                 ;; headers_install uses rsync, which is a
                 ;; silly large dependency to pull in
@@ -974,7 +975,7 @@ EOF
                 (cc-for-target conf #t))
         inputs: '()
         build: (let ((make-args (append
-                                  (kvargs cc-env/for-kbuild)
+                                  (kvargs (cc-env/for-kbuild))
                                   (k=v*
                                     YACC: 'yacc ;; not bison -y
                                     ARCH: (linux-arch-dir-name ($arch conf))
@@ -1173,7 +1174,7 @@ EOF
                                         CONFIG_BOOTARGS: bootargs
                                         CONFIG_BOOTCOMMAND: bootcmd
                                         CROSS_COMPILE: (conc ($triple conf) "-"))
-                                      (kvargs cc-env/for-kbuild))))
+                                      (kvargs (cc-env/for-kbuild)))))
                      ;; note that we don't really do much in terms of
                      ;; setting the usual CFLAGS=..., LDFLAGS=... here,
                      ;; because those flags likely do not apply safely
@@ -1493,5 +1494,8 @@ EOF
 
 ;; set package#build-config to
 ;; the default config for this machine
-(build-config
- (default-config *this-machine*))
+;;
+;; default-build-config is special because
+;; it is the config used for bootstrapping toolchain(s)
+(define default-build-config (default-config *this-machine*))
+(build-config default-build-config)

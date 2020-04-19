@@ -226,39 +226,6 @@
 (define $OBJCOPY (cenv OBJCOPY:))
 (define $NM (cenv NM:))
 
-#;(define (config* #!key
-                 (arch     *this-machine*)
-                 (CFLAGS   '(-pipe -Os -fstack-protector-strong))
-                 (CXXFLAGS '(-pipe -Os -fstack-protector-strong))
-                 (LDFLAGS  '())
-                 (sysroot  #f))
-  (let* ((triple  (string->symbol (conc arch "-linux-musl")))
-         (sysflag (conc "--sysroot=" (triple->sysroot triple)))
-	 (plat    (lambda (prog) (string-append (symbol->string triple) "-" prog))))
-    (%make-config
-     arch:    arch
-     triple:  triple
-     cc-toolchain: (make-cc-toolchain
-		    ;; TODO: tools: libc: ;
-		    env:
-		    (make-cc-env
-		     CC:       (plat "gcc")
-		     CXX:      (plat "g++")
-		     LD:       (plat "ld")
-		     AS:       (plat "as")
-		     CBUILD:   (build-triple)
-		     CHOST:    triple
-		     CFLAGS:   (flatten sysflag '(-fPIE -static-pie) CFLAGS)
-		     LDFLAGS:  (flatten sysflag '(-static-pie) LDFLAGS)
-		     CXXFLAGS: (flatten sysflag '(-fPIE -static-pie) CXXFLAGS)
-		     AR:       (plat "ar")
-		     ARFLAGS:  '-Dcr
-		     NM:       (plat "nm")
-		     RANLIB:   (plat "ranlib")
-		     STRIP:    (plat "strip")
-		     READELF:  (plat "readelf")
-		     OBJCOPY:  (plat "objcopy"))))))
-
 ;; $make-overrides is the subset of <config>
 ;; that is supplied as k=v arguments to invocations
 ;; of $MAKE (in order to override assignments in the Makefile)
@@ -270,50 +237,26 @@
      RANLIB: STRIP: NM: READELF: OBJCOPY: AR: ARFLAGS:)
     $cc-env)))
 
-;; when packages need CC_FOR_BUILD, etc.,
-;; these are the environment variables that are set
-;; (see also the 'native-gcc' wrappers in base.scm)
-(define buildcc
-  (kvector*
-   CC: "gcc"
-   LD: "ld"
-   AS: "as"
-   AR: "ar"
-   NM: "nm"
-   CXX: "g++"
-   ;; sadness: pretty much everything
-   ;; assumes $CC $CFLAGS <foo> will link
-   ;; a binary (i.e. without $LDFLAGS) so
-   ;; any super-important linker flags really
-   ;; need to be part of CFLAGS
-   CFLAGS:   '(-fPIE -static-pie -pipe -O2)
-   CXXFLAGS: '(-fPIE -static-pie -pipe -O2)
-   LDFLAGS:  '(-static-pie)
-   ARFLAGS: "-Dcr"
-   OBJCOPY: "objcopy"
-   READELF: "readelf"
-   STRIP: "strip"
-   RANLIB: "ranlib"))
-
 ;; cc-env/build produces a C environment
 ;; by transforming the usual CC, LD, etc.
 ;; variables using (frob-kw key) for each keyword
 (: cc-env/build ((keyword -> keyword) -> vector))
 (define (cc-env/build frob-kw)
   (let ((folder (lambda (kw arg lst)
-		  (cons
-		   (frob-kw kw)
-		   (cons arg lst)))))
+		  ;; ignore cc-env values that are #f
+		  (if arg
+		      (cons (frob-kw kw) (cons arg lst))
+		      lst))))
     (list->kvector
      (kvector-foldl
-      buildcc
+      (cc-toolchain-env ($native-toolchain (build-config)))
       folder
       '()))))
 
 ;; cc-env/for-build is a C environment
 ;; with CC_FOR_BUILD, CFLAGS_FOR_BUILD, etc.
 ;; (this is typical for autotools-based configure scripts)
-(define cc-env/for-build
+(define (cc-env/for-build)
   (cc-env/build (lambda (kw)
 		  (string->keyword
 		   (string-append
@@ -323,7 +266,7 @@
 ;; cc-env/for-kbuild is a C environment
 ;; with HOSTCC, HOSTCFLAGS, etc.
 ;; (this is typical for Kbuild-based build systems)
-(define cc-env/for-kbuild
+(define (cc-env/for-kbuild)
   (cc-env/build (lambda (kw)
 		  (string->keyword
 		   (string-append
@@ -409,6 +352,7 @@
 
 ;; build-config is the configuration
 ;; for artifacts produced for *this* machine (tools, etc)
+;; (this is set to a reasonable value when base.scm is loaded)
 (define build-config
   (make-parameter #f))
 
