@@ -320,47 +320,26 @@ EOF
 		   exports: (+= (list (cons 'CC_FOR_BUILD cc-for-build))))))))))
 
 (define libmpfr
-  (let ((src (source-template
-               "mpfr" "4.0.2"
-               "https://www.mpfr.org/mpfr-current/$name-$version.tar.bz2"
-               "wKuAJV_JEeh560Jgqo8Iub6opUuqOKFfQATGEJ2F3ek=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (cons libgmp libc)
-        build:  (gnu-recipe ($gnu-build conf))))))
+  (cmmi-package
+   "mpfr" "4.0.2"
+   "https://www.mpfr.org/mpfr-current/$name-$version.tar.bz2"
+   "wKuAJV_JEeh560Jgqo8Iub6opUuqOKFfQATGEJ2F3ek="
+   libs: (list libgmp)))
 
 (define libmpc
-  (let ((src (source-template
-               "mpc" "1.1.0"
-               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-               "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (cons* libgmp libmpfr libc)
-        build:  (gnu-recipe ($gnu-build conf))))))
+  (cmmi-package
+   "mpc" "1.1.0"
+   "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+   "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc="
+   libs: (list libgmp libmpfr)))
 
 (define m4
-  (let ((src (source-template
-               "m4" "1.4.18"
-               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-               "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: libc
-        build:  (gnu-recipe
-                  (kwith
-                    ($gnu-build conf)
-                    ;; m4 sticks a file in /usr/lib/charset.alias
-                    post-install: (+= '((if ((rm -rf /out/usr/lib)))))))))))
+  (cmmi-package
+   "m4" "1.4.18"
+   "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+   "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0="
+   ;; m4 leaves some garbage in /usr/lib
+   cleanup: '((if ((rm -rf /out/usr/lib))))))
 
 (define bzip2
   (let ((src (source-template
@@ -414,76 +393,41 @@ EOF
                                              --enable-static-libc))))))))
 
 (define byacc
-  (let ((src (source-template
-	      "byacc" "20200330"
-	      "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-	      "FTAMi_kKoQy3LVJS7qBVMo-rrgG5IlzUK10JGTUaq7c=")))
-    (lambda (conf)
-      (source->package
-       conf
-       src
-       tools:  (cc-for-target conf)
-       inputs: libc
-       build:  (gnu-recipe
-		(kwith
-		 ($gnu-build conf)
-		  configure-args: (+= '(--enable-btyacc))))))))
+  (cmmi-package
+   "byacc" "20200330"
+   "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
+   "FTAMi_kKoQy3LVJS7qBVMo-rrgG5IlzUK10JGTUaq7c="
+   extra-configure: '(--enable-btyacc)))
 
 (define reflex
-  (let ((src (source-template
-               "reflex" "20191123"
-               "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-               "SsgYKYUlYwedhJWxTvBAO2hdfrAMJ8mNpFjuIveGpSo=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:   (cons byacc (cc-for-target conf))
-        inputs:  libc
-        build:   (gnu-recipe
-                   (kwith
-                     ($gnu-build conf)
-                     ;; install the lex(1)+flex(1) symlinks
-                     post-install:
-                     (+=
-                       `((if ((ln -s reflex /out/usr/bin/lex)))
-                         (if ((ln -s reflex++ /out/usr/bin/lex++)))
-                         (if ((ln -s reflex /out/usr/bin/flex)))
-                         (if ((ln -s reflex++ /out/usr/bin/flex++)))))))))))
+  (cmmi-package
+   "reflex" "20191123"
+   "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
+   "SsgYKYUlYwedhJWxTvBAO2hdfrAMJ8mNpFjuIveGpSo="
+   tools: (list byacc)
+   ;; install flex(1) and lex(1) symlinks
+   cleanup: '((if ((ln -s reflex /out/usr/bin/lex)))
+	      (if ((ln -s reflex++ /out/usr/bin/lex++)))
+	      (if ((ln -s reflex /out/usr/bin/flex)))
+	      (if ((ln -s reflex++ /out/usr/bin/flex++))))))
 
 (define zlib
-  (let ((src (source-template
-               "zlib" "1.2.11"
-               "https://zlib.net/$name-$version.tar.gz"
-               "K3Q8ig9qMtClPdpflHwS8OkSMrLVItBzEu5beP_szJA=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: libc
-        ;; not autoconf, but this works fine
-        build:  (gnu-recipe
-                  (kwith
-                    ($gnu-build conf)
-                    configure-args: (:= '(--static --prefix=/usr --libdir=/lib))))))))
+  (cmmi-package
+   "zlib" "1.2.11"
+   "https://zlib.net/$name-$version.tar.gz"
+   "K3Q8ig9qMtClPdpflHwS8OkSMrLVItBzEu5beP_szJA="
+   ;; not autoconf
+   override-configure: '(--static --prefix=/usr --libdir=/lib)))
 
+;; NOTE: the latest version of isl is 0.22.1, but
+;; it is not available through any HTTPS mirror that I have found...
+;; the gcc infrastructure mirror only includes up to 0.18
 (define libisl
-  ;; NOTE: the latest version of isl is 0.22.1, but
-  ;; it is not available through any HTTPS mirror that I have found...
-  ;; the gcc infrastructure mirror only includes up to 0.18
-  (let ((src (source-template
-               "isl" "0.18"
-               "https://gcc.gnu.org/pub/gcc/infrastructure/$name-$version.tar.bz2"
-               "bFSNjbp4fE4N5xcaqSGTnNfLPVv7QhnEb2IByFGBZUY=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (cons libgmp libc)
-        build:  (gnu-recipe
-                  ($gnu-build conf))))))
+  (cmmi-package
+   "isl" "0.18"
+   "https://gcc.gnu.org/pub/gcc/infrastructure/$name-$version.tar.bz2"
+   "bFSNjbp4fE4N5xcaqSGTnNfLPVv7QhnEb2IByFGBZUY="
+   libs: (list libgmp)))
 
 ;; include a file as literal text at compile time
 (define-syntax include-file-text
@@ -495,23 +439,14 @@ EOF
         (with-input-from-file arg read-string)))))
 
 (define make
-  (let ((src (source-template
-               "make" "4.3"
-               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-               "HaL2VGA5mzktijZa2L_IyOv2OTKTGkf8D-AVI_wvARc=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        prebuilt: (maybe-prebuilt conf 'make)
-        tools:    (cc-for-target conf)
-        inputs:   libc
-        build:    (gnu-recipe
-                    (kwith
-                      ($gnu-build conf)
-                      ;; can't call exit(3) inside a procedure registered with atexit(3);
-                      ;; just exit promptly
-                      pre-configure: (+= '((if ((sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c)))))))))))
+  (cmmi-package
+   "make" "4.3"
+   "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+   "HaL2VGA5mzktijZa2L_IyOv2OTKTGkf8D-AVI_wvARc="
+   prebuilt: (cut maybe-prebuilt <> 'make)
+   ;; can't call exit(3) inside a procedure registered with atexit(3);
+   ;; just exit promptly
+   prepare: '((if ((sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c))))))
 
 (define *gcc-version* "9.3.0")
 (define *gcc-src*
@@ -1289,65 +1224,33 @@ EOF
             (install -D -m "755"
                      programs/zstd /out/usr/bin/zstd)))))))
 
-(define libarchive
-  (let ((src (source-template
-               "libarchive" "3.4.1"
-               "https://github.com/libarchive/$name/releases/download/v$version/$name-$version.tar.gz"
-               "dfot337ydQKCCABhpdrALARa6QFrjqzYxFSAPSiflFk=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (list bzip2 zlib xz-utils lz4 libressl zstd musl libssp-nonshared)
-        build:  (gnu-recipe
-                  (kwith
-                    ($gnu-build conf)
-                    configure-args: (+= '(--without-xml2 --without-acl --without-attr --without-expat))))))))
-
 (define libressl
-  (let ((src (source-template
-               "libressl" "3.0.2"
-               "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-               "klypcg5zlwvSTOzTQZ7M-tBZgcb3tPe72gtWn6iMTR8=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (list musl libssp-nonshared)
-        build:  (gnu-recipe
-                  (kwith
-                    ($gnu-build conf)
-                    post-install: (+= `((if ((ln -s openssl /out/usr/bin/libressl)))))))))))
+  (cmmi-package
+   "libressl" "3.0.2"
+   "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
+   "klypcg5zlwvSTOzTQZ7M-tBZgcb3tPe72gtWn6iMTR8="
+   cleanup: '((if ((ln -s openssl /out/usr/bin/libressl))))))
 
 (define xz-utils
-  (let ((src (source-template
-               "xz" "5.2.4"
-               "https://tukaani.org/$name/$name-$version.tar.xz"
-               "xbmRDrGbBvg_6BxpAPsQGBrFFAgpb0FrU3Yu1zOf4k8=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (list musl libssp-nonshared)
-        build:  (gnu-recipe
-                  ($gnu-build conf))))))
+  (cmmi-package
+   "xz" "5.2.4"
+   "https://tukaani.org/$name/$name-$version.tar.xz"
+   "xbmRDrGbBvg_6BxpAPsQGBrFFAgpb0FrU3Yu1zOf4k8="))
+
+(define libarchive
+  (cmmi-package
+   "libarchive" "3.4.1"
+   "https://github.com/libarchive/$name/releases/download/v$version/$name-$version.tar.gz"
+   "dfot337ydQKCCABhpdrALARa6QFrjqzYxFSAPSiflFk="
+   libs: (list bzip2 zlib xz-utils lz4 libressl zstd)
+   extra-configure: '(--without-xml2 --without-acl --without-attr --without-expat)))
 
 (define libmnl
-  (let ((src (source-template
-               "libmnl" "1.0.4"
-               "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-               "kUOLXuIdscWD_5WHBvAIuytyuy-gGm_LXen3TWodgNs=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:   (cc-for-target conf)
-        inputs:  (list linux-headers musl libssp-nonshared)
-        build:   (gnu-recipe
-                   ($gnu-build conf))))))
+  (cmmi-package
+   "libmnl" "1.0.4"
+   "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
+   "kUOLXuIdscWD_5WHBvAIuytyuy-gGm_LXen3TWodgNs="
+   libs: (list linux-headers)))
 
 (define libnftnl
   (let ((src (source-template

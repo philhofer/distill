@@ -2,6 +2,7 @@
   (import
     scheme
     (srfi 2)
+    (srfi 26) ; cut/cute
     (srfi 69)
     (srfi 88)
     (distill eprint)

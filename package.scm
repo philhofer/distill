@@ -71,34 +71,80 @@
        env:     '()
        dir:     (conc name "-" version)))))
 
+;; template for 'configure; make; make install;' or 'c;m;mi'
+;; that has sane defaults for environment, tooling, etc.
+(define (cmmi-package
+	 name version urlfmt hash
+	 #!key
+	 (dir #f)       ;; directory override
+	 (prebuilt #f)  ;; prebuilt function
+	 (patches '())  ;; patches to apply
+	 (env '())      ;; extra environment
+
+	 ;; override-configure, if not #f, takes
+	 ;; precedence over the default configure options;
+	 ;; otherwise (append default extra-configure) is used
+	 (extra-configure '())
+	 (override-configure #f)
+
+	 (override-make #f)
+
+	 (libs '())     ;; extra libraries beyond libc
+	 (tools '())    ;; extra tools beyond a C toolchain
+	 (extra-src '());; extra source
+	 (prepare '())  ;; a place to put sed chicanery, etc.
+	 (cleanup '())  ;; a place to put extra install tweaking
+	 (native-cc #f) ;; should be one of the cc-env/for-xxx functions if not #f
+	 (extra-cflags '()))
+  (let* ((url (string-translate* urlfmt `(("$name" . ,name)
+					  ("$version" . ,version))))
+	 (src (remote-archive url hash)))
+    (lambda (conf)
+      (let ((default-configure `(--disable-shared
+				 --enable-static
+				 --disable-nls
+				 --prefix=/usr
+				 --sysconfdir=/etc
+				 --build ,(build-triple)
+				 --host ,($triple conf)))
+	    (make-args (or override-make (kvargs ($make-overrides conf))))
+	    (ctc       ($cc-toolchain conf)))
+	(raw-make-package
+	 prebuilt: (and prebuilt (prebuilt conf))
+	 patches: patches
+	 label:   (conc name "-" version "-" ($arch conf))
+	 src:     (cons src (append patches extra-src))
+	 env:     (cons
+		   (if (null? extra-cflags)
+		       ($cc-env conf)
+		       (kwith ($cc-env conf)
+			      CFLAGS: (+= extra-cflags)
+			      CXXFLAGS: (+= extra-cflags)))
+		   (if native-cc
+		       (cons (native-cc) env)
+		       env))
+	 dir:     (or dir (conc name "-" version))
+	 tools:   (append (cc-toolchain-tools ctc)
+			  tools
+			  (if native-cc
+			      (let ((ntc ($native-toolchain conf)))
+				(append (cc-toolchain-tools ntc)
+					(cc-toolchain-libc ntc)))
+			      '()))
+	 inputs:  (append (cc-toolchain-libc ctc) libs)
+	 build:   (append
+		   prepare
+		   `((if ((./configure ,@(or override-configure (append default-configure extra-configure)))))
+		     (if ((make ,@make-args)))
+		     (if ((make DESTDIR=/out install)))
+		     (foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
+		     (foreground ((find /out -name "*.la" -delete))))
+		   cleanup
+		   (strip-binaries-script ($triple conf))))))))
+
 ;; temporary hack
 (define (source->package conf src . rest)
   (apply kupdate (src conf) rest))
-
-(define (package-mutator . args)
-  (let* ((vec (list->vector args))
-         (len (vector-length vec)))
-    (let loop ((i 0))
-      (or (= i len)
-          (begin
-            (vector-set! vec i (kidx <package> (vector-ref vec i)))
-            (loop (+ i 2)))))
-    (lambda (pkg conf)
-      (let loop ((i 0))
-        (or (= i len)
-            (begin
-              (vector-set! pkg i ((vector-ref vec (+ i 1)) conf (vector-ref pkg i)))
-              (loop (+ i 2))))))))
-
-(define (integrate template . extensions)
-  (lambda (conf)
-    (let ((root (template conf)))
-      (let loop ((lst extensions))
-        (if (null? lst)
-	    root
-	    (begin
-	      ((car lst) root conf)
-	      (loop (cdr extensions))))))))
 
 (: update-package (vector #!rest * -> vector))
 (define (update-package pkg . args)
@@ -577,6 +623,40 @@
 	(foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
 	(foreground ((find /out -type f -name "*.la" -delete)))
 	,@(strip-binaries-script ($triple v))))))
+
+(define (ska-cmmi-package name version urlfmt hash
+			  #!key
+			  (extra-configure '())
+			  (prebuilt #f)
+			  (libs '())
+			  (tools '()))
+  (let* ((url (string-translate* urlfmt `(("$name" . ,name)
+					  ("$version" . ,version))))
+	 (src (remote-archive url hash)))
+    (lambda (conf)
+      (let ((sysroot   ($sysroot conf))
+	    (make-args ($make-overrides conf)))
+	(make-package
+	 prebuilt: (and prebuilt (prebuilt conf))
+	 label:    (conc name "-" version "-" ($arch conf))
+	 src:      (list src)
+	 tools:    (append (cc-toolchain-tools ($cc-toolchain conf)) tools)
+	 inputs:   (append (cc-toolchain-libc ($cc-toolchain conf)) libs)
+	 build:    (append
+		    ;; use our stack protector choice, thank you very much
+		    `((if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
+		      (if ((./configure
+			    --target ,($triple conf)
+			    --prefix=/ --libdir=/usr/lib
+			    --disable-shared --enable-static
+			    ,(conc "--with-include=" (filepath-join sysroot "/include"))
+			    ,(conc "--with-include=" (filepath-join sysroot "/usr/include"))
+			    ,(conc "--with-lib=" (filepath-join sysroot "/lib"))
+			    ,(conc "--with-lib=" (filepath-join sysroot "/usr/lib"))
+			    ,@extra-configure)))
+		      (if ((make ,@make-args)))
+		      (if ((make install))))
+		    (strip-binaries-script ($triple conf))))))))
 
 (: <ska-build> vector)
 (define <ska-build>

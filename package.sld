@@ -49,6 +49,8 @@
     source->package
     source-template
 
+    cmmi-package
+
     $arch
     $sysroot
     $triple
