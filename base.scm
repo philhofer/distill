@@ -20,6 +20,7 @@
                          (error "expected package to have a prebuilt binary:" (package-label old)))
                        (update-package old prebuilt: #f)))))
          (pkgs   `((make . ,(->boot make))
+		   (exportall . ,(->boot exportall))
                    (busybox . ,(->boot busybox-core))
                    (execline . ,(->boot execline-tools))
                    (binutils . ,(->boot (binutils-for-triple ($triple host))))
@@ -40,7 +41,7 @@
                                            (artifact-hash (cdr (assq name (cdr built)))))
                                  (loop rest))))))))
     (let ((stage-1 (remake!)))
-      (if (stable? stage-1)
+      (if (and (= (length pkgs) (length built)) (stable? stage-1))
         (display "prebuilts already equivalent.\n")
         (begin
           (display "outputting new prebuilts.\n")
@@ -97,6 +98,7 @@
     (make-cc-toolchain
      tools: (list (gcc-for-triple triple)
 		  (binutils-for-triple triple)
+		  exportall
 		  make
 		  execline-tools
 		  busybox-core)
@@ -256,6 +258,24 @@ EOF
 
 ;; dependencies necessary to statically link an ordinary C executable
 (define libc (list musl libssp-nonshared))
+
+;; exportall(1) is an execline tool for exporting a block of variables
+;; (in execline syntax, it works like 'exportall { key val ... } prog ...'
+;; so you'd write (exportall ((k v) ...)) in a build script
+(define exportall
+  (let* ((h   "YR0DqwQcQvI7RwjCDNtnoiENnK_fIbitz76HKwdZ0Ms=")
+	 (src (remote-archive
+	       (string-append "https://b2cdn.sunfi.sh/pub-cdn/files/" h) h kind: 'tar.zst)))
+    (lambda (conf)
+      (make-package
+       prebuilt: (maybe-prebuilt conf 'exportall)
+       label:  (string-append "exportall-0.1-" (symbol->string ($arch conf)))
+       src:    src
+       tools:  (cc-for-target conf)
+       inputs: (list musl libssp-nonshared)
+       dir:    "exportall-0.1"
+       build: `((if ((make DESTDIR=/out ,@(splat ($cc-env conf) CC: CFLAGS:) install)))
+		,@(strip-binaries-script ($triple conf)))))))
 
 (define gawk
   (let ((src (source-template
@@ -713,8 +733,9 @@ EOF
 		bzip2 config
 		(cc-for-target conf #t))
        inputs: (append libc extra-inputs)
-       build: `((export KCONFIG_NOTIMESTAMP 1)
-		(if ((mv /src/config.head .config)))
+       env:    (list
+		'(KCONFIG_NOTIMESTAMP . 1))
+       build: `((if ((mv /src/config.head .config)))
 		(if ((make V=1
 		       ,(conc "CROSS_COMPILE=" ($triple conf) "-")
 		       ,(conc "CONFIG_SYSROOT=" ($sysroot conf))
@@ -974,6 +995,12 @@ EOF
 		perl xz-utils reflex byacc libelf zlib linux-headers
                 (cc-for-target conf #t))
         inputs: '()
+	env:   `((KCONFIG_NOTIMESTAMP . 1)
+		 (KBUILD_BUILD_TIMESTAMP . "@0")
+		 (KBUILD_BUILD_USER . distill)
+		 (KBUILD_BUILD_HOST . distill)
+		 (CROSS_COMPILE . ,(conc ($triple conf) "-")))
+	patches: patches
         build: (let ((make-args (append
                                   (kvargs (cc-env/for-kbuild))
                                   (k=v*
@@ -982,7 +1009,6 @@ EOF
                                     HOST_LIBELF_LIBS: '(-lelf -lz)))))
                  `((if ((pipeline ((xzcat /src/linux.patch)))
                         (patch -p1)))
-                   ,@(script-apply-patches patches)
                    ,@(fix-dtc-script
                        fix-lex-options: 'scripts/kconfig/lexer.l
                        fix-yacc-cmdline: 'scripts/Makefile.host)
@@ -990,11 +1016,6 @@ EOF
                    (if ((find "." -type f -name "Make*"
                               -exec sed "-i" -e
                               "s/-lelf/-lelf -lz/g" "{}" ";")))
-                   (export KCONFIG_NOTIMESTAMP 1)
-                   (export KBUILD_BUILD_TIMESTAMP "@0")
-                   (export KBUILD_BUILD_USER distill)
-                   (export KBUILD_BUILD_HOST distill)
-                   (export CROSS_COMPILE ,(conc ($triple conf) "-"))
                    (if ((make
                           V=1 KCONFIG_ALLCONFIG=/src/config
                           ,@make-args
@@ -1083,6 +1104,10 @@ EOF
         src
         tools:  (cons samedate (cc-for-target conf))
         inputs: (list zlib bzip2 musl libssp-nonshared)
+	env: `((BUILD_ZLIB . 0)
+	       (BUILD_BZIP2 . 0)
+	       (BZIP2_LIB . ,(filepath-join ($sysroot conf) "/usr/lib"))
+	       (BZIP2_INCLUDE . ,(filepath-join ($sysroot conf) "/usr/include")))
         build:
         ;; yes, this is gross
         ;; but not as gross as perl's 'Configure' script
@@ -1109,11 +1134,7 @@ EOF
                                   -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
                                   -Dman1ext=1 -Dman3ext=3pm -Ud_csh -Uusedl -Dusenm
                                   -Dusemallocwrap)))
-          `((export BUILD_ZLIB 0)
-            (export BUILD_BZIP2 0)
-            (export BZIP2_LIB ,(filepath-join ($sysroot conf) "/usr/lib"))
-            (export BZIP2_INCLUDE ,(filepath-join ($sysroot conf) "/usr/include"))
-            ;; force date(1) output to be stable
+          `(;; force date(1) output to be stable
             (if ((ln -sf /bin/samedate /bin/date)))
             (if ((./Configure -des ,@configure-flags)))
             (if ((make ,@(kvargs ($make-overrides conf)))))
@@ -1208,12 +1229,12 @@ EOF
         src
         ;; non-standard directory
         dir:    (conc "squashfs-tools-" ver "/squashfs-tools")
+	env:    (list ($cc-env conf))
         tools:  (cc-for-target conf)
         inputs: (list zstd lz4 xz-utils zlib musl libssp-nonshared)
         build:  `(;; can't set CFLAGS= in the make invocation
                   ;; because the Makefile is clever and toggles
                   ;; a bunch of additional -DXXX flags based on configuration
-                  ,@(kvexport ($cc-env conf))
                   (if ((make XZ_SUPPORT=1 LZO_SUPPORT=0
                              LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0
                              ,@(kvargs ($make-overrides conf)))))

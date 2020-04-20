@@ -16,6 +16,7 @@
       (source->package
        conf
        src
+       env:    '((tcl_cv_strtoul_unbroken . ok))
        ;; non-standard build directory:
        dir:    (conc "tcl" ver "/unix")
        tools:  (+cross conf
@@ -28,8 +29,7 @@
 		(kwith
 		 ($gnu-build conf)
 		 make-flags: (+= (list "RANLIB=/bin/true"))
-		 pre-configure: (+= '((export tcl_cv_strtoul_unbroken ok)
-				      (if ((sed "-i" -e "20a #include <sys/stat.h>\n" "../generic/tcl.h")))))
+		 pre-configure: (+= '((if ((sed "-i" -e "20a #include <sys/stat.h>\n" "../generic/tcl.h")))))
 		 configure-args: (+= `(--enable-shared=no ; doesn't always respect disable-shared
 				       --mandir=/usr/share/man
 				       --disable-load

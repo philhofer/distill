@@ -425,6 +425,8 @@ EOF
       (source->package
         conf
         src
+	env:    '((ac_cv_file__dev_ptmx . yes)
+		  (ac_cv_file__dev_ptc . no))
         tools:  (cons
                   (interned "/src/py-setup" #o644 py-setup)
                   (+cross conf (cc-for-target conf) (list python3)))
@@ -434,9 +436,7 @@ EOF
                   libffi linux-headers gdbm libreadline)
         build:  (gnu-recipe
                   (kwith ($gnu-build conf)
-                         pre-configure: (+= '((export ac_cv_file__dev_ptmx yes)
-                                              (export ac_cv_file__dev_ptc no)
-                                              (if ((cp /src/py-setup Modules/Setup)))))
+                         pre-configure: (+= '((if ((cp /src/py-setup Modules/Setup)))))
                          ;; files in __pycache__ are not reproducible; remove them
                          post-install: (+= '((if ((pipeline ((find /out -type d -name __pycache__ -print0)))
                                                   (xargs "-0")

@@ -62,6 +62,9 @@
     s6
     s6-rc
 
+    ; execline helpers
+    exportall
+
     ; linux:
     perl
     libelf

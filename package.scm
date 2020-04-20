@@ -19,6 +19,7 @@
    patches:
    build:
    dir:
+   env:
    raw-output:))
 
 (define <meta-package> (list 'meta-package))
@@ -55,6 +56,7 @@
    patches:    '() list?
    build:      #f  list?
    dir:        "/" string?
+   env:        '() (list-of (or/c pair? kvector?))
    raw-output: #f  (or/c false/c string?)))
 
 (define (source-template name version urlfmt hash #!optional (patchlst '()))
@@ -66,6 +68,7 @@
        patches: patchlst
        label:   (conc name "-" version "-" ($arch conf))
        src:     (cons src patchlst)
+       env:     '()
        dir:     (conc name "-" version)))))
 
 ;; temporary hack
@@ -122,6 +125,8 @@
 (define package-dir (kvector-getter <package> dir:))
 (: package-patches (vector --> list))
 (define package-patches (kvector-getter <package> patches:))
+(: package-env (vector --> list))
+(define package-env (kvector-getter <package> env:))
 
 (: <config> vector)
 (define <config>
@@ -345,10 +350,9 @@
 ;; string, even if they are lists
 (: kvexport (vector --> list))
 (define (kvexport kvec)
-  (kvector-map
-   kvec
-   (lambda (k v)
-     `(export ,(##sys#symbol->string k) ,(spaced v)))))
+  `((exportall ,(kvector-map
+		 (lambda (k v)
+		   (list (##sys#symbol->string k) (spaced v)))))))
 
 ;; build-config is the configuration
 ;; for artifacts produced for *this* machine (tools, etc)
@@ -441,12 +445,14 @@
    (lambda ()
      (write-exexpr
       (let ((dir (package-dir r))
-	    (patches (or (package-patches r) '())))
+	    (patches (or (package-patches r) '()))
+	    (exports (package-env r)))
 	(unless dir "error: no dir specified" r)
 	(cons
 	 `(cd ,dir)
 	 (append
 	  (script-apply-patches patches)
+	  (exports->script exports)
 	  (package-build r))))))))
 
 ;; generator for an execline sequence that strips binaries
@@ -517,20 +523,21 @@
 			  --host ,($triple conf)))))))
 
 (define (exports->script lst)
-  (if (null? lst)
-      '()
-      (let ((head (car lst))
-	    (rest (cdr lst)))
-	(cond
-	 ((pair? head)
-	  (cons `(export ,(car head) ,(cdr head))
-		(exports->script rest)))
-	 ((kvector? head)
-	  (append (kvexport head)
-		  (exports->script rest)))
-	 (else
-	  (error "unexpected export value:" lst))))))
-
+  (let loop ((in  lst)
+	     (exp '()))
+    (if (null? in)
+        (if (null? exp) '() `((exportall ,(reverse exp))))
+	(let ((h (car in)))
+	  (cond
+	   ((pair? h)
+            (loop (cdr in) (cons (list (car h) (spaced (cdr h))) exp)))
+	   ((kvector? h)
+            (loop (cdr in) (kvector-foldl
+			    (car in)
+			    (lambda (k v lst)
+			      (if v (cons (list (##sys#symbol->string k) (spaced v)) lst) lst))
+			    exp)))
+	   (else (error "bad env element" (car in))))))))
 
 (define (+gnu-ccflags gr lst)
   (kwith
@@ -556,8 +563,8 @@
 	($triple         (kvector-getter <gnu-build> triple:))
 	(gnu?            (kvector-predicate <gnu-build>)))
     (lambda (v)
-      `(,@($pre-configure v)
-	,@(exports->script ($exports v))
+      `(,@(exports->script ($exports v))
+	,@($pre-configure v)
 	,@(if ($out-of-tree v)
 	      `((if ((mkdir -p "distill-builddir")))
 		(cd "distill-builddir")

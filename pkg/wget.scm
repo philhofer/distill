@@ -15,14 +15,14 @@
       (source->package
         conf
         src
+	env:    '((OPENSSL_LIBS . "-lssl -lcrypto")
+		  (OPENSSL_CFLAGS . -lssl))
         tools:  (cons perl (cc-for-target conf))
         inputs: (list libressl musl libssp-nonshared)
         build:  (gnu-recipe
                   (kwith
                     ($gnu-build conf)
-                    pre-configure: (+= '((export OPENSSL_LIBS "-lssl -lcrypto")
-                                         (export OPENSSL_CFLAGS -lssl)))
                     configure-args: (+= '(--disable-dependency-tracking
-                                           --with-ssl=openssl
-                                           --with-openssl
-                                           --without-libidn))))))))
+                                          --with-ssl=openssl
+                                          --with-openssl
+                                          --without-libidn))))))))

@@ -18,8 +18,8 @@
 (define build! (config->builder conf))
 
 (let ((alist (map cons
-                  '(make execline busybox binutils gcc)
-                  (build! make execline-tools busybox-core
+                  '(make exportall execline busybox binutils gcc)
+                  (build! make exportall execline-tools busybox-core
 			  (binutils-for-triple ($triple conf))
 			  (gcc-for-triple ($triple conf))))))
   (with-output-to-file
