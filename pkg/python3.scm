@@ -417,36 +417,32 @@ EOF
 )
 
 (define python3
-  (let ((src (source-template
-               "Python" "3.8.2"
-               "https://www.python.org/ftp/python/$version/$name-$version.tar.xz"
-               "Fz7sjZlaw3LqjDO4K3IViMKGscHMEH2_7UTIvSmKxfM=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-	env:    '((ac_cv_file__dev_ptmx . yes)
-		  (ac_cv_file__dev_ptc . no))
-        tools:  (cons
-                  (interned "/src/py-setup" #o644 py-setup)
-                  (+cross conf (cc-for-target conf) (list python3)))
-        inputs: (list
-                  musl libssp-nonshared ncurses
-                  libexpat libressl zlib bzip2 xz-utils
-                  libffi linux-headers gdbm libreadline)
-        build:  (gnu-recipe
-                  (kwith ($gnu-build conf)
-                         pre-configure: (+= '((if ((cp /src/py-setup Modules/Setup)))))
-                         ;; files in __pycache__ are not reproducible; remove them
-                         post-install: (+= '((if ((pipeline ((find /out -type d -name __pycache__ -print0)))
-                                                  (xargs "-0")
-                                                  (rm -rf)))))
-                         configure-args: (+= `(,(conc "--with-openssl=" ($sysroot conf) "/usr")
-                                                --enable-ipv6
-                                                --enable-optimizations=no
-                                                --with-computed-gotos
-                                                --with-dbmliborder=gdbm
-                                                --with-system-expat
-                                                --without-ensurepip))
-                         make-flags: (+= (k=v* EXTRA_CFLAGS: (cons '-DTHREAD_STACK_SIZE=0x100000
-                                                                   ($CFLAGS conf))))))))))
+  (cmmi-package
+   "Python" "3.8.2"
+   "https://www.python.org/ftp/python/$version/$name-$version.tar.xz"
+   "Fz7sjZlaw3LqjDO4K3IViMKGscHMEH2_7UTIvSmKxfM="
+   extra-src: (list (interned "/src/py-setup" #o644 py-setup))
+   libs: (list ncurses libexpat libressl zlib bzip2 xz-utils libffi
+	       linux-headers gdbm libreadline)
+   tools: (lambda (conf)
+	    ;; TODO: figure out precisely the conditions under which
+	    ;; the build script requires an external python3 program;
+	    ;; right now we're approximating it as 'build-triple != host-triple'
+	    (if (eq? ($triple conf) (build-triple)) '() (list python3)))
+   env:   '((ac_cv_file__dev_ptmx . yes)
+	    (ac_cv_file__dev_ptc . no))
+   prepare: '((if ((cp /src/py-setup Modules/Setup))))
+   cleanup: '((if ((pipeline ((find /out -type d -name __pycache__ -print0)))
+		   (xargs "-0")
+		   (rm -rf))))
+   extra-configure: (vargs
+		     `((--with-openssl= ,$sysroot /usr)
+		       --enable-ipv6
+		       --enable-optimizations=no
+		       --with-computed-gotos
+		       --with-dbmliborder=gdbm
+		       --with-system-expat
+		       --without-ensurepip))
+   override-make: (let (($py-cflags (lambda (conf)
+				      (cons '-DTHREAD_STACK_SIZE=0x100000 ($CFLAGS conf)))))
+		    (vargs `((EXTRA_CFLAGS= ,$py-cflags) ,$make-overrides)))))

@@ -6,7 +6,15 @@
      (let ((val want)
 	   (got expr))
        (unless (cmp? val got)
-	 (error "test failure:" (quote expr) "should be" val "but is" got))))))
+	       (display (quote expr))
+	       (newline)
+	       (display "should be:\n")
+	       (display val)
+	       (newline)
+	       (display "but got:\n")
+	       (display got)
+	       (newline)
+	       (error "test failure"))))))
 
 (define-syntax test*
   (syntax-rules ()

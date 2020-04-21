@@ -320,20 +320,13 @@ EOF
    libs: (list libgmp libmpfr)))
 
 (define bzip2
-  (let ((src (source-template
-               "bzip2" "1.0.8"
-               "https://sourceware.org/pub/$name/$name-$version.tar.gz"
-               "pZGXjBOF4VYQnwdDp2UYObANElrjShQaRbMDj5yef1A=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: libc
-        build:  `((make PREFIX=/out/usr ;; no DESTDIR supported
-                        ,@(kvargs ($cc-env conf))
-                        ,@(kvargs ($make-overrides conf))
-                        install))))))
+  (cc-package
+   "bzip2" "1.0.8"
+   "https://sourceware.org/pub/$name/$name-$version.tar.gz"
+   "pZGXjBOF4VYQnwdDp2UYObANElrjShQaRbMDj5yef1A="
+   build: (cmd*
+	   `(make PREFIX=/out/usr ,$cc-env ,$make-overrides install)
+	   $strip-cmd)))
 
 ;; wrapper for cmmi-package for skaware,
 ;; since they all need similar treatment
@@ -349,7 +342,7 @@ EOF
    prebuilt: prebuilt
    libs:     libs
    prepare:  '((if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure))))
-   override-configure: (confsubst
+   override-configure: (vargs
 			(append
 			`(--prefix=/
 			  --libdir=/usr/lib
@@ -636,37 +629,36 @@ EOF
 					   `((if ((find /out/usr/bin -type f ! -name ,(conc target-arch "*") -delete))))
 					   `((if ((rm -rf ,(conc "/out/usr/share/gcc-" *gcc-version* "/python")))))))))))))))
 
+(define ($cc-env/for-kbuild conf)
+  (cc-env/for-kbuild))
+
 (define (busybox/config config-hash extra-inputs)
-  (let ((src (source-template
-	      "busybox" "1.31.1"
-	      "https://busybox.net/downloads/$name-$version.tar.bz2"
-	      "JqkfZAknGWBuXj1sPLwftVaH05I5Hb2WusYrYuO-sJk="
-	      (patch* (include-file-text "patches/busybox/busybox-bc.patch"))))
-        (config (remote-file
-		 #f config-hash "/src/config.head" #o644)))
-    (lambda (conf)
-      (source->package
-       conf
-       src
-       tools:  (cons*
-		bzip2 config
-		(cc-for-target conf #t))
-       inputs: (append libc extra-inputs)
-       env:    (list
-		'(KCONFIG_NOTIMESTAMP . 1))
-       build: `((if ((mv /src/config.head .config)))
-		(if ((make V=1
-		       ,(conc "CROSS_COMPILE=" ($triple conf) "-")
-		       ,(conc "CONFIG_SYSROOT=" ($sysroot conf))
-		       ,(conc "CONFIG_EXTRA_CFLAGS=" (spaced ($CFLAGS conf)))
-		       ,@(kvargs (cc-env/for-kbuild)) busybox)))
-		(if ((make V=1 busybox.links)))
-		(if ((install -D -m "755" busybox /out/bin/busybox)))
-		(if ((mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)))
-		(redirfd -r 0 busybox.links)
+  (cc-package
+   "busybox" "1.31.1"
+   "https://busybox.net/downloads/$name-$version.tar.bz2"
+   "JqkfZAknGWBuXj1sPLwftVaH05I5Hb2WusYrYuO-sJk="
+   patches:   (patch* (include-file-text "patches/busybox/busybox-bc.patch"))
+   extra-src: (list (remote-file #f config-hash "/src/config.head" #o644))
+   libs:      extra-inputs
+   tools:     (list bzip2)
+   use-native-cc: #t
+   env:     (list
+	     '(KCONFIG_NOTIMESTAMP . 1))
+   build:   (cmd*
+	     '(mv /src/config.head .config)
+	     `(make V=1
+		(CROSS_COMPILE= ,$triple -)
+		(CONFIG_SYSROOT= ,$sysroot)
+		(CONFIG_EXTRA_CFLAGS= ,$CFLAGS)
+		,$cc-env/for-kbuild
+		busybox)
+              '(make V=1 busybox.links)
+	      '(install -D -m "755" busybox /out/bin/busybox)
+	      '(mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)
+	      '((redirfd -r 0 busybox.links)
 		(forstdin -o 0 link)
 		(importas "-i" -u link link)
-		(ln -s /bin/busybox "/out/${link}"))))))
+		(ln -s /bin/busybox "/out/${link}")))))
 
 ;; busybox-core is just enough busybox to build packages;
 ;; it doesn't include system utilities that would require
@@ -990,76 +982,55 @@ EOF
                     (if ((cp libelf.h /out/usr/include/libelf.h)))
                     (cp libelf.a /out/usr/lib/libelf.a)))))))
 
-;; perl packages a statically-linked perl binary
-;;
-;; NOTE: cross-compiling perl using the standard 'Configure' script
-;; requires ssh access to the target machine (in order to run code!),
-;; which is very obviously not something we can support, so this
-;; code would have to learn *a lot* about perl build configuration internals
-;; in order to make cross-compilation work
 (define perl
-  (let ((src (source-template
-               "perl" "5.30.1"
-               "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
-               "EBvfwKXjX_aaet0AXxwJKJGpGy4RnUrrYjh-qLeZ8ts=")))
-    (lambda (conf)
-      ;; TODO: really, this test should be even tighter:
-      ;; you can't build perl on a machine that can't run
-      ;; the perl executable produced using $CC, which
-      ;; means that i686/x86_64 builds and ppc{32,64}{,le}
-      ;; builds may or may not work, depending on how
-      ;; the kernel is configured...
-      (unless (eq? ($arch conf) *this-machine*)
-        (fatal "one does not simply cross-compile perl :("))
-      ;; a dummy date(1) binary
-      (define samedate
-        (interned "/bin/samedate" #o755
-                  (lambda ()
-                    (write-exexpr
+  ;; the perl configure script desperately
+  ;; wants to put date(1) output into the build output,
+  ;; so just overwrite the date(1) executable
+  (let ((samedate
+	 (interned "/bin/samedate" #o755
+		   (lambda ()
+		     (write-exexpr
                       '((echo "Fri Apr 3 20:09:47 UTC 2020"))
-                      shebang: "#!/bin/execlineb -s0"))))
-      (source->package
-        conf
-        src
-        tools:  (cons samedate (cc-for-target conf))
-        inputs: (list zlib bzip2 musl libssp-nonshared)
-	env: `((BUILD_ZLIB . 0)
-	       (BUILD_BZIP2 . 0)
-	       (BZIP2_LIB . ,(filepath-join ($sysroot conf) "/usr/lib"))
-	       (BZIP2_INCLUDE . ,(filepath-join ($sysroot conf) "/usr/include")))
-        build:
-        ;; yes, this is gross
-        ;; but not as gross as perl's 'Configure' script
-        (let ((configure-flags `(,@(k=v*
-                                     -Dcc:       ($CC conf)
-                                     -Dccflags:  ($CFLAGS conf)
-                                     -Dar:       ($AR conf)
-                                     -Darflags:  ($ARFLAGS conf)
-                                     -Dld:       ($LD conf)
-                                     -Dldflags:  ($LDFLAGS conf)
-                                     -Doptimize: '-Os ;; TODO: figure out how to pull this out of $CFLAGS
-                                     -Dnm:       ($NM conf)
-                                     -Dranlib:   ($RANLIB conf)
-                                     -Dsysroot:  ($sysroot conf))
-                                  ;; force reproducible date and uname:
-                                  -A "define:osname=linux"
-                                  -A "define:osvers=5.4.x"
-                                  -Dmyuname=distill-builder -Dcf_by=distill-builder
-                                  -Dprefix=/usr -Dprivlib=/usr/share/perl5/core_perl
-                                  -Darchlib=/usr/lib/perl5/core_perl -Dvendorprefix=/usr
-                                  -Dvendorlib=/usr/share/perl5/vendor_perl -Dvendorarch=/usr/lib/perl5/vendor_perl
-                                  -Duselargefiles -Dusethreads -Duseshrplib=false -Dd_semctl_semun
-                                  -Dman1dir=/usr/share/man/man1 -Dman3dir=/usr/share/man/man3
-                                  -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
-                                  -Dman1ext=1 -Dman3ext=3pm -Ud_csh -Uusedl -Dusenm
-                                  -Dusemallocwrap)))
-          `(;; force date(1) output to be stable
-            (if ((ln -sf /bin/samedate /bin/date)))
-            (if ((./Configure -des ,@configure-flags)))
-            (if ((make ,@(kvargs ($make-overrides conf)))))
-            (if ((make DESTDIR=/out install)))
-            (if ((rm -rf /out/usr/share/man)))
-            (find /out -name ".*" -delete)))))))
+                      shebang: "#!/bin/execlineb -s0")))))
+    (cc-package
+     "perl" "5.30.1"
+     "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
+     "EBvfwKXjX_aaet0AXxwJKJGpGy4RnUrrYjh-qLeZ8ts="
+     tools: (list samedate)
+     libs:  (list bzip2 zlib)
+     env:   (lambda (conf)
+	      `((BUILD_ZLIB . 0)
+		(BUILD_BZIP2 . 0)
+		(BZIP2_LIB . ,(filepath-join ($sysroot conf) "/usr/lib"))
+		(BZIP2_INCLUDE . ,(filepath-join ($sysroot conf) "/usr/include"))))
+     build: (cmd*
+	     '(ln -sf /bin/samedate /bin/date)
+	     `(./Configure -des (-Dcc= ,$CC)
+			   (-Dccflags= ,$CFLAGS)
+			   (-Dar= ,$AR)
+			   (-Darflags= ,$ARFLAGS)
+			   (-Dld= ,$LD)
+			   (-Dldflags= ,$LDFLAGS)
+                           (-Doptimize= -Os) ;; TODO: pull this out of $CFLAGS
+			   (-Dnm= ,$NM)
+			   (-Dranlib= ,$RANLIB)
+			   (-Dsysroot= ,$sysroot)
+			   ;; force reproducible uname
+			   -A "define:osname=linux"
+			   -A "define:osvers=5.4.x"
+			   -Dmyuname=distill-builder -Dcf_by=distill-builder
+			   -Dprefix=/usr -Dprivlib=/usr/share/perl5/core_perl
+			   -Darchlib=/usr/lib/perl5/core_perl -Dvendorprefix=/usr
+			   -Dvendorlib=/usr/share/perl5/vendor_perl -Dvendorarch=/usr/lib/perl5/vendor_perl
+			   -Duselargefiles -Dusethreads -Duseshrplib=false -Dd_semctl_semun
+			   -Dman1dir=/usr/share/man/man1 -Dman3dir=/usr/share/man/man3
+			   -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
+			   -Dman1ext=1 -Dman3ext=3pm -Ud_csh -Uusedl -Dusenm
+			   -Dusemallocwrap)
+	     `(make ,$make-overrides)
+	     '(make DESTDIR=/out install)
+	     '(rm -rf /out/usr/share/man)
+	     '(find /out -name ".*" -delete)))))
 
 ;; busybox xxd doesn't recognize '-i'
 ;; but we can achieve a similar result
@@ -1132,80 +1103,55 @@ EOF
                                  -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)))
                        (if ((make V=1 ,@make-args)))
                        (install -D -m 644 -t /out/boot u-boot.bin)))))))))
-
-(define squashfs-tools
-  ;; NOTE: mksquashfs before 4.4 does not honor SOURCE_DATE_EPOCH
-  ;; nor does it produce reproducible images (without a lot of additional trouble)
-  (let* ((ver "4.4")
-         (src (source-template
-                "squashfs-tools" "4.4"
-                "https://github.com/plougher/$name/archive/$version.tar.gz"
-                "o-ja9XdUjDj8KcrNOfKi7jQ1z37f7dtf3YUFgqRTIuo=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        ;; non-standard directory
-        dir:    (conc "squashfs-tools-" ver "/squashfs-tools")
-	env:    (list ($cc-env conf))
-        tools:  (cc-for-target conf)
-        inputs: (list zstd lz4 xz-utils zlib musl libssp-nonshared)
-        build:  `(;; can't set CFLAGS= in the make invocation
-                  ;; because the Makefile is clever and toggles
-                  ;; a bunch of additional -DXXX flags based on configuration
-                  (if ((make XZ_SUPPORT=1 LZO_SUPPORT=0
-                             LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0
-                             ,@(kvargs ($make-overrides conf)))))
-                  (if ((mkdir -p /out/usr/bin)))
-                  (cp mksquashfs unsquashfs /out/usr/bin))))))
+(define xz-utils
+  (cmmi-package
+   "xz" "5.2.4"
+   "https://tukaani.org/$name/$name-$version.tar.xz"
+   "xbmRDrGbBvg_6BxpAPsQGBrFFAgpb0FrU3Yu1zOf4k8="))
 
 (define lz4
-  (let ((src (source-template
-               "lz4" "1.9.2"
-               "https://github.com/lz4/$name/archive/v$version.tar.gz"
-               "uwHhgT74Tk7ds0TQeFZTodoI1_5IZsRnVRNNHi7ywlc=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (list musl libssp-nonshared)
-        build:  `((if ((make DESTDIR=/out PREFIX=/usr
-                             ,@(kvargs ($cc-env conf))
-                             ,@(kvargs ($make-overrides conf))
-                             install)))
-                  ,@(strip-binaries-script ($triple conf)))))))
+  (cc-package
+  "lz4" "1.9.2"
+  "https://github.com/lz4/$name/archive/v$version.tar.gz"
+  "uwHhgT74Tk7ds0TQeFZTodoI1_5IZsRnVRNNHi7ywlc="
+  build: (cmd*
+	  `(make DESTDIR=/out PREFIX=/usr ,$cc-env ,$make-overrides install)
+	  $strip-cmd)))
 
 (define zstd
-  (let ((src (source-template
-               "zstd" "1.4.4"
-               "https://github.com/facebook/$name/archive/v$version.tar.gz"
-               "PKNr93GxvtI1hA4Oia-Ut7HNNGjAcxlvfSr3TYdpdX4=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (list musl libssp-nonshared)
-        build:
-        ;; just a raw Makefile
-        (let ((makeflags (append
-                           (kvargs ($cc-env conf))
-                           (kvargs ($make-overrides conf))
-                           (k=v*
-                             HAVE_PTHREAD: 1
-                             HAVE_ZLIB: 0
-                             HAVE_LZMA: 0
-                             HAVE_LZ4:  0
-                             ZSTD_LEGACY_SUPPORT: 0
-                             ZSTD_LIB_DEPRECATED: 0))))
-          `((if ((cd lib/)
-                 (make PREFIX=/usr DESTDIR=/out
-                       ,@makeflags install-static install-includes)))
-            (if ((cd programs/)
-                 (make ,@makeflags zstd)))
-            (install -D -m "755"
-                     programs/zstd /out/usr/bin/zstd)))))))
+  (cc-package
+   "zstd" "1.4.4"
+   "https://github.com/facebook/$name/archive/v$version.tar.gz"
+   "PKNr93GxvtI1hA4Oia-Ut7HNNGjAcxlvfSr3TYdpdX4="
+   build: (let ((makeflags '(HAVE_PTHREAD=1
+			     HAVE_ZLIB=0
+			     HAVE_LZMA=0
+			     HAVE_LZ4=0
+			     ZSTD_LEGACY_SUPPORT=0
+			     ZSTD_LIB_DEPRECATED=0)))
+	    (cmd*
+	     `((cd lib/)
+	       (make PREFIX=/usr DESTDIR=/out ,$cc-env ,$make-overrides ,@makeflags install-static install-includes))
+	     `((cd programs/)
+	       (make ,$cc-env ,$make-overrides ,@makeflags zstd))
+	     '(install -D -m "755" programs/zstd /out/usr/bin/zstd)))))
+
+(define squashfs-tools
+  (let ((ver "4.4"))
+    (cc-package
+     "squashfs-tools" ver
+     "https://github.com/plougher/$name/archive/$version.tar.gz"
+     "o-ja9XdUjDj8KcrNOfKi7jQ1z37f7dtf3YUFgqRTIuo="
+     ;; non-standard directory:
+     dir:   (string-append "squashfs-tools-" ver "/squashfs-tools")
+     env:   (csubst (lambda (subst) (list (subst $cc-env))))
+     libs:  (list zstd lz4 xz-utils zlib)
+     build: (cmd*
+	     `(make XZ_SUPPORT=1 LZO_SUPPORT=0
+		    LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0 ,$make-overrides)
+	     '(mkdir -p /out/usr/bin)
+	     '(cp mksquashfs unsquashfs /out/usr/bin)
+	     $strip-cmd))))
 
 (define libressl
   (cmmi-package
@@ -1214,11 +1160,6 @@ EOF
    "klypcg5zlwvSTOzTQZ7M-tBZgcb3tPe72gtWn6iMTR8="
    cleanup: '((if ((ln -s openssl /out/usr/bin/libressl))))))
 
-(define xz-utils
-  (cmmi-package
-   "xz" "5.2.4"
-   "https://tukaani.org/$name/$name-$version.tar.xz"
-   "xbmRDrGbBvg_6BxpAPsQGBrFFAgpb0FrU3Yu1zOf4k8="))
 
 (define libarchive
   (cmmi-package
@@ -1329,22 +1270,14 @@ EOF
 
 ;; hard(8) command; an alternative to busybox halt(8)/reboot(8)/poweroff(8)
 (define hard
-  (let* ((version '0.1)
-         (hash    "aVGnVsRk_al4CfeliyuIZsyj7LBG-GphmUM-BgHad7E=")
-         (src     (remote-archive
-                    (conc "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
-                    hash
-                    kind: 'tar.zst)))
-    (lambda (conf)
-      (make-package
-        label:  (conc "hard-" version "-" ($arch conf))
-        src:    src
-        dir:    (conc "hard-" version)
-        tools:  (cc-for-target conf)
-        inputs: (list musl libssp-nonshared)
-        build:  `((if ((make ,@(splat ($cc-env conf) CC: CFLAGS: LDFLAGS:)
-                             DESTDIR=/out install)))
-                  ,@(strip-binaries-script ($triple conf)))))))
+  (let ((hash "aVGnVsRk_al4CfeliyuIZsyj7LBG-GphmUM-BgHad7E="))
+    (cc-package
+     "hard" "0.1"
+     (string-append "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
+     hash
+     build: (cmd*
+	     `(make (CC= ,$CC) (CFLAGS= ,$CFLAGS) (LDFLAGS= ,$LDFLAGS) DESTDIR=/out install)
+	     $strip-cmd))))
 
 (define busybox-full
   (busybox/config

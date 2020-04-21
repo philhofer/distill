@@ -71,7 +71,11 @@
        env:     '()
        dir:     (conc name "-" version)))))
 
-(define (confsubst lst)
+;; vargs takes a list of arguments,
+;; some of which are functions,
+;; and delays their expansion into
+;; a list of concrete arguments once a config is supplied
+(define (vargs lst)
   (lambda (conf)
     (let ((sublist (lambda (lst)
 		     (foldl
@@ -113,8 +117,93 @@
 	'()
 	lst)))))
 
+;; cdelay produces a delayed evaluation
+;; of 'proc' with a <config> as its only argument
+;;
+;; useful for wrapping script generation
+(define (cdelay proc)
+  (lambda (conf)
+    (proc (lambda (v) (if (procedure? v) (v conf) v)))))
+
+;; csubst is similar to cdelay
+(define (csubst proc)
+  (lambda (conf)
+    (proc (lambda (fn) (fn conf)))))
+
+(define (cmd* first . rest)
+  (csubst
+   (lambda (subst)
+     (let ((cmdline (lambda (arglst)
+		      (cond
+		       ((pair? arglst)
+			;; accept (cmd ...) forms and also
+			;; ((cmd ...) ...) forms
+			(if (pair? (car arglst))
+			    (map (lambda (cmd) (subst (vargs cmd))) arglst)
+			    (list (subst (vargs arglst)))))
+		       ((procedure? arglst)
+			(subst arglst))
+		       (else (error "unexpected argument to cmd*" arglst))))))
+       (let loop ((first first)
+		  (rest  rest))
+	 (if (null? rest)
+	     ;; allow the terminal expression to be
+	     ;; a list-of-lists, which means it is
+	     ;; another sequence of programs (perhaps another (cmd* ...) expression)
+	     (let ((tail (cmdline first)))
+	       (if (and (pair? tail) (pair? (car tail)))
+		   tail
+		   (list tail)))
+	     (cons `(if ,(cmdline first)) (loop (car rest) (cdr rest)))))))))
+
+;; template for C/C++ packages
+;;
+;; the cc-package template picks suitable defaults
+;; for the package source, inputs (libc), tools (toolchain)
+;; and build directory; the additional keyword arguments
+;; can be used to augment that package template with
+;; more libraries and tools
+;;
+;; the 'build:' argument is mandatory; cc-package
+;; does not provide a default build script
+(define (cc-package
+	 name version urlfmt hash
+	 #!key
+	 (dir #f)       ;; directory override
+	 (build #f)
+	 (prebuilt #f)  ;; prebuilt function
+	 (use-native-cc #f)
+	 (patches '())  ;; patches to apply
+	 (env '())      ;; extra environment
+	 (libs '())     ;; extra libraries beyond libc
+	 (tools '())    ;; extra tools beyond a C toolchain
+	 (extra-src '()))
+  (let* ((url (string-translate* urlfmt `(("$name" . ,name)
+					  ("$version" . ,version))))
+	 (src (remote-archive url hash)))
+    (lambda (conf)
+      (let* ((ll  (lambda (l) (if (procedure? l) (l conf) l)))
+	     (ctc ($cc-toolchain conf)))
+	(raw-make-package
+	 prebuilt: (ll prebuilt)
+	 patches: patches
+	 label:   (conc name "-" version "-" ($arch conf))
+	 src:     (cons src (append patches extra-src))
+	 env:     (ll env)
+	 dir:     (or dir (conc name "-" version))
+	 tools:   (append (cc-toolchain-tools ctc)
+			  (ll tools)
+			  (if use-native-cc
+			      (let ((ntc ($native-toolchain (build-config))))
+				(append (cc-toolchain-tools ntc) (cc-toolchain-libc ntc)))
+			      '()))
+	 inputs:  (append (cc-toolchain-libc ctc) (ll libs))
+	 build:   (if build (ll build) (error "cc-package needs build: argument")))))))
+
 ;; template for 'configure; make; make install;' or 'c;m;mi'
-;; that has sane defaults for environment, tooling, etc.
+;; that has sane defaults for environment, tools, libraries
+;; (see cc-package) and a reasonable default for the build script.
+;;
 (define (cmmi-package
 	 name version urlfmt hash
 	 #!key
@@ -138,52 +227,51 @@
 	 (cleanup '())  ;; a place to put extra install tweaking
 	 (native-cc #f) ;; should be one of the cc-env/for-xxx functions if not #f
 	 (extra-cflags '()))
-  (let* ((url (string-translate* urlfmt `(("$name" . ,name)
-					  ("$version" . ,version))))
-	 (src (remote-archive url hash)))
-    (lambda (conf)
-      (let* ((ll (lambda (l) (if (procedure? l) (l conf) l)))
-	     (default-configure `(--disable-shared
-				  --enable-static
-				  --disable-nls
-				  --prefix=/usr
-				  --sysconfdir=/etc
-				  --build ,(build-triple)
-				  --host ,($triple conf)))
-	     (make-args (or (ll override-make) (kvargs ($make-overrides conf))))
-	     (ctc       ($cc-toolchain conf)))
-	(raw-make-package
-	 prebuilt: (ll prebuilt)
-	 patches: patches
-	 label:   (conc name "-" version "-" ($arch conf))
-	 src:     (cons src (append patches extra-src))
-	 env:     (cons
-		   (if (null? extra-cflags)
-		       ($cc-env conf)
-		       (kwith ($cc-env conf)
-			      CFLAGS: (+= extra-cflags)
-			      CXXFLAGS: (+= extra-cflags)))
-		   (if native-cc
-		       (cons (native-cc) (ll env))
-		       (ll env)))
-	 dir:     (or dir (conc name "-" version))
-	 tools:   (append (cc-toolchain-tools ctc)
-			  (ll tools)
-			  (if native-cc
-			      (let ((ntc ($native-toolchain conf)))
-				(append (cc-toolchain-tools ntc)
-					(cc-toolchain-libc ntc)))
-			      '()))
-	 inputs:  (append (cc-toolchain-libc ctc) (ll libs))
-	 build:   (append
-		   (ll prepare)
-		   `((if ((./configure ,@(or (ll override-configure) (append default-configure (ll extra-configure))))))
-		     (if ((make ,@make-args)))
-		     (if ((make DESTDIR=/out install)))
-		     (foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
-		     (foreground ((find /out -name "*.la" -delete))))
-		   (ll cleanup)
-		   (strip-binaries-script ($triple conf))))))))
+  (let* ((default-configure (vargs
+			     `(--disable-shared
+			       --enable-static
+			       --disable-nls
+			       --prefix=/usr
+			       --sysconfdir=/etc
+			       ;; delay the evaluation of the build machine
+			       ;; in case build-config is re-parameterized
+			       --build ,(lambda (conf)
+					  ($triple (build-config)))
+			       --host ,$triple)))
+	 (make-args (or override-make (vargs (list $make-overrides)))))
+    (cc-package
+     name version urlfmt hash
+     dir: dir
+     patches: patches
+     prebuilt: prebuilt
+     libs: libs
+     tools: tools
+     extra-src: extra-src
+     use-native-cc: (if native-cc #t #f)
+     env:     (cdelay
+	       (lambda (ll)
+		 (cons
+		  (if (null? extra-cflags)
+		      (ll $cc-env)
+		      (kwith (ll $cc-env)
+			     CFLAGS: (+= extra-cflags)
+			     CXXFLAGS: (+= extra-cflags)))
+		  (if native-cc
+		      (cons (native-cc) (ll env))
+		      (ll env)))))
+     build:   (cdelay
+	       (lambda (ll)
+		 (append
+		  (ll prepare)
+		  `((if ((./configure ,@(or (ll override-configure)
+					    (append (ll default-configure) (ll extra-configure))))))
+		    (if ((make ,@(ll make-args))))
+		    (if ((make DESTDIR=/out install)))
+		    (foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
+		    (foreground ((find /out -name "*.la" -delete))))
+		  (ll cleanup)
+		  (ll (lambda (conf)
+			(strip-binaries-script ($triple conf))))))))))
 
 ;; temporary hack
 (define (source->package conf src . rest)
@@ -557,6 +645,8 @@
     (if ((test $prefix "=" #u8(127 69 76 70))))
     (if ((echo "strip" $file)))
     (,(conc triple "-strip") $file)))
+
+(define ($strip-cmd conf) (strip-binaries-script ($triple conf)))
 
 ;; patch* creates a series of patch artifacts
 ;; from a collection of verbatim strings

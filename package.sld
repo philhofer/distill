@@ -31,10 +31,13 @@
     patch*
     script-apply-patches
     strip-binaries-script
+    $strip-cmd
     build-config
     config->builder
     make-config
-    confsubst
+    vargs
+    csubst
+    cmd*
 
     make-meta-package
     meta-package?
@@ -50,6 +53,7 @@
     source->package
     source-template
 
+    cc-package
     cmmi-package
 
     $arch

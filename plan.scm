@@ -58,9 +58,15 @@
                      (".tar.zst". tar.zst)
                      (".tar"    . tar))))
     (cond
-      ((null? suff) (error "bad archive suffix" src))
-      ((string-suffix? (caar suff) src) (cdar suff))
-      (else (loop (cdr suff))))))
+     ((null? suff)
+      ;; hack because some package sources are stored in the CDN,
+      ;; thus the url does not contain an extension
+      (if (string-prefix? "https://b2cdn.sunfi.sh" src)
+	  'tar.zst
+	  (error "bad archive suffix" src)))
+     ((string-suffix? (caar suff) src)
+      (cdar suff))
+     (else (loop (cdr suff))))))
 
 ;; TODO: normalize remote archives for faster re-builds
 ;; (large xz tarballs are reeeeally slow to unpack)
@@ -339,7 +345,9 @@
                 (child ((prop 'child) exn)))
            (info "plan" (plan-name plan) "encountered a fatal error:")
            (fatal-plan-failure child)))
-        (else (abort exn))))))
+        (else (begin
+		(print-error-message exn)
+		(fatal "fatal error; exited")))))))
 
 ;; fork+exec, wait for the process to exit and check
 ;; that it exited successfully
