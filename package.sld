@@ -22,7 +22,7 @@
                (only (chicken port)
                      with-output-to-string
                      call-with-output-string)
-               (only (chicken base) include error flatten unless o disjoin))))
+               (only (chicken base) include error flatten unless o disjoin foldl))))
   (cond-expand
     (chicken (import-for-syntax
                (chicken keyword))))
@@ -34,6 +34,7 @@
     build-config
     config->builder
     make-config
+    confsubst
 
     make-meta-package
     meta-package?
@@ -80,8 +81,6 @@
     +cross
     +gnu-ccflags
     gnu-recipe
-    $ska-build
-    ska-recipe
     cc-env/build
     cc-env/for-build
     cc-env/for-kbuild

@@ -276,48 +276,34 @@ EOF
        dir:    "exportall-0.1"
        build: `((if ((make DESTDIR=/out ,@(splat ($cc-env conf) CC: CFLAGS:) install)))
 		,@(strip-binaries-script ($triple conf)))))))
+(define m4
+  (cmmi-package
+   "m4" "1.4.18"
+   "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+   "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0="
+   ;; m4 leaves some garbage in /usr/lib
+   cleanup: '((if ((rm -rf /out/usr/lib))))))
 
 (define gawk
-  (let ((src (source-template
-               "gawk" "5.0.1"
-               "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
-               "R3Oyp6YDumBd6v06rLYd5U5vEOpnq0Ie1MjwINSmX-4=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: libc
-        build:  (gnu-recipe
-                  (kwith
-                    ($gnu-build conf)
-                    ;; we don't want the awk symlink;
-                    ;; it conflicts with busybox
-                    post-install: (+= '((foreground ((rm -f /out/usr/bin/awk)))))))))))
+  (cmmi-package
+   "gawk" "5.0.1"
+   "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
+   "R3Oyp6YDumBd6v06rLYd5U5vEOpnq0Ie1MjwINSmX-4="
+   cleanup: '((foreground ((rm -f /out/usr/bin/awk))))))
 
 (define libgmp
-  (let ((src (source-template
-	      "gmp" "6.2.0"
-	      "https://gmplib.org/download/gmp/gmp-$version.tar.xz"
-	      "YQMYgwK95PJL5gS5-l_Iw59tc1O31Kx3X2XFdWm8t6M=")))
-    (lambda (conf)
-      (source->package
-       conf
-       src
-       tools:  (cons m4 (cc-for-target conf #t))
-       inputs: libc
-       build:  (gnu-recipe
-		;; gmp's configure script is silly and
-		;; only looks at CC_FOR_BUILD, but doesn't
-		;; know anything about CFLAGS_FOR_BUILD, etc
-		(let ((cc-for-build (spaced
-				     (list (kref (cc-env/for-build)
-						 CC_FOR_BUILD:)
-					   (kref (cc-env/for-build)
-						 CFLAGS_FOR_BUILD:)))))
-		  (kwith
-		   ($gnu-build conf)
-		   exports: (+= (list (cons 'CC_FOR_BUILD cc-for-build))))))))))
+  (cmmi-package
+   "gmp" "6.2.0"
+   "https://gmplib.org/download/gmp/gmp-$version.tar.xz"
+   "YQMYgwK95PJL5gS5-l_Iw59tc1O31Kx3X2XFdWm8t6M="
+   env: (lambda (conf)
+	  ;; gmp's configure script ignores CFLAGS_FOR_BUILD,
+	  ;; so we have to shove everything into CC_FOR_BUILD
+	  (let ((env (cc-env/for-build)))
+	    `((CC_FOR_BUILD . ,(cons (kref env CC_FOR_BUILD:)
+				     (kref env CFLAGS_FOR_BUILD:))))))
+   tools: (list m4 native-toolchain)
+   extra-configure: '(--with-pic)))
 
 (define libmpfr
   (cmmi-package
@@ -332,14 +318,6 @@ EOF
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
    "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc="
    libs: (list libgmp libmpfr)))
-
-(define m4
-  (cmmi-package
-   "m4" "1.4.18"
-   "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0="
-   ;; m4 leaves some garbage in /usr/lib
-   cleanup: '((if ((rm -rf /out/usr/lib))))))
 
 (define bzip2
   (let ((src (source-template
@@ -357,41 +335,47 @@ EOF
                         ,@(kvargs ($make-overrides conf))
                         install))))))
 
+;; wrapper for cmmi-package for skaware,
+;; since they all need similar treatment
+(define (ska-cmmi-package
+	 name version hash
+	 #!key
+	 (prebuilt #f)
+	 (libs '())
+	 (extra-configure '()))
+  (cmmi-package
+   name version
+   "https://skarnet.org/software/$name/$name-$version.tar.gz" hash
+   prebuilt: prebuilt
+   libs:     libs
+   prepare:  '((if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure))))
+   override-configure: (confsubst
+			(append
+			`(--prefix=/
+			  --libdir=/usr/lib
+			  --disable-shared --enable-static
+			  --target ,$triple
+			  (--with-include= ,$sysroot /include)
+			  (--with-include= ,$sysroot /usr/include)
+			  (--with-lib= ,$sysroot /lib)
+			  (--with-lib= ,$sysroot /usr/lib))
+			  extra-configure))))
+
 (define skalibs
-  (let ((src (source-template
-               "skalibs" "2.9.2.0"
-               "https://skarnet.org/software/$name/$name-$version.tar.gz"
-               "s_kjqv340yaXpye_on0w-h8_PR0M6t8Agb4dPqAMWIs=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: libc
-        build:  (ska-recipe
-                  (kwith
-                    ($ska-build conf)
-                    configure-args: (+= '(--with-sysdep-devurandom=yes))))))))
+  (ska-cmmi-package
+   "skalibs" "2.9.2.0"
+   "s_kjqv340yaXpye_on0w-h8_PR0M6t8Agb4dPqAMWIs="
+   extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define execline-tools
-  (let ((src (source-template
-               "execline" "2.6.0.0"
-               "https://skarnet.org/software/$name/$name-$version.tar.gz"
-               "KLkA2uCEV2wf2sOEbSzdE7NAiJpolLFh6HrgohLAGFo=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        prebuilt: (maybe-prebuilt conf 'execline)
-        tools:    (cc-for-target conf)
-        inputs:   (cons skalibs libc)
-        build:    (ska-recipe
-                    (kwith
-                      ($ska-build conf)
-                      configure-args: (+= `(,(conc "--with-sysdeps=" ($sysroot conf) "/lib/skalibs/sysdeps")
-                                             --enable-pedantic-posix
-                                             --enable-static-libc))))))))
-
+  (ska-cmmi-package
+   "execline" "2.6.0.0"
+   "KLkA2uCEV2wf2sOEbSzdE7NAiJpolLFh6HrgohLAGFo="
+   prebuilt: (cut maybe-prebuilt <> 'execline)
+   libs: (list skalibs)
+   extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
+		      --enable-pedantic-posix
+		      --enable-static-libc)))
 (define byacc
   (cmmi-package
    "byacc" "20200330"
@@ -1149,7 +1133,6 @@ EOF
                        (if ((make V=1 ,@make-args)))
                        (install -D -m 644 -t /out/boot u-boot.bin)))))))))
 
-
 (define squashfs-tools
   ;; NOTE: mksquashfs before 4.4 does not honor SOURCE_DATE_EPOCH
   ;; nor does it produce reproducible images (without a lot of additional trouble)
@@ -1253,45 +1236,25 @@ EOF
    libs: (list linux-headers)))
 
 (define libnftnl
-  (let ((src (source-template
-               "libnftnl" "1.1.5"
-               "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-               "R3Dq9wvV2TNUcXSy_KDTNcR4G8fm_ypLB9xLc0OfEBc=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (list linux-headers libmnl musl libssp-nonshared)
-        build:  (gnu-recipe
-                  (kwith
-                    ($gnu-build conf)
-                    ;; LIBMNL_CFLAGS needs to be set
-                    ;; to make the configure script happy,
-                    ;; but there isn't actually a value
-                    ;; we'd like to set...
-                    configure-args: (+= '(LIBMNL_CFLAGS=-lmnl
-                                           LIBMNL_LIBS=-lmnl))
-                    make-flags: (+= '(V=1))))))))
+  (cmmi-package
+   "libnftnl" "1.1.5"
+   "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
+   "R3Dq9wvV2TNUcXSy_KDTNcR4G8fm_ypLB9xLc0OfEBc="
+   libs: (list linux-headers libmnl)
+   extra-configure: '(LIBMNL_CFLAGS=-lmnl
+		      LIBMNL_LIBS=-lmnl)))
 
 (define iptables
-  (let ((src (source-template
-	      "iptables" "1.8.4"
-	      "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-	      "hBWYiIU2PYebYoMF6_n_anAFXGfruGBmAXU94ge9DQo=")))
-    (lambda (conf)
-      (source->package
-       conf
-       src
-       tools:  (append (list byacc reflex) (cc-for-target conf))
-       inputs: (list linux-headers libnftnl libmnl musl libssp-nonshared)
-       build:  (gnu-recipe
-		(kwith
-		 (+gnu-ccflags ($gnu-build conf) '(-D_GNU_SOURCE))
-		 configure-args: (+= '(libmnl_CFLAGS=-lmnl
-				       libmnl_LIBS=-lmnl
-				       libnftnl_CFLAGS=-lnftnl
-				       libnftnl_LIBS=-lnftnl))))))))
+  (cmmi-package
+   "iptables" "1.8.4"
+   "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
+   "hBWYiIU2PYebYoMF6_n_anAFXGfruGBmAXU94ge9DQo="
+   libs: (list linux-headers libnftnl libmnl)
+   extra-cflags: '(-D_GNU_SOURCE)
+   extra-configure: '(libmnl_CFLAGS=-lmnl
+		      libmnl_LIBS=-lmnl
+		      libnftnl_CFLAGS=-lnftnl
+		      libnftnl_LIBS=-lnftnl)))
 
 (define iproute2
   (let ((src (source-template
@@ -1349,37 +1312,20 @@ EOF
                     ,@(strip-binaries-script ($triple conf))))))))
 
 (define s6
-  (let ((src (source-template
-               "s6" "2.9.0.1"
-               "https://skarnet.org/software/$name/$name-$version.tar.gz"
-               "uwnwdcxfc7i3LTjeNPcnouhShXzpMPIG0I2AbQfjL_I=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (list skalibs execline-tools musl libssp-nonshared)
-        build:  (ska-recipe
-                  (kwith
-                    ($ska-build conf)
-                    configure-args: (+= `(,(conc '--with-sysdeps= ($sysroot conf) "/lib/skalibs/sysdeps")
-                                           --enable-static-libc))))))))
+  (ska-cmmi-package
+   "s6" "2.9.0.1"
+   "uwnwdcxfc7i3LTjeNPcnouhShXzpMPIG0I2AbQfjL_I="
+   libs: (list skalibs execline-tools)
+   extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
+		      --enable-static-libc)))
+
 (define s6-rc
-  (let ((src (source-template
-               "s6-rc" "0.5.1.1"
-               "https://skarnet.org/software/$name/$name-$version.tar.gz"
-               "KCvqdFSKEUNPkHQuCBfs86zE9JvLrNHU2ZhEzLYY5RY=")))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf)
-        inputs: (list s6 skalibs execline-tools musl libssp-nonshared)
-        build:  (ska-recipe
-                  (kwith
-                    ($ska-build conf)
-                    configure-args: (+= `(,(conc '--with-sysdeps= ($sysroot conf) "/lib/skalibs/sysdeps")
-                                           --enable-static-libc))))))))
+  (ska-cmmi-package
+   "s6-rc" "0.5.1.1"
+   "KCvqdFSKEUNPkHQuCBfs86zE9JvLrNHU2ZhEzLYY5RY="
+   libs: (list s6 skalibs execline-tools)
+   extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
+		      --enable-static-libc)))
 
 ;; hard(8) command; an alternative to busybox halt(8)/reboot(8)/poweroff(8)
 (define hard

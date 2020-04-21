@@ -71,6 +71,48 @@
        env:     '()
        dir:     (conc name "-" version)))))
 
+(define (confsubst lst)
+  (lambda (conf)
+    (let ((sublist (lambda (lst)
+		     (foldl
+		      (lambda (str item)
+			(string-append
+			 str
+			 (cond
+			  ((string? item) item)
+			  ((symbol? item) (##sys#symbol->string item))
+			  ((procedure? item) (spaced (item conf)))
+			  ((number? item) (number->string item))
+			  (else (error "bad item in confsubst" item)))))
+		      ""
+		      lst))))
+      (reverse
+       (foldl
+	(lambda (lst item)
+	  (cond
+	   ((procedure? item)
+	    ;; if the config variable is a kvector,
+	    ;; splat it into the list
+	    (let ((res (item conf)))
+	      (cond
+	       ((kvector? res)
+		(kvector-foldl
+		 res
+		 (lambda (k v lst)
+		   (if v
+		       (cons (string-append (##sys#symbol->string k) "=" (spaced v)) lst)
+		       lst))
+		 lst))
+	       ((list? res)
+		(let loop ((in res) (out lst))
+		  (if (null? in) out (loop (cdr in) (cons (car in) out)))))
+	       (else (cons res lst)))))
+	   ((list? item)
+	    (cons (sublist item) lst))
+	   (else (cons item lst))))
+	'()
+	lst)))))
+
 ;; template for 'configure; make; make install;' or 'c;m;mi'
 ;; that has sane defaults for environment, tooling, etc.
 (define (cmmi-package
@@ -100,17 +142,18 @@
 					  ("$version" . ,version))))
 	 (src (remote-archive url hash)))
     (lambda (conf)
-      (let ((default-configure `(--disable-shared
-				 --enable-static
-				 --disable-nls
-				 --prefix=/usr
-				 --sysconfdir=/etc
-				 --build ,(build-triple)
-				 --host ,($triple conf)))
-	    (make-args (or override-make (kvargs ($make-overrides conf))))
-	    (ctc       ($cc-toolchain conf)))
+      (let* ((ll (lambda (l) (if (procedure? l) (l conf) l)))
+	     (default-configure `(--disable-shared
+				  --enable-static
+				  --disable-nls
+				  --prefix=/usr
+				  --sysconfdir=/etc
+				  --build ,(build-triple)
+				  --host ,($triple conf)))
+	     (make-args (or (ll override-make) (kvargs ($make-overrides conf))))
+	     (ctc       ($cc-toolchain conf)))
 	(raw-make-package
-	 prebuilt: (and prebuilt (prebuilt conf))
+	 prebuilt: (ll prebuilt)
 	 patches: patches
 	 label:   (conc name "-" version "-" ($arch conf))
 	 src:     (cons src (append patches extra-src))
@@ -121,25 +164,25 @@
 			      CFLAGS: (+= extra-cflags)
 			      CXXFLAGS: (+= extra-cflags)))
 		   (if native-cc
-		       (cons (native-cc) env)
-		       env))
+		       (cons (native-cc) (ll env))
+		       (ll env)))
 	 dir:     (or dir (conc name "-" version))
 	 tools:   (append (cc-toolchain-tools ctc)
-			  tools
+			  (ll tools)
 			  (if native-cc
 			      (let ((ntc ($native-toolchain conf)))
 				(append (cc-toolchain-tools ntc)
 					(cc-toolchain-libc ntc)))
 			      '()))
-	 inputs:  (append (cc-toolchain-libc ctc) libs)
+	 inputs:  (append (cc-toolchain-libc ctc) (ll libs))
 	 build:   (append
-		   prepare
-		   `((if ((./configure ,@(or override-configure (append default-configure extra-configure)))))
+		   (ll prepare)
+		   `((if ((./configure ,@(or (ll override-configure) (append default-configure (ll extra-configure))))))
 		     (if ((make ,@make-args)))
 		     (if ((make DESTDIR=/out install)))
 		     (foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
 		     (foreground ((find /out -name "*.la" -delete))))
-		   cleanup
+		   (ll cleanup)
 		   (strip-binaries-script ($triple conf))))))))
 
 ;; temporary hack
@@ -327,18 +370,19 @@
 (: spaced (* -> string))
 (define (spaced lst)
   (let ((out (open-output-string)))
-    (if (list? lst)
-	(let loop ((lst lst))
-	  (or (null? lst)
-	      (let ((head (car lst))
-		    (rest (cdr lst)))
-		(if (list? head)
-		    (loop head)
-		    (display head out))
-		(unless (null? rest)
-			(display " " out))
-		(loop rest))))
-	(display lst out))
+    (cond
+     ((list? lst)
+      (let loop ((lst lst))
+	(or (null? lst)
+	    (let ((head (car lst))
+		  (rest (cdr lst)))
+	      (if (list? head)
+		  (loop head)
+		  (display head out))
+	      (unless (null? rest)
+		      (display " " out))
+	      (loop rest)))))
+     (else (display lst out)))
     (let ((s (get-output-string out)))
       (close-output-port out)
       s)))
@@ -624,80 +668,5 @@
 	(foreground ((find /out -type f -name "*.la" -delete)))
 	,@(strip-binaries-script ($triple v))))))
 
-(define (ska-cmmi-package name version urlfmt hash
-			  #!key
-			  (extra-configure '())
-			  (prebuilt #f)
-			  (libs '())
-			  (tools '()))
-  (let* ((url (string-translate* urlfmt `(("$name" . ,name)
-					  ("$version" . ,version))))
-	 (src (remote-archive url hash)))
-    (lambda (conf)
-      (let ((sysroot   ($sysroot conf))
-	    (make-args ($make-overrides conf)))
-	(make-package
-	 prebuilt: (and prebuilt (prebuilt conf))
-	 label:    (conc name "-" version "-" ($arch conf))
-	 src:      (list src)
-	 tools:    (append (cc-toolchain-tools ($cc-toolchain conf)) tools)
-	 inputs:   (append (cc-toolchain-libc ($cc-toolchain conf)) libs)
-	 build:    (append
-		    ;; use our stack protector choice, thank you very much
-		    `((if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
-		      (if ((./configure
-			    --target ,($triple conf)
-			    --prefix=/ --libdir=/usr/lib
-			    --disable-shared --enable-static
-			    ,(conc "--with-include=" (filepath-join sysroot "/include"))
-			    ,(conc "--with-include=" (filepath-join sysroot "/usr/include"))
-			    ,(conc "--with-lib=" (filepath-join sysroot "/lib"))
-			    ,(conc "--with-lib=" (filepath-join sysroot "/usr/lib"))
-			    ,@extra-configure)))
-		      (if ((make ,@make-args)))
-		      (if ((make install))))
-		    (strip-binaries-script ($triple conf))))))))
 
-(: <ska-build> vector)
-(define <ska-build>
-  (make-kvector-type
-   triple:
-   exports:
-   configure-args:
-   make-args:))
-
-(: $ska-build (vector --> vector))
-(define $ska-build
-  (let ((%make (kvector-constructor <ska-build>)))
-    (lambda (conf)
-      (let ((sysroot ($sysroot conf)))
-	(%make
-	 triple:  ($triple conf)
-	 exports: (list ($cc-env conf))
-	 configure-args:
-	 `(--target ,($triple conf) --prefix=/ --libdir=/usr/lib
-		    ,(conc "--with-include=" (filepath-join sysroot "/include"))
-		    ,(conc "--with-include=" (filepath-join sysroot "/usr/include"))
-		    ,(conc "--with-lib=" (filepath-join sysroot "/lib"))
-		    ,(conc "--with-lib=" (filepath-join sysroot "/usr/lib"))
-		    --disable-shared --enable-static)
-	 make-args: (kvargs ($make-overrides conf)))))))
-
-(: ska-recipe (vector --> list))
-(define ska-recipe
-  (let (($exports        (kvector-getter <ska-build> exports:))
-	($configure-args (kvector-getter <ska-build> configure-args:))
-	($make-args      (kvector-getter <ska-build> make-args:))
-	($triple         (kvector-getter <ska-build> triple:))
-	(ska?            (kvector-predicate <ska-build>)))
-    (lambda (bld)
-      (unless (ska? bld)
-	      (error "ska-recipe given a non-<ska-build> object:" bld))
-      `(,@(exports->script ($exports bld))
-	;; don't let the configure script override our CFLAGS selections
-	(if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)))
-	(if ((./configure ,@($configure-args bld))))
-	(if ((make ,@($make-args bld))))
-	(if ((make DESTDIR=/out install)))
-	,@(strip-binaries-script ($triple bld))))))
 
