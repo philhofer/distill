@@ -60,6 +60,7 @@ fast_hash_file(unsigned char *restrict dst, const char *fname)
         if (mem == MAP_FAILED)
                 goto fail;
 
+	while (close(fd) < 0 && errno == EINTR) ;
         err = blake2b(buf, 32, mem, stbuf.st_size, NULL, 0);
         assert(err == 0);
 	hash_to_base64(dst, buf);
