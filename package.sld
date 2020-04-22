@@ -71,6 +71,7 @@
     $make-overrides
     $cc-env
     build-triple
+    $build-triple
     $CC
     $CXX
     $AR
@@ -81,10 +82,7 @@
     $ARFLAGS
     $RANLIB
     $READELF
-    $gnu-build
     +cross
-    +gnu-ccflags
-    gnu-recipe
     cc-env/build
     cc-env/for-build
     cc-env/for-kbuild

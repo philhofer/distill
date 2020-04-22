@@ -12,7 +12,7 @@
 (define (bootstrap-base!)
   (let* ((host   (build-config))
          (build! (config->builder host))
-         (built  (assq *this-machine* *prebuilts*))
+         (built  (cdr (assq *this-machine* *prebuilts*)))
          (->boot (lambda (pkg)
                    (lambda (conf)
                      (let ((old (pkg conf)))
@@ -38,7 +38,7 @@
                                  (art  (cdr p))
                                  (rest (cdr lst)))
                             (and (string=? (artifact-hash art)
-                                           (artifact-hash (cdr (assq name (cdr built)))))
+                                           (artifact-hash (cdr (assq name built))))
                                  (loop rest))))))))
     (let ((stage-1 (remake!)))
       (if (and (= (length pkgs) (length built)) (stable? stage-1))
@@ -263,19 +263,16 @@ EOF
 ;; (in execline syntax, it works like 'exportall { key val ... } prog ...'
 ;; so you'd write (exportall ((k v) ...)) in a build script
 (define exportall
-  (let* ((h   "YR0DqwQcQvI7RwjCDNtnoiENnK_fIbitz76HKwdZ0Ms=")
-	 (src (remote-archive
-	       (string-append "https://b2cdn.sunfi.sh/pub-cdn/files/" h) h kind: 'tar.zst)))
-    (lambda (conf)
-      (make-package
-       prebuilt: (maybe-prebuilt conf 'exportall)
-       label:  (string-append "exportall-0.1-" (symbol->string ($arch conf)))
-       src:    src
-       tools:  (cc-for-target conf)
-       inputs: (list musl libssp-nonshared)
-       dir:    "exportall-0.1"
-       build: `((if ((make DESTDIR=/out ,@(splat ($cc-env conf) CC: CFLAGS:) install)))
-		,@(strip-binaries-script ($triple conf)))))))
+  (let ((hash "YR0DqwQcQvI7RwjCDNtnoiENnK_fIbitz76HKwdZ0Ms="))
+    (cc-package
+     "exportall" "0.1"
+     (string-append "https://b2cdn.sunfi.sh/pub-cdn/files/" hash)
+     hash
+     prebuilt: (cut maybe-prebuilt <> 'exportall)
+     build: (cmd*
+	     `(make DESTDIR=/out (CC= ,$CC) (CFLAGS= ,$CFLAGS) install)
+	     $strip-cmd))))
+
 (define m4
   (cmmi-package
    "m4" "1.4.18"
@@ -286,7 +283,7 @@ EOF
 
 (define gawk
   (cmmi-package
-   "gawk" "5.0.1"
+   "gawk" "5.0.1" ; todo: 5.1.0
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
    "R3Oyp6YDumBd6v06rLYd5U5vEOpnq0Ie1MjwINSmX-4="
    cleanup: '((foreground ((rm -f /out/usr/bin/awk))))))
@@ -356,13 +353,13 @@ EOF
 
 (define skalibs
   (ska-cmmi-package
-   "skalibs" "2.9.2.0"
+   "skalibs" "2.9.2.0" ; todo 2.9.2.1
    "s_kjqv340yaXpye_on0w-h8_PR0M6t8Agb4dPqAMWIs="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define execline-tools
   (ska-cmmi-package
-   "execline" "2.6.0.0"
+   "execline" "2.6.0.0" ; todo 2.6.0.1
    "KLkA2uCEV2wf2sOEbSzdE7NAiJpolLFh6HrgohLAGFo="
    prebuilt: (cut maybe-prebuilt <> 'execline)
    libs: (list skalibs)
@@ -433,80 +430,39 @@ EOF
     "Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="
     (patch* (include-file-text "patches/gcc/pie-gcc.patch"))))
 
-(define (gcc-target-flags conf)
-  (case ($arch conf)
-    ((aarch64) '(--with-arch=armv8 --with-abi=lp64))
-    ((ppc64 ppc64le) '(--with-abi=elfv2 --enable-secureplt
-                                        --enable-decimal-float=no
-                                        --enable-targets=powerpcle-linux))
-    (else '())))
-
-(define (triplet-depends host-arch target-arch
-                         all
-                         cross-build
-                         foreign-target)
-  (let ((+cross (lambda (lst)
-                  (if (eq? *this-machine* host-arch)
-                    lst
-                    (append cross-build lst))))
-        (+foreign (lambda (lst)
-                    (if (eq? host-arch target-arch)
-                      lst
-                      (append foreign-target lst)))))
-    (+foreign
-      (+cross all))))
-
-(define *binutils-src*
-  (source-template
-    "binutils" "2.34"
-    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-    "laZMIwGW3GAXUFMyvWCaHwBwgnojWVXGE94gWH164A4="))
-
 (define binutils-for-triple
   (memoize-eq
    (lambda (target-triple)
-     (lambda (host)
-       (let ((host-arch     ($arch host))
-	     (target-arch   (triple->arch target-triple))
-	     (host-triple   ($triple host)))
-	 (source->package
-	  host
-	  *binutils-src*
-	  prebuilt: (and (eq? host-triple target-triple) (maybe-prebuilt host 'binutils))
-	  tools:    (cons*
-		     byacc
-		     reflex
-		     (cc-for-target host #t))
-	  inputs:   (cons zlib libc)
-	  build:    (gnu-recipe
-		     (kwith
-		      ($gnu-build host)
-		      exports: (+= (list (cc-env/for-build)))
-		      ;; 2.34: even with MAKEINFO=/bin/true, binutils refuses to build without makeinfo,
-		      ;; so remove 'doc' and 'po' from subdirs
-		      pre-configure: (+= '((if ((sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in)))))
-		      configure-args:
-		      (:= `(--disable-nls
-			    --disable-shared --enable-static
-			    --disable-multilib --enable-gold=yes --with-ppl=no
-			    --disable-install-libiberty --enable-relro
-			    --disable-plugins --enable-deterministic-archives
-			    --with-pic --with-mmap --enable-ld=default
-			    --with-system-zlib --enable-64-bit-bfd
-			    --disable-install-libbfd
-			    --prefix=/usr
-			    ;; no libdir, etc. because we discard any
-			    ;; libraries and headers produced
-			    ,(conc "--program-prefix=" target-triple "-")
-			    ,(conc "--build=" (build-triple))
-			    ,(conc "--target=" target-triple)
-			    ,(conc "--host=" host-triple)
-			    ,(conc "--with-sysroot=" (triple->sysroot target-triple))))
-		      post-install:
-		      (+= `((if ((rm -rf /out/usr/include)))
-			    (if ((rm -rf /out/include)))
-			    (if ((rm -rf /out/usr/lib)))
-			    (if ((rm -rf /out/lib)))))))))))))
+     (cmmi-package
+      "binutils" "2.34"
+      "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+      "laZMIwGW3GAXUFMyvWCaHwBwgnojWVXGE94gWH164A4="
+      prebuilt: (lambda (conf)
+		  (and (eq? ($triple conf) target-triple) (maybe-prebuilt conf 'binutils)))
+      tools: (list byacc reflex)
+      libs:  (list zlib)
+      native-cc: cc-env/for-build
+      prepare: '((if ((sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in))))
+      override-configure: (vargs `(--disable-nls
+				   --disable-shared --enable-static
+				   --disable-multilib --enable-gold=yes --with-ppl=no
+				   --disable-install-libiberty --enable-relro
+				   --disable-plugins --enable-deterministic-archives
+				   --with-mmap --enable-ld=default
+				   --with-system-zlib --enable-64-bit-bfd
+				   --disable-install-libbfd
+				   --prefix=/usr
+				   ;; no libdir, etc. because we discard any
+				   ;; libraries and headers produced
+				   (--program-prefix= ,target-triple -)
+				   (--build= ,$build-triple)
+				   (--target= ,target-triple)
+				   (--host= ,$triple)
+				   (--with-sysroot= ,(triple->sysroot target-triple))))
+      cleanup: '((if ((rm -rf /out/usr/include)))
+		 (if ((rm -rf /out/include)))
+		 (if ((rm -rf /out/usr/lib)))
+		 (if ((rm -rf /out/lib))))))))
 
 ;; this is a hack that allows us to build a cross-gcc
 ;; without circular dependencies: install a fake set of
@@ -524,6 +480,10 @@ EOF
             label: (conc "fakemusl-" version "-" (triple->arch target-triple))
             src:   leaf
             dir:   (conc "fakemusl-" version)
+	    ;; so, we're hard-coding binutils here rather than
+	    ;; getting the toolchain from the host <config>
+	    ;; because we actually need an assembler, and
+	    ;; clang doesn't come with one
             tools: (list (binutils-for-triple target-triple)
                          make
                          execline-tools
@@ -534,100 +494,100 @@ EOF
 					  AR: (conc target-triple "-ar")) all)))
                        (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
 
+(define (if-native-target? tg yes no)
+  (lambda (conf)
+    (if (eq? tg ($triple conf))
+	yes
+	no)))
+
 (define gcc-for-triple
   (memoize-eq
-    (lambda (target-triple)
-      (lambda (host)
-        (let ((host-arch     ($arch host))
-	      (target-arch   (triple->arch target-triple))
-              (host-triple   ($triple host)))
-          (source->package
-            host
-            *gcc-src*
-            prebuilt: (and (eq? host-triple target-triple) (maybe-prebuilt host 'gcc))
-            ;; TODO: when build!=host!=target, need (cc-for-target target)
-            ;; and the appropriate cc-env needs to be exported
-	    tools: (let ((need (cons* byacc reflex gawk (cc-for-target host #t))))
-		     (if (eq? target-triple host-triple)
-			 need
-			 ;; we only need these when host!=target;
-			 ;; otherwise they're implied by cc-for-target
-			 ;; and/or libc being present in inputs
-			 (cons*
-			  (binutils-for-triple target-triple)
-			  (fake-musl-for-triple target-triple)
-			  (musl-headers-for-triple target-triple)
-			  need)))
-            inputs: (cons* libgmp libmpfr libmpc libisl zlib libc)
-            build: (gnu-recipe
-		    (kwith
-		     (+gnu-ccflags ($gnu-build host) '(-DCROSS_DIRECTORY_STRUCTURE))
-		     out-of-tree: (:= #t)
-		     exports: (+= (list
-				   ($make-overrides host)
-				   (cc-env/for-build)
-				   ;; ordinarily gcc refuses to build as PIE
-				   ;; because that breaks pre-compiled headers (?),
-				   ;; but we don't care because we disable those anyway
-				   '(gcc_cv_no_pie . no)
-				   '(gcc_cv_c_no_pie . no)
-				   '(gcc_cv_c_no_fpie . no)))
-		     pre-configure: (+=
-				     `(;; some makefile templates don't set AR+ARFLAGS correctly;
-				       ;; just let them take the values from the environment
-				       (if ((find "." -name Makefile.in -exec sed "-i"
-						  -e "/^AR = ar/d"
-						  -e "/^ARFLAGS = cru/d"
-						  "{}" ";")))
-				       ;; this $(MAKE) command invocation
-				       ;; for libraries for the *build* system
-				       ;; overrides the wrong variables; the
-				       ;; right ones are already in the Makefile(s)
-				       ;; for those targets; the configure scripts
-				       ;; make sure of that...
-				       ;;
-				       ;; you can repro this build failure by
-				       ;; cross-building a "native" GCC with
-				       ;; CFLAGS that are invalid for the *build* system
-				       (if ((sed "-i"
-						 -e "s/\\$(MAKE) \\$(BASE_FLAGS_TO_PASS) \\$(EXTRA_BUILD_FLAGS)/\\$(MAKE)/g"
-						 Makefile.in)))
-				       ;; don't pull in GNU tar just to install headers;
-				       ;; force the makefile to use busybox cpio instead
-				       (if ((sed "-i"
-						 -e "s/=install-headers-tar/=install-headers-cpio/g"
-						 gcc/config.build)))))
-		     configure-args:
-		     (:= `(--prefix=/usr --exec-prefix=/usr --disable-lto
-					 --disable-nls --disable-shared --enable-static
-					 --disable-host-shared --enable-host-static
-					 --disable-multilib --enable-default-ssp
-					 --disable-bootstrap --disable-libssp
-					 --enable-default-pie --with-cloog=no
-					 --with-ppl=no --disable-libquadmath
-					 --disable-libgomp --disable-fixed-point
-					 --enable-__cxa_atexit --disable-libstdcxx-pch
-					 --disable-libmpx --disable-libsanitizer
-					 --enable-libstdcxx-time --disable-libitm
-					 --enable-threads --enable-tls
-					 --disable-install-libiberty
-					 --enable-relro --disable-plugins
-					 --with-pic --with-mmap --disable-symvers
-					 --enable-version-specific-runtime-libs
-					 --with-system-zlib
-					 "--enable-languages=c,c++"
-					 ,(conc "--with-sysroot=" (triple->sysroot target-triple))
-					 ,(conc "--build=" (build-triple))
-					 ,(conc "--target=" target-triple)
-					 ,(conc "--host=" host-triple)))
-		     ;; installing compilers for different targets will
-		     ;; conflict unless we limit the python gdb stuff
-		     ;; to just "native" (host=target) gcc builds
-		     post-install: (+= (if (eq? host-triple target-triple)
-					   ;; don't create a regular 'gcc'/'g++' binary; we create
-					   ;; symlinks or wrappers for those only when it is appropriate
-					   `((if ((find /out/usr/bin -type f ! -name ,(conc target-arch "*") -delete))))
-					   `((if ((rm -rf ,(conc "/out/usr/share/gcc-" *gcc-version* "/python")))))))))))))))
+   (lambda (target-triple)
+     ;; TODO: make fakelibc work for
+     ;; something other than musl
+     (let ((fakelibc (lambda (triple)
+		       (list (fake-musl-for-triple triple)
+			     (musl-headers-for-triple triple)))))
+       (cmmi-package
+	"gcc" "9.3.0"
+	"https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
+	"Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="
+	patches: (patch* (include-file-text "patches/gcc/pie-gcc.patch"))
+	prebuilt: (lambda (conf)
+		    ;; only use prebuilts for build=host=target
+		    (and (eq? ($triple conf) target-triple)
+			 (eq? target-triple (build-triple))
+			 (maybe-prebuilt conf 'gcc)))
+	tools: (if-native-target?
+		target-triple
+		(list byacc reflex gawk)
+		(cons* byacc reflex gawk
+		       (binutils-for-triple target-triple)
+		       (fakelibc target-triple)))
+	libs: (list libgmp libmpfr libmpc libisl zlib)
+	out-of-tree: #t
+	extra-cflags: '(-DCROSS_DIRECTORY_STRUCTURE)
+	native-cc: cc-env/for-build
+	env:  (lambda (conf)
+		(list ($make-overrides conf)
+		      '(gcc_cv_no_pie . no)
+		      '(gcc_cv_c_no_pie . no)
+		      '(gcc_cv_c_no_fpie . no)))
+	prepare: '((if ((find "." -name Makefile.in -exec sed "-i"
+			      -e "/^AR = ar/d"        ; please don't hard-code AR
+			      -e "/^ARFLAGS = cru/d"  ; please don't hard-code ARFLAGS
+			      "{}" ";")))
+		   ;; this $(MAKE) command invocation
+		   ;; for libraries for the *build* system
+		   ;; overrides the wrong variables; the
+		   ;; right ones are already in the Makefile(s)
+		   ;; for those targets; the configure scripts
+		   ;; make sure of that...
+		   ;;
+		   ;; you can repro this build failure by
+		   ;; cross-building a "native" GCC with
+		   ;; CFLAGS that are invalid for the *build* system
+		   (if ((sed "-i"
+			     -e "s/\\$(MAKE) \\$(BASE_FLAGS_TO_PASS) \\$(EXTRA_BUILD_FLAGS)/\\$(MAKE)/g"
+			     Makefile.in)))
+		   ;; don't pull in GNU tar just to install headers;
+		   ;; force the makefile to use busybox cpio instead
+		   (if ((sed "-i"
+			     -e "s/=install-headers-tar/=install-headers-cpio/g"
+			     gcc/config.build))))
+	override-configure: (vargs
+			     `(--prefix=/usr
+			       --exec-prefix=/usr --disable-lto
+			       --disable-nls --disable-shared --enable-static
+			       --disable-host-shared --enable-host-static
+			       --disable-multilib --enable-default-ssp
+			       --disable-bootstrap --disable-libssp
+			       --enable-default-pie --with-cloog=no
+			       --with-ppl=no --disable-libquadmath
+			       --disable-libgomp --disable-fixed-point
+			       --enable-__cxa_atexit --disable-libstdcxx-pch
+			       --disable-libmpx --disable-libsanitizer
+			       --enable-libstdcxx-time --disable-libitm
+			       --enable-threads --enable-tls
+			       --disable-install-libiberty
+			       --enable-relro --disable-plugins
+			       --with-mmap --disable-symvers
+			       --enable-version-specific-runtime-libs
+			       --with-system-zlib
+			       "--enable-languages=c,c++"
+			       (--with-sysroot= ,(triple->sysroot target-triple))
+			       (--build= ,$build-triple)
+			       (--target= ,target-triple)
+			       (--host= ,$triple)))
+	cleanup: (if-native-target?
+		  target-triple
+		  ;; native targets still shouldn't keep /usr/bin/gcc, etc.;
+		  ;; we'll install those as symlinks when native-cc is required
+		  `((if ((find /out/usr/bin -type f ! -name ,(conc target-triple "*") -delete))))
+		  ;; only the native version of gcc should have
+		  ;; the python gdb helpers
+		  '((if ((elglob dir "/out/usr/share/gcc-*/python")
+			 (rm -rf $dir))))))))))
 
 (define ($cc-env/for-kbuild conf)
   (cc-env/for-kbuild))
@@ -675,88 +635,19 @@ EOF
         bbpkg))))
 
 
-;; mke2fs -d <dir> does not have a way
-;; to bypass timestamps and override uid/gid,
-;; so this hacks in a way to at least ensure
-;; that those fields get zeroed...
-(define mke2fs-repro-patch #<<EOF
---- a/misc/create_inode.c
-+++ b/misc/create_inode.c
-@@ -17,6 +17,7 @@
- #include <time.h>
- #include <sys/stat.h>
- #include <sys/types.h>
-+#include <stdlib.h>
- #include <unistd.h>
- #include <limits.h> /* for PATH_MAX */
- #include <dirent.h> /* for scandir() and alphasort() */
-@@ -128,6 +129,16 @@
- 	inode.i_atime = st->st_atime;
- 	inode.i_mtime = st->st_mtime;
- 	inode.i_ctime = st->st_ctime;
-+
-+        if (getenv("MKE2FS_DETERMINISTIC")) {
-+                inode.i_uid = 0;
-+                ext2fs_set_i_uid_high(inode, 0);
-+                inode.i_gid = 0;
-+                ext2fs_set_i_gid_high(inode, 0);
-+                inode.i_atime = 0;
-+                inode.i_mtime = 0;
-+                inode.i_ctime = 0;
-+        }
-
- 	retval = ext2fs_write_inode(fs, ino, &inode);
- 	if (retval)
-EOF
-)
-
-;; e2fsprogs is weird and uses BUILD_CC, BUILD_CFLAGS, etc.
-;; in order to indicate which CC to use for building tools
-(define (buildcc-env)
-  (cc-env/build
-    (lambda (kw)
-      (string->keyword
-        (string-append
-          "BUILD_"
-          (keyword->string kw))))))
-
-(define e2fsprogs
-  (let ((src (source-template
-                    "e2fsprogs" "1.45.5"
-                    "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
-                    "w7R6x_QX6QpTEtnNihjwlHLBBtfo-r9RrWVjt9Nc818="
-                    (patch* mke2fs-repro-patch))))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cc-for-target conf #t)
-        inputs: (list linux-headers musl libssp-nonshared)
-        build:  (gnu-recipe
-                  (kwith
-                    ($gnu-build conf)
-                    configure-args: (+=
-                                      `(--enable-symlink-install
-                                         --enable-libuuid
-                                         --enable-libblkid
-                                         --disable-uuidd
-                                         --disable-fsck
-                                         ,@(kvargs (buildcc-env))))
-                    install-flags: (:= '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))))))
-
 (define *linux-major* 5.4)
-(define *linux-patch* 32)
+(define *linux-patch* 34)
 
 (define *linux-source*
   (list
     (remote-archive
-      (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-" *linux-major* ".tar.xz")
-      "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
+     (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-" *linux-major* ".tar.xz")
+     "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
     (remote-file
-      (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" *linux-major* "." *linux-patch* ".xz")
-      "RY7siin1qy78SLD_ALjgQvNgL6y0CRRqqVL3a9NiXIc="
-      "/src/linux.patch"
-      #o644)))
+     (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" *linux-major* "." *linux-patch* ".xz")
+     "AKCPylvqBG3cRwNfx86K6GJoDcBJla2mAM0Ug9ZL1xc="
+     "/src/linux.patch"
+     #o644)))
 
 (define (linux-arch-name arch)
   (case arch
@@ -940,47 +831,108 @@ EOF
 (define linux-virt-x86_64
   (linux/config-static "virt-x86_64" "FTMQoxE4ClKOWLDdcDVzWt8UuizXfMmR4duX8Z-5qlY="))
 
-;; libelf is just a subset of elfutils (just the bit we need in order to build kbuild's objtool)
+;; libelf is *just* libelf.a and headers;
+;; it does not include the rest of elfutils
 (define libelf
-  (let ((src (source-template
-                "elfutils" "0.178"
-                "https://sourceware.org/$name/ftp/$version/$name-$version.tar.bz2"
-                "ibDvVn8CMIhlIQAZGAsl7Yf13fm42qO7NJDctqLd2Hc="))
-         (config  (remote-file
-                    #f "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
-    (lambda (conf)
-      (source->package
-        conf
-        src
-        tools:  (cons config (cc-for-target conf))
-        inputs: (list zlib musl libssp-nonshared)
-        build:  (let ((cflags (append ($CFLAGS conf)
-                                      '(-D_GNU_SOURCE -DHAVE_CONFIG_H -I. -I.. -I../lib)))
-                      (cc     ($CC conf)))
-                  ;; ALLLLRIGHTY THEN, here's what happening here...
-                  ;; elfultils' configure script is utterly broken
-                  ;; and also requires a bunch of libraries that
-                  ;; I don't want to package, so we're just building
-                  ;; libelf.a manually and ignoring everything else
-                  `((if ((cp /src/config.h config.h)))
-                    (if ((find lib/ libelf/ -type f -name "*.[ch]"
-                               -exec sed "-i"
-                               -e "/#include <libintl.h>/d"
-                               -e "/#include.*cdefs.h>/d"
-                               "{}" ";")))
-                    (if ((find lib/ -type f -name "*.h"
-                               -exec sed "-i" -e "s/<error.h>/<err.h>/g" "{}" ";")))
-                    (cd libelf)
-                    (if ((elglob -s csrc "*.c")
-                         (if ((echo "cflags: " ,@cflags)))
-                         (if ((echo "source: " $csrc)))
-                         (,cc ,@cflags -c $csrc)))
-                    (if ((elglob -s objs "*.o")
-                         (,($AR conf) Dcr libelf.a $objs)))
-                    (if ((mkdir -p /out/usr/include /out/usr/lib)))
-                    (if ((cp gelf.h /out/usr/include/gelf.h)))
-                    (if ((cp libelf.h /out/usr/include/libelf.h)))
-                    (cp libelf.a /out/usr/lib/libelf.a)))))))
+  (let (($cflags (lambda (conf)
+		   (cons* '-D_GNU_SOURCE '-DHAVE_CONFIG_H '-I. '-I.. '-I../lib ($CFLAGS conf))))
+	(config  (remote-file
+                     #f "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
+    (cc-package
+     "elfutils" "0.178"
+     "https://sourceware.org/$name/ftp/$version/$name-$version.tar.bz2"
+     "ibDvVn8CMIhlIQAZGAsl7Yf13fm42qO7NJDctqLd2Hc="
+     libs: (list zlib)
+     extra-src: (list config)
+     ;; the elfutils configure script is a basket case,
+     ;; and so are the headers, so we're just massaging
+     ;; the source and then building it manually.
+     ;; (the included config.h would be generated by ./configure
+     ;; if the script could actually run correctly...)
+
+     build: (cmd*
+	     `(cp /src/config.h config.h)
+	     '(find lib/ libelf/ -type f -name "*.[ch]"
+		    -exec sed "-i"
+		    -e "/#include <libintl.h>/d"
+		    -e "/#include.*cdefs.h>/d"
+		    "{}" ";")
+	     '(find lib/ -type f -name "*.h"
+		    -exec sed "-i" -e "s/<error.h>/<err.h>/g" "{}" ";")
+	     `((cd libelf/)
+	       (elglob -s csrc "*.c")
+	       (,$CC ,$cflags -c $csrc))
+	     `((cd libelf/)
+	       (elglob -s objs "*.o")
+	       (,$AR ,$ARFLAGS libelf.a $objs))
+	     '(mkdir -p /out/usr/include /out/usr/lib)
+	     '(cp libelf/gelf.h /out/usr/include/gelf.h)
+	     '(cp libelf/libelf.h /out/usr/include/libelf.h)
+	     '(cp libelf/libelf.a /out/usr/lib/libelf.a)))))
+
+;; mke2fs -d <dir> does not have a way
+;; to bypass timestamps and override uid/gid,
+;; so this hacks in a way to at least ensure
+;; that those fields get zeroed...
+(define mke2fs-repro-patch #<<EOF
+--- a/misc/create_inode.c
++++ b/misc/create_inode.c
+@@ -17,6 +17,7 @@
+ #include <time.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
++#include <stdlib.h>
+ #include <unistd.h>
+ #include <limits.h> /* for PATH_MAX */
+ #include <dirent.h> /* for scandir() and alphasort() */
+@@ -128,6 +129,16 @@
+ 	inode.i_atime = st->st_atime;
+ 	inode.i_mtime = st->st_mtime;
+ 	inode.i_ctime = st->st_ctime;
++
++        if (getenv("MKE2FS_DETERMINISTIC")) {
++                inode.i_uid = 0;
++                ext2fs_set_i_uid_high(inode, 0);
++                inode.i_gid = 0;
++                ext2fs_set_i_gid_high(inode, 0);
++                inode.i_atime = 0;
++                inode.i_mtime = 0;
++                inode.i_ctime = 0;
++        }
+
+ 	retval = ext2fs_write_inode(fs, ino, &inode);
+ 	if (retval)
+EOF
+)
+
+(define e2fsprogs
+  ;; e2fsprogs is unusual and uses BUILD_CC, BUILD_CFLAGS, etc.
+  ;; in order to indicate which CC to use for building tools
+  (let* ((buildcc-env  (lambda ()
+			 (cc-env/build
+			  (lambda (kw)
+			    (string->keyword
+			     (string-append
+			      "BUILD_"
+			      (keyword->string kw)))))))
+	 ($buildcc-env (lambda (conf) (buildcc-env))))
+    (cmmi-package
+     "e2fsprogs" "1.45.5"
+     "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
+     "w7R6x_QX6QpTEtnNihjwlHLBBtfo-r9RrWVjt9Nc818="
+     patches: (patch* mke2fs-repro-patch)
+     native-cc: buildcc-env
+     libs: (list linux-headers)
+     ;; atypical:
+     ;; e2fsprogs wants BUILD_CC, etc. to be specified
+     ;; as configure script arguments
+     extra-configure: (vargs `(--enable-symlink-install
+			       --enable-libuuid
+			       --enable-libblkid
+			       --disable-uuidd
+			       --disable-fsck
+			       ,$buildcc-env))
+     override-install: '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))
 
 (define perl
   ;; the perl configure script desperately
@@ -1198,63 +1150,57 @@ EOF
 		      libnftnl_LIBS=-lnftnl)))
 
 (define iproute2
-  (let ((src (source-template
-               "iproute2" "5.5.0"
-               "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
-               "zVeW6PtWecKE9Qlx9l4NrfnQcIZNAW4HocbzuLiJOpo="
-               ;; patches:
-               (list
-                 (remote-file
-                   "https://git.alpinelinux.org/aports/plain/main/iproute2/musl-fixes.patch"
-                   "K4srcIY08guTgXv7DeGR6InxsXUKFV76vmeLao7Y0Cw="
-                   "/src/musl-fixes.patch"
-                   #o644)
-                 (remote-file
-                   "https://git.alpinelinux.org/aports/plain/main/iproute2/fix-install-errors.patch"
-                   "jUzhNv5c3_lyQZ6omNKQaBvZNbpHZVkyeMuG15uq1sA="
-                   "/src/fix-install-errors.patch"
-                   #o644)))))
-    (lambda (conf)
-      ;; the configure script isn't autoconf and
-      ;; doesn't work without pkgconfig, but luckily
-      ;; all it does is generate config.mk, so just do that directly...
-      (let ((config.mk (interned
-                         "/src/config.mk"
-                         #o644
-                         (lines/s
-                           (list->seq
-                             (append
-                               '("YACC=yacc")
-                               (splat
-                                 ($cc-env conf)
-                                 CC: LDFLAGS: AR:)
-                               (list
-                                 "TC_CONFIG_IPSET:=y"
-                                 "TC_CONFIG_NO_XT:=y"
-                                 "HAVE_MNL:=y"
-                                 "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
-                                 "LDLIBS += -lelf -lmnl -lz"
-                                 "%.o: %.c"
-                                 "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
-        (source->package
-          conf
-          src
-          tools: (append (list config.mk byacc reflex)
-                         (cc-for-target conf))
-          inputs: (list linux-headers iptables libmnl libelf zlib musl libssp-nonshared)
-          build:  `((if ((cp /src/config.mk config.mk)))
-                    (if ((sed "-i" -e "/^SUBDIRS/s: netem::" Makefile)))
-                    (if ((make ,@(k=v* CCOPTS: ($CFLAGS conf))
-                               SHARED_LIBS=n PREFIX=/usr all)))
-                    (if ((make SHARED_LIBS=n DESTDIR=/out PREFIX=/usr install)))
-                    (if ((rm -rf /out/usr/share/bash-completion)))
-                    (if ((rm -rf /out/var)))
-                    (if ((rm -rf /out/usr/share/man)))
-                    ,@(strip-binaries-script ($triple conf))))))))
+  (let ((tools (lambda (conf)
+		 (list
+		  byacc reflex
+		  (interned
+		   "/src/config.mk"
+		   #o644
+		   (lines/s
+		    (list->seq
+		     (append
+		      '("YACC=yacc")
+		      (splat
+		       ($cc-env conf)
+		       CC: LDFLAGS: AR:)
+		      (list
+		       "TC_CONFIG_IPSET:=y"
+		       "TC_CONFIG_NO_XT:=y"
+		       "HAVE_MNL:=y"
+		       "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
+		       "LDLIBS += -lelf -lmnl -lz"
+		       "%.o: %.c"
+		       "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))))
+	(cc-package
+	 "iproute2" "5.5.0"
+	 "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
+	 "zVeW6PtWecKE9Qlx9l4NrfnQcIZNAW4HocbzuLiJOpo="
+	 patches: (list
+		   (remote-file
+		    "https://git.alpinelinux.org/aports/plain/main/iproute2/musl-fixes.patch"
+		    "K4srcIY08guTgXv7DeGR6InxsXUKFV76vmeLao7Y0Cw="
+		    "/src/musl-fixes.patch"
+		    #o644)
+		   (remote-file
+		    "https://git.alpinelinux.org/aports/plain/main/iproute2/fix-install-errors.patch"
+		    "jUzhNv5c3_lyQZ6omNKQaBvZNbpHZVkyeMuG15uq1sA="
+		    "/src/fix-install-errors.patch"
+		    #o644))
+	 tools: tools
+	 libs:  (list linux-headers iptables libmnl libelf zlib)
+	 build: (cmd*
+		 '(cp /src/config.mk config.mk)
+                 '(sed "-i" -e "/^SUBDIRS/s: netem::" Makefile)
+                 `(make (CCOPTS= ,$CFLAGS) SHARED_LIBS=n PREFIX=/usr all)
+                 '(make SHARED_LIBS=n DESTDIR=/out PREFIX=/usr install)
+                 '(rm -rf /out/usr/share/bash-completion)
+                 '(rm -rf /out/var)
+                 '(rm -rf /out/usr/share/man)
+		 $strip-cmd))))
 
 (define s6
   (ska-cmmi-package
-   "s6" "2.9.0.1"
+   "s6" "2.9.0.1" ; todo 2.9.1.0
    "uwnwdcxfc7i3LTjeNPcnouhShXzpMPIG0I2AbQfjL_I="
    libs: (list skalibs execline-tools)
    extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
@@ -1262,7 +1208,7 @@ EOF
 
 (define s6-rc
   (ska-cmmi-package
-   "s6-rc" "0.5.1.1"
+   "s6-rc" "0.5.1.1" ; todo 0.5.1.2
    "KCvqdFSKEUNPkHQuCBfs86zE9JvLrNHU2ZhEzLYY5RY="
    libs: (list s6 skalibs execline-tools)
    extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)

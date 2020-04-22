@@ -82,6 +82,7 @@
       s6-rc
       linux-headers
       libelf
+      exportall
       e2fsprogs
       libmnl
       libnftnl

@@ -219,6 +219,8 @@
 	 (override-configure #f)
 
 	 (override-make #f)
+	 (override-install #f)
+	 (out-of-tree #f)
 
 	 (libs '())     ;; extra libraries beyond libc
 	 (tools '())    ;; extra tools beyond a C toolchain
@@ -263,10 +265,16 @@
 	       (lambda (ll)
 		 (append
 		  (ll prepare)
-		  `((if ((./configure ,@(or (ll override-configure)
-					    (append (ll default-configure) (ll extra-configure))))))
-		    (if ((make ,@(ll make-args))))
-		    (if ((make DESTDIR=/out install)))
+		  (let ((args (or (ll override-configure)
+				  (append (ll default-configure)
+					  (ll extra-configure)))))
+		    (if out-of-tree
+			`((if ((mkdir -p distill-builddir)))
+			  (cd distill-builddir)
+			  (if ((../configure ,@args))))
+			`((if ((./configure ,@args))))))
+		  `((if ((make ,@(ll make-args))))
+		    (if ((make ,@(or (ll override-install) '(DESTDIR=/out install)))))
 		    (foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
 		    (foreground ((find /out -name "*.la" -delete))))
 		  (ll cleanup)
@@ -375,6 +383,7 @@
 ;; as it declares default-config
 (: build-triple (-> symbol))
 (define (build-triple) ($triple (build-config)))
+(define ($build-triple conf) (build-triple))
 
 (define (+cross conf normal extra)
   (if (eq? (build-triple) ($triple conf))
@@ -668,40 +677,6 @@
      `(if ((patch -p1 "-i" ,(vector-ref (vector-ref pf 0) 1)))))
    lst))
 
-(define <gnu-build>
-  (make-kvector-type
-   triple:
-   pre-configure:
-   exports:
-   post-install:
-   make-flags:
-   install-flags:
-   out-of-tree:
-   configure-args:))
-
-;; $gnu-build fetches the default <gnu-build> object
-;; for a configuration
-(define $gnu-build
-  (let ((%make (kvector-constructor <gnu-build>)))
-    ;; cache one copy of this since it's likely to be
-    ;; the same result in most invocations
-    (memoize-one-eq
-     (lambda (conf)
-       (%make
-	triple:         ($triple conf)
-	pre-configure:  '()
-	exports:        (list ($cc-env conf))
-	post-install:   '()
-	make-flags:     (kvargs ($make-overrides conf))
-	install-flags:  '(DESTDIR=/out install)
-	out-of-tree:    #f
-	configure-args: `(--disable-shared
-			  --disable-nls --enable-static
-			  --enable-pie --with-pic
-			  --prefix=/usr --sysconfdir=/etc
-			  --build ,(build-triple)
-			  --host ,($triple conf)))))))
-
 (define (exports->script lst)
   (let loop ((in  lst)
 	     (exp '()))
@@ -718,45 +693,6 @@
 			      (if v (cons (list (##sys#symbol->string k) (spaced v)) lst) lst))
 			    exp)))
 	   (else (error "bad env element" (car in))))))))
-
-(define (+gnu-ccflags gr lst)
-  (kwith
-   gr
-   exports: (lambda (old)
-	      (map
-	       (lambda (ex)
-		 (if (cc-env? ex)
-		     (kwith ex CFLAGS: (+= lst) CXXFLAGS: (+= lst))
-		     ex))
-	       old))))
-
-;; gnu-recipe takes the result of ($gnu-build conf)
-;; and turns it into a recipe
-(define gnu-recipe
-  (let (($pre-configure  (kvector-getter <gnu-build> pre-configure:))
-	($exports        (kvector-getter <gnu-build> exports:))
-	($post-install   (kvector-getter <gnu-build> post-install:))
-	($make-flags     (kvector-getter <gnu-build> make-flags:))
-	($install-flags  (kvector-getter <gnu-build> install-flags:))
-	($out-of-tree    (kvector-getter <gnu-build> out-of-tree:))
-	($configure-args (kvector-getter <gnu-build> configure-args:))
-	($triple         (kvector-getter <gnu-build> triple:))
-	(gnu?            (kvector-predicate <gnu-build>)))
-    (lambda (v)
-      `(,@(exports->script ($exports v))
-	,@($pre-configure v)
-	,@(if ($out-of-tree v)
-	      `((if ((mkdir -p "distill-builddir")))
-		(cd "distill-builddir")
-		(if (("../configure"
-		      ,@($configure-args v)))))
-	      `((if ((./configure ,@($configure-args v))))))
-	(if ((make ,@($make-flags v))))
-	(if ((make ,@($install-flags v))))
-	,@($post-install v)
-	(foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
-	(foreground ((find /out -type f -name "*.la" -delete)))
-	,@(strip-binaries-script ($triple v))))))
 
 
 
