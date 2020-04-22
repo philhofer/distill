@@ -35,16 +35,20 @@
       limit:  0
       seed:   (make-hash-table test: string=? hash: string-hash)
       action: (lambda (dir ht)
-                (let ((ofile (filepath-join dir "outputs.scm")))
-                  (if (file-exists? ofile)
-                    (begin
-                      (note-outputs ofile ht)
-                      (note-inputs (or (file-exists? (filepath-join art-dir (basename dir)))
-                                       (filepath-join dir "inputs.scm")) ht))
-                    (begin
-                      (info "removing dead plan" dir)
-                      (delete-file* (filepath-join art-dir (basename dir)))
-                      (delete-directory dir #t))))
+                (let* ((hash   (basename dir))
+		       (ofile  (filepath-join dir "outputs.scm"))
+		       (infile (filepath-join art-dir hash)))
+                  (if (and (file-exists? ofile)
+			   (file-exists? infile))
+		      (begin
+			;; this plan is live
+			(hash-table-set! ht hash #t)
+			(note-outputs ofile ht)
+			(note-inputs infile ht))
+		      (begin
+			(info "removing dead plan" dir)
+			(delete-file* (filepath-join art-dir (basename dir)))
+			(delete-directory dir #t))))
                 ht))))
 
 ;; walk every artifact and produce a list of those
