@@ -37,13 +37,30 @@
            (and (string=? end suff)
                 (substring/shared str 0 diff))))))
 
+;; alist of arch-limited packages
+;; (i.e. packages that only support
+;; a subset of host architectures)
+(define pkgs-for-arch
+  '((linux-virt-x86_64 x86_64)))
+
 (define package-names
   (find-files
-    "./pkg"
-    action: (lambda (f lst)
-              (let ((suf (trim-suffix f ".scm")))
-                (if suf (cons (string->symbol (basename suf)) lst) lst)))
-    seed: '()))
+   "./pkg"
+   action: (lambda (f lst)
+	     (let ((suf (trim-suffix f ".scm")))
+	       (if suf
+		   (cons (string->symbol (basename suf)) lst)
+		   lst)))
+   seed: '()))
+
+;; filter out packges that are arch-specific
+(define (packages-for conf)
+  (let ((arch ($arch conf)))
+    (filter
+     (lambda (name)
+       (let ((c (assq name pkgs-for-arch)))
+	 (or (not c) (memq arch (cdr c)))))
+     package-names)))
 
 (define (builtin-for conf)
   (letrec-syntax ((builtin* (syntax-rules ()
@@ -101,7 +118,7 @@
        (build!  (config->builder config))
        (loaded  (map (lambda (name)
                        (cons name (package-handle name)))
-                     package-names))
+                     (packages-for config)))
        (builtin (builtin-for config))
        (all     (append loaded builtin))
        (outputs (apply build! (map cdr all))))
