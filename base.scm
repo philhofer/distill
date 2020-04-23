@@ -1,7 +1,8 @@
 
 (define *prebuilts*
   `((x86_64 . ,(include "prebuilt-x86_64.scm"))
-    (aarch64 . ,(include "prebuilt-aarch64.scm"))))
+    (aarch64 . ,(include "prebuilt-aarch64.scm"))
+    (ppc64le . ,(include "prebuilt-ppc64le.scm"))))
 
 (define (maybe-prebuilt conf ref)
   (and-let* ((_ (eq? conf default-build-config))
@@ -203,6 +204,13 @@
     "https://www.musl-libc.org/releases/musl-$version.tar.gz"
     "-DtKaw1hxYkV_hURoMR-00bA9TPByU0RITAnt9ELLls="))
 
+(define (musl-arch-name triple)
+  (let ((arch (triple->arch triple)))
+    (case arch
+      ((ppc64le ppc64) 'powerpc64)
+      ((armv7 armv6) 'arm)
+      (else arch))))
+
 ;; when building a cross-compiler,
 ;; we need headers for the target system
 ;;
@@ -219,7 +227,7 @@
           tools: (list make execline-tools busybox-core)
           inputs: '()
           build: `((make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
-		     ,(conc "ARCH=" (triple->arch target-triple))
+		     ,(conc "ARCH=" (musl-arch-name target-triple))
 		     "prefix=/usr" install-headers)))))))
 
 (define musl
@@ -575,6 +583,10 @@ EOF
 			       --enable-version-specific-runtime-libs
 			       --with-system-zlib
 			       "--enable-languages=c,c++"
+			       ;; target-specific options:
+			       ,@(case (triple->arch target-triple)
+				   ((ppc64le ppc64) '(--enable-secureplt --enable-decimal-float=no))
+				   (else '()))
 			       (--with-sysroot= ,(triple->sysroot target-triple))
 			       (--build= ,$build-triple)
 			       (--target= ,target-triple)
@@ -1235,9 +1247,9 @@ EOF
 ;; for gcc+musl-static-config not to reference unbound variables
 
 ;; default-config produces the default config for 'arch'
-;; which should be one of '(x86_64 aarch64)
+;; which should be one of '(x86_64 aarch64 ppc64le)
 (define (default-config arch)
-  (or (memq arch '(x86_64 aarch64))
+  (or (memq arch '(x86_64 aarch64 ppc64le))
       (info "WARNING: un-tested architecture" arch))
   (gcc+musl-static-config arch optflag: '-Os sspflag: '-fstack-protector-strong))
 
