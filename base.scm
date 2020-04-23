@@ -291,9 +291,9 @@ EOF
 
 (define gawk
   (cmmi-package
-   "gawk" "5.0.1" ; todo: 5.1.0
+   "gawk" "5.1.0"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
-   "R3Oyp6YDumBd6v06rLYd5U5vEOpnq0Ie1MjwINSmX-4="
+   "qPUwDbyEw75NjMOALy2nyYWv_LSMprTZEfAYjIos0-c="
    cleanup: '((foreground ((rm -f /out/usr/bin/awk))))))
 
 (define libgmp
@@ -361,14 +361,14 @@ EOF
 
 (define skalibs
   (ska-cmmi-package
-   "skalibs" "2.9.2.0" ; todo 2.9.2.1
-   "s_kjqv340yaXpye_on0w-h8_PR0M6t8Agb4dPqAMWIs="
+   "skalibs" "2.9.2.1"
+   "-GI9LFINaiNdVFzBFvQxD2880lyqLAC2YpWNdRXUPaE="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define execline-tools
   (ska-cmmi-package
-   "execline" "2.6.0.0" ; todo 2.6.0.1
-   "KLkA2uCEV2wf2sOEbSzdE7NAiJpolLFh6HrgohLAGFo="
+   "execline" "2.6.0.1"
+   "0AwX9jiwZt0b0KiHeuWYvuzZdHlP22cZ0088gDI_iRc="
    prebuilt: (cut maybe-prebuilt <> 'execline)
    libs: (list skalibs)
    extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
@@ -429,14 +429,6 @@ EOF
    ;; can't call exit(3) inside a procedure registered with atexit(3);
    ;; just exit promptly
    prepare: '((if ((sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c))))))
-
-(define *gcc-version* "9.3.0")
-(define *gcc-src*
-  (source-template
-    "gcc" *gcc-version*
-    "https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
-    "Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="
-    (patch* (include-file-text "patches/gcc/pie-gcc.patch"))))
 
 (define binutils-for-triple
   (memoize-eq
@@ -1212,16 +1204,16 @@ EOF
 
 (define s6
   (ska-cmmi-package
-   "s6" "2.9.0.1" ; todo 2.9.1.0
-   "uwnwdcxfc7i3LTjeNPcnouhShXzpMPIG0I2AbQfjL_I="
+   "s6" "2.9.1.0"
+   "-YjvL_kpeegF4FFOlDizjsxkC8gSqPftHDsII5sDmEc="
    libs: (list skalibs execline-tools)
    extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
 		      --enable-static-libc)))
 
 (define s6-rc
   (ska-cmmi-package
-   "s6-rc" "0.5.1.1" ; todo 0.5.1.2
-   "KCvqdFSKEUNPkHQuCBfs86zE9JvLrNHU2ZhEzLYY5RY="
+   "s6-rc" "0.5.1.2"
+   "y8awbxd6B7btH4qmlyx2FWwhdlysT4n19Twc-x0lotc="
    libs: (list s6 skalibs execline-tools)
    extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
 		      --enable-static-libc)))
