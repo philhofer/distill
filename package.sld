@@ -50,9 +50,8 @@
     package-build
     package-prebuilt
 
-    source->package
-    source-template
 
+    url-translate
     cc-package
     cmmi-package
 
@@ -72,6 +71,10 @@
     $cc-env
     build-triple
     $build-triple
+    $cross-compile
+    $build-CC
+    $build-LD
+    $build-CFLAGS
     $CC
     $CXX
     $AR
@@ -82,7 +85,6 @@
     $ARFLAGS
     $RANLIB
     $READELF
-    +cross
     cc-env/build
     cc-env/for-build
     cc-env/for-kbuild

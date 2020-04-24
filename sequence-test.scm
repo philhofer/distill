@@ -88,3 +88,11 @@
        (kdfs  (dfs-uniq child)))
   (test equal? revg (seq (kbfs cons) '()))
   (test equal? (vector->list graph) (seq (kdfs cons) '())))
+
+(test equal?
+      "first\nsecond line\nthird line values\nfourth\n"
+      (->lines+spaces
+       '(first
+	 (second line)
+	 (third line values)
+	 fourth)))

@@ -688,7 +688,10 @@
           (lambda (exn)
             (let ((linkname (filepath-join
                               (current-directory)
-                              (string-append (plan-name p) ".log.zst"))))
+                              (string-append (plan-name p)
+					     "-" (short-hash (plan-hash p))
+					     ".log.zst"))))
+	      (delete-file* linkname) ;; delete old link if it exists
               (create-symbolic-link outfile linkname)
               (infoln "build failed; please see" linkname)))
           (lambda ()

@@ -198,11 +198,10 @@
 	(cons native-toolchain tools)
 	tools)))
 
-(define *musl-src*
-  (source-template
-    "musl" "1.2.0"
-    "https://www.musl-libc.org/releases/musl-$version.tar.gz"
-    "-DtKaw1hxYkV_hURoMR-00bA9TPByU0RITAnt9ELLls="))
+(define *musl-url*
+  "https://www.musl-libc.org/releases/musl-$version.tar.gz")
+(define *musl-version* "1.2.0")
+(define *musl-hash* "-DtKaw1hxYkV_hURoMR-00bA9TPByU0RITAnt9ELLls=")
 
 (define (musl-arch-name triple)
   (let ((arch (triple->arch triple)))
@@ -220,32 +219,30 @@
   (memoize-eq
     (lambda (target-triple)
       (lambda (host)
-        (source->package
-          host
-          *musl-src*
-          label: (conc "musl-headers-" (triple->arch target-triple))
-          tools: (list make execline-tools busybox-core)
-          inputs: '()
-          build: `((make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
-		     ,(conc "ARCH=" (musl-arch-name target-triple))
-		     "prefix=/usr" install-headers)))))))
+        (make-package
+	 src:   (remote-archive
+		 (url-translate *musl-url* "musl" *musl-version*)
+		 *musl-hash*)
+	 dir:   (string-append "musl-" *musl-version*)
+	 env:   '()
+	 label: (conc "musl-headers-" (triple->arch target-triple))
+	 tools: (list make execline-tools busybox-core)
+	 inputs: '()
+	 build: `((make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
+		    ,(conc "ARCH=" (musl-arch-name target-triple))
+		    "prefix=/usr" install-headers)))))))
 
 (define musl
-  (lambda (conf)
-    ;; note: musl is compiled as -ffreestanding, so
-    ;; the gcc that builds it does *not* need to know
-    ;; how to find a libc.a or crt*.o, and so forth
-    (source->package
-      conf
-      *musl-src*
-      tools:  (cc-for-target conf)
-      inputs: '()
-      build:
-      `((if ((./configure --disable-shared --enable-static
-                          --prefix=/usr ,@(splat ($cc-env conf) CC: CFLAGS:)
-                          --target ,($arch conf))))
-        (if ((make ,@(kvargs ($make-overrides conf)))))
-        (make DESTDIR=/out install)))))
+  (cc-package
+   "musl" *musl-version*
+   *musl-url* *musl-hash*
+   no-libc: #t ; compiled as -ffreestanding
+   build: (cmd*
+	   `(./configure --disable-shared --enable-static
+			 --prefix=/usr (CC= ,$CC) (CFLAGS= ,$CFLAGS)
+			 --target ,$arch)
+	   `(make ,$make-overrides)
+	   '(make DESTDIR=/out install))))
 
 (define libssp-nonshared
   (lambda (conf)
@@ -611,7 +608,7 @@ EOF
    build:   (cmd*
 	     '(mv /src/config.head .config)
 	     `(make V=1
-		(CROSS_COMPILE= ,$triple -)
+		(CROSS_COMPILE= ,$cross-compile)
 		(CONFIG_SYSROOT= ,$sysroot)
 		(CONFIG_EXTRA_CFLAGS= ,$CFLAGS)
 		,$cc-env/for-kbuild
@@ -805,7 +802,7 @@ EOF
 		 (KBUILD_BUILD_TIMESTAMP . "@0")
 		 (KBUILD_BUILD_USER . distill)
 		 (KBUILD_BUILD_HOST . distill)
-		 (CROSS_COMPILE . ,(conc ($triple conf) "-")))
+		 (CROSS_COMPILE . ,($cross-compile conf)))
 	patches: patches
         build: (let ((make-args (append
                                   (kvargs (cc-env/for-kbuild))
@@ -1006,59 +1003,48 @@ EOF
 EOF
 )
 
-;; uboot/config accepts 5 arguments:
+;; uboot/config accepts 4 arguments:
 ;;  - name: a suffix added to the package name
 ;;    (the package will be named "uboot-<version>-<name>"
 ;;  - hash: the hash of the .config
 ;;  - env:  a list of key=value strings that populate
 ;;    the default environment for the bootloader
-;;  - bootargs: the default kernel argument list
 ;;  - bootcmd: the default kernel boot command for u-boot (i.e. booti, etc.)
-(define uboot/config
-  (let ((src (source-template
-               "u-boot" "2020.04-rc3"
-               "https://ftp.denx.de/pub/$name/$name-$version.tar.bz2"
-               "-se2Ch0_yG0gCjtkTSEUmOYrle8860Gg887w3f7I8yI="
-              (patch* no-xxd-patch portable-lexer-patch))))
-    (lambda (name h env bootargs bootcmd)
-      (let ((envfile (interned
-                       "/src/uboot-env"
-                       #o644
-                       (lines/s (list->seq env))))
-            (dotconf (remote-file
-                       #f h "/src/uboot-config" #o644)))
-        (lambda (conf)
-          (source->package
-            conf
-            src
-            tools: (append
-                     (list reflex byacc envfile dotconf)
-                     (cc-for-target conf #t))
-            inputs: '()
-            build: (let ((make-args (append
-                                      (k=v*
-                                        YACC: '(yacc -d)
-                                        CONFIG_BOOTARGS: bootargs
-                                        CONFIG_BOOTCOMMAND: bootcmd
-                                        CROSS_COMPILE: (conc ($triple conf) "-"))
-                                      (kvargs (cc-env/for-kbuild)))))
-                     ;; note that we don't really do much in terms of
-                     ;; setting the usual CFLAGS=..., LDFLAGS=... here,
-                     ;; because those flags likely do not apply safely
-                     ;; to building a freestanding bootloader
-                     `((importas -D 0 epoch SOURCE_DATE_EPOCH)
-                       (backtick SOURCE_DATE_EPOCH
-                                 ((pipeline ((echo -n $epoch)))
-                                  (sed -e "s/@//")))
-                       (if ((cp /src/uboot-config .config)))
-                       ,@(fix-dtc-script
-                           fix-lex-options: 'scripts/kconfig/zconf.l
-                           fix-yacc-cmdline: 'scripts/Makefile.lib)
-                       ;; we're using yacc -d, so the zconf.tab.c needs to #include the generated definitions
-                       (if ((sed "-i"
-                                 -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)))
-                       (if ((make V=1 ,@make-args)))
-                       (install -D -m 644 -t /out/boot u-boot.bin)))))))))
+(define (uboot/config name hash env bootcmd)
+  (let ((envfile (interned
+		  "/src/uboot-env"
+		  #o644
+		  (lines/s (list->seq env))))
+	(dotconf (remote-file
+		  #f hash "/src/uboot-config" #o644)))
+    (cc-package
+     "u-boot" "2020.04-rc3"
+     "https://ftp.denx.de/pub/$name/$name-$version.tar.bz2"
+     "-se2Ch0_yG0gCjtkTSEUmOYrle8860Gg887w3f7I8yI="
+     no-libc:   #t
+     use-native-cc: #t
+     patches:   (patch* no-xxd-patch portable-lexer-patch)
+     extra-src: (list envfile dotconf)
+     tools:     (list byacc reflex)
+     build: (lambda (conf)
+	      (let ((make-args (vargs `("YACC=yacc -d"
+					(CONFIG_BOOTCOMMAND= ,bootcmd)
+					(CROSS_COMPILE= ,$cross-compile)
+					,$cc-env/for-kbuild))))
+		`((importas -D 0 epoch SOURCE_DATE_EPOCH)
+		  (backtick SOURCE_DATE_EPOCH
+			    ((pipeline ((echo -n $epoch)))
+			     (sed -e "s/@//")))
+		  (if ((cp /src/uboot-config .config)))
+		  ,@(fix-dtc-script
+		     fix-lex-options: 'scripts/kconfig/zconf.l
+		     fix-yacc-cmdline: 'scripts/Makefile.lib)
+		  ;; we're using yacc -d, so the zconf.tab.c needs to #include the generated definitions
+		  (if ((sed "-i"
+			    -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)))
+		  (if ((make V=1 ,@(make-args conf))))
+		  (install -D -m 644 -t /out/boot u-boot.bin)))))))
+
 (define xz-utils
   (cmmi-package
    "xz" "5.2.4"

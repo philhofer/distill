@@ -25,7 +25,8 @@
     join/s
     any/s?
     all/s?
-    for-each/s)
+    for-each/s
+    ->lines+spaces)
   (import
     scheme
     (srfi 69)
@@ -33,7 +34,7 @@
   (cond-expand
     (chicken (import
                (chicken type)
-               (only (chicken port) call-with-output-string)
+               (only (chicken port) with-output-to-string call-with-output-string)
                (only (chicken base) void include error))))
   (include "sequence.scm"))
 

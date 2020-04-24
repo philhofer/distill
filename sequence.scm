@@ -277,3 +277,25 @@
      (lambda (kons)
        (kompose "recur" kons head rest* ...)))))
 
+;; ->lines+spaces converts a list of lisp datums
+;; to lines, taking care to separate sub-lists
+;; with spaces
+;;
+;; e.g. (->lines+spaces 'line1 (second line))
+;; yields "line1\nsecond line\n"
+(define (->lines+spaces lst)
+  (with-output-to-string
+    (lambda ()
+      (for-each
+       (lambda (line)
+	 (if (pair? line)
+	     (let loop ((head (car line))
+			(rest (cdr line)))
+	       (display head)
+	       (or (null? rest)
+		   (begin
+		     (display " ")
+		     (loop (car rest) (cdr rest)))))
+	     (display line))
+	 (newline))
+       lst))))

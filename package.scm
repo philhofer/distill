@@ -42,34 +42,25 @@
 (: package? (* -> boolean))
 (define package? (kvector-predicate <package>))
 
-(define raw-make-package (kvector-constructor <package>))
-
 (: make-package (#!rest * -> vector))
 (define make-package
-  (kvector-constructor
-   <package>
-   label:      #f  string?
-   src:        '() (or/c artifact? (list-of artifact?))
-   tools:      '() (list-of (or/c meta-package? procedure? artifact?))
-   inputs:     '() (list-of (or/c meta-package? procedure? artifact?))
-   prebuilt:   #f  (or/c false/c artifact?)
-   patches:    '() list?
-   build:      #f  list?
-   dir:        "/" string?
-   env:        '() (list-of (or/c pair? kvector?))
-   raw-output: #f  (or/c false/c string?)))
-
-(define (source-template name version urlfmt hash #!optional (patchlst '()))
-  (let* ((url (string-translate* urlfmt `(("$name" . ,name)
-                                          ("$version" . ,version))))
-         (src (remote-archive url hash)))
-    (lambda (conf)
-      (raw-make-package
-       patches: patchlst
-       label:   (conc name "-" version "-" ($arch conf))
-       src:     (cons src patchlst)
-       env:     '()
-       dir:     (conc name "-" version)))))
+  (let* ((input?  (disjoin meta-package? procedure? artifact?))
+	 (perhaps (lambda (ok?)
+		   (lambda (in)
+		     (or (not in) (ok? in)))))
+	 (inputs? (list-of input?)))
+    (kvector-constructor
+     <package>
+     label:      #f  string?
+     src:        '() (disjoin artifact? (list-of artifact?))
+     tools:      '() inputs?
+     inputs:     '() inputs?
+     prebuilt:   #f  (perhaps artifact?)
+     patches:    '() (list-of artifact?)
+     build:      #f  list?   ; todo: valid script?
+     dir:        "/" string? ; todo: valid filepath?
+     env:        '() (list-of (disjoin pair? kvector?))
+     raw-output: #f  (perhaps string?))))
 
 ;; vargs takes a list of arguments,
 ;; some of which are functions,
@@ -87,7 +78,7 @@
 			  ((symbol? item) (##sys#symbol->string item))
 			  ((procedure? item) (spaced (item conf)))
 			  ((number? item) (number->string item))
-			  (else (error "bad item in confsubst" item)))))
+			  (else (error "bad item in vargs" item)))))
 		      ""
 		      lst))))
       (reverse
@@ -156,6 +147,10 @@
 		   (list tail)))
 	     (cons `(if ,(cmdline first)) (loop (car rest) (cdr rest)))))))))
 
+(define (url-translate urlfmt name version)
+  (string-translate* urlfmt `(("$name" . ,name)
+			      ("$version" . ,version))))
+
 ;; template for C/C++ packages
 ;;
 ;; the cc-package template picks suitable defaults
@@ -172,19 +167,21 @@
 	 (dir #f)       ;; directory override
 	 (build #f)
 	 (prebuilt #f)  ;; prebuilt function
+	 (no-libc #f)   ;; do not bring in a libc implicitly
 	 (use-native-cc #f)
+	 (raw-output #f)
 	 (patches '())  ;; patches to apply
 	 (env '())      ;; extra environment
 	 (libs '())     ;; extra libraries beyond libc
 	 (tools '())    ;; extra tools beyond a C toolchain
 	 (extra-src '()))
-  (let* ((url (string-translate* urlfmt `(("$name" . ,name)
-					  ("$version" . ,version))))
+  (let* ((url (url-translate urlfmt name version))
 	 (src (remote-archive url hash)))
     (lambda (conf)
       (let* ((ll  (lambda (l) (if (procedure? l) (l conf) l)))
 	     (ctc ($cc-toolchain conf)))
-	(raw-make-package
+	(make-package
+	 raw-output: raw-output
 	 prebuilt: (ll prebuilt)
 	 patches: patches
 	 label:   (conc name "-" version "-" ($arch conf))
@@ -197,7 +194,7 @@
 			      (let ((ntc ($native-toolchain (build-config))))
 				(append (cc-toolchain-tools ntc) (cc-toolchain-libc ntc)))
 			      '()))
-	 inputs:  (append (cc-toolchain-libc ctc) (ll libs))
+	 inputs:  (append (if no-libc '() (cc-toolchain-libc ctc)) (ll libs))
 	 build:   (if build (ll build) (error "cc-package needs build: argument")))))))
 
 ;; template for 'configure; make; make install;' or 'c;m;mi'
@@ -281,10 +278,6 @@
 		  (ll (lambda (conf)
 			(strip-binaries-script ($triple conf))))))))))
 
-;; temporary hack
-(define (source->package conf src . rest)
-  (apply kupdate (src conf) rest))
-
 (: update-package (vector #!rest * -> vector))
 (define (update-package pkg . args)
   (apply make-package
@@ -352,11 +345,12 @@
 (define make-cc-env (kvector-constructor <cc-env>))
 
 (define make-cc-toolchain
-  (kvector-constructor
-   <cc-toolchain>
-   tools: '() (list-of (disjoin procedure? vector?))
-   libc:  '() (list-of (disjoin procedure? vector?))
-   env:   #f  cc-env?))
+  (let ((inputs? (list-of (disjoin procedure? artifact? meta-package?))))
+    (kvector-constructor
+     <cc-toolchain>
+     tools: '() inputs?
+     libc:  '() inputs?
+     env:   #f  cc-env?)))
 
 (: config? (* -> boolean))
 (define config? (kvector-predicate <config>))
@@ -376,6 +370,15 @@
 (: $cc-env (vector --> vector))
 (define $cc-env (o cc-toolchain-env $cc-toolchain))
 
+(define (build-getter kw)
+  (let ((get (kvector-getter <cc-env> kw)))
+    (lambda (_)
+      (get (cc-toolchain-env ($native-toolchain (build-config)))))))
+
+(define $build-CC (build-getter CC:))
+(define $build-LD (build-getter LD:))
+(define $build-CFLAGS (build-getter CFLAGS:))
+
 ;; sort of a hack to keep a circular dependency
 ;; between base.scm and package.scm from creeping in:
 ;; have package.scm declare the 'build-config'
@@ -384,11 +387,7 @@
 (: build-triple (-> symbol))
 (define (build-triple) ($triple (build-config)))
 (define ($build-triple conf) (build-triple))
-
-(define (+cross conf normal extra)
-  (if (eq? (build-triple) ($triple conf))
-      normal
-      (append extra normal)))
+(define ($cross-compile conf) (conc ($triple conf) "-"))
 
 (: make-config (#!rest * -> vector))
 (define make-config (kvector-constructor <config>))

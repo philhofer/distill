@@ -3,6 +3,7 @@
   (only (chicken base) unless error)
   (only (chicken string) conc)
   (distill kvector)
+  (distill filepath)
   (distill base)
   (distill plan)
   (distill service)
@@ -37,7 +38,6 @@
     "mcbin"
     "7OANoghNx5M20pf41I4ByZ7rYc_umDft5VJkcYjyUk0="
     uboot-env
-    '()
     "run bootcmd"))
 
 ;; TODO: reverse-engineer this.
@@ -45,6 +45,8 @@
 ;; This parser for these images in ATF
 ;; is at plat/marvell/common/mss/mss_scp_bootloader.c,
 ;; and they *look* like thumb(2?) binaries for a Cortex-M3
+;; (there are apparently some coprocessors running on-chip,
+;; but the documentation appears to be gated by an NDA)
 (define marvell-scp-bl2-blob
   (remote-file
     "https://github.com/MarvellEmbeddedProcessors/binaries-marvell/raw/binaries-marvell-armada-18.12/mrvl_scp_bl2.img"
@@ -64,7 +66,7 @@
       "const char *mv_ddr_version_string = \"mv_ddr-devel-18.08.0-distill\";\n")))
 
 ;; fix an uninitialized data warning in mv_ddr4_training_leveling.c
-;; and do NOT generate mv_ddr_build_message.c
+;; and do NOT generate mv_ddr_build_message.c (it embeds a timestamp)
 (define mv-ddr-fixup #<<EOF
 --- a/drivers/marvell/mv_ddr/Makefile
 +++ b/drivers/marvell/mv_ddr/Makefile
@@ -92,9 +94,9 @@
 
 EOF
 )
-;; various fixups; the first is that busybox truncate(1) doesn't support '%size'
-;; and the second is that marvell.mk has a weird non-PHONY clean rule
-;; that is invoked on every build...
+
+;; busybox truncate(1) doesn't support %size arguments,
+;; and bl1.bin is always under 128kB anyhow
 (define atf-truncate-fixup #<<EOF
 --- a/plat/marvell/a8k/common/a8k_common.mk
 +++ b/plat/marvell/a8k/common/a8k_common.mk
@@ -111,71 +113,84 @@ EOF
 )
 
 (define atf-mcbin
-  (let* ((ver '2.2)
-         (src (remote-archive
-                (conc "https://github.com/ARM-software/arm-trusted-firmware/archive/v" ver ".tar.gz")
-                "Pxwp8bIs5lmYYmedB8SjKH-3bLNV5_1b0TKdAZCGWm4="))
+  ;; it took some serious yak-shaving to get this to build
+  ;; correctly and reproducibly... here's what's going on:
+  ;;
+  ;; - the a80x0 hardware needs out-of-tree DRAM-training code
+  ;;   to be vendored into the drivers/marvell directory
+  ;; - the marvell makefiles are super busted: parallel builds
+  ;;   fail (due to broken prerequisites that I have not had the
+  ;;   patience to track down) and there are strange superfluous
+  ;;   rules like a non-PHONY 'clean' rule that runs on every invocation
+  ;; - there's a blob with firmware for the a80x0 coprocessors
+  ;;   that needs to be part of the build; I have not had time
+  ;;   to reverse-engineer them (but they appear to be thumb-mode
+  ;;   code for cortex-M3 cores, and the license indicates that
+  ;;   the code is derived from FreeRTOS)
+  ;;
+  (let* ((name "arm-trusted-firmware")
+	 (ver  "2.2")
          (mv-ddr-ver 'mv_ddr-armada-atf-mainline)
          (mv-ddr-src (remote-archive
                        ;; TODO: this is not guaranteed to be a stable tarball,
                        ;; but marvell has all but abandoned this code...
                        (conc "https://github.com/MarvellEmbeddedProcessors/mv-ddr-marvell/archive/" mv-ddr-ver ".tar.gz")
                        "nV3OhnbmGNAy4JQz60aYjucT1SrMuoVHppiYbyd40zI="))
-         (patches    (patch* atf-truncate-fixup mv-ddr-fixup)))
-    (lambda (conf)
-      (unless (eq? ($arch conf) 'aarch64)
-        (error "atf-mcbin is for aarch64 targets"))
-      (make-package
-        raw-output: "/boot/flash-image.bin"
-        label:  (conc "atf-" ver "-mcbin")
-        src:    (append (list src mv-ddr-src mv-ddr-localversion marvell-scp-bl2-blob)
-                        patches)
-        tools:  (cons libressl (cc-for-target conf #t))
-        inputs: (list uboot-mcbin)
-        build:  (let ((mflags `(V=1
-                                 SCP_BL2=/src/mrvl_scp_bl2.img
-                                 PLAT=a80x0_mcbin
-                                 ,(conc "BL33=" ($sysroot conf) "/boot/u-boot.bin")))
-                      (bflags `(V=1 ,@(splat cc-env/for-kbuild HOSTCC: HOSTLD:)
-                                    ,(conc "HOSTCCFLAGS=" (spaced (kref cc-env/for-kbuild HOSTCFLAGS:))))))
-                  `((cd ,(conc 'arm-trusted-firmware- ver))
-                    (unexport MAKEFLAGS) ;; parallel build is busted
-                    (export CROSS_COMPILE ,(conc ($triple conf) "-"))
-                    (if ((mkdir drivers/marvell/mv_ddr)))
-                    ;; copy mv-ddr-marvell into the ATF source tree;
-                    ;; the marvell makefiles expect it to be here
-                    (if ((elglob files ,(conc "/mv-ddr-marvell-" mv-ddr-ver "/*"))
-                         (cp -r $files drivers/marvell/mv_ddr)))
-                    ;; for mv-ddr-localversion:
-                    (if ((cp /src/mv_ddr_build_message.c drivers/marvell/mv_ddr/)))
-                    ,@(script-apply-patches patches)
-                    ;; do not force a clean:
-                    (if ((sed "-i" -e "/^mrvl_clean:/,+3d" plat/marvell/marvell.mk)))
-                    (if ((sed "-i" -e "s/mrvl_clean//g" plat/marvell/marvell.mk)))
-                    ;; the top-level makefile doesn't invoke these sub-makes
-                    ;; correctly, so invoke them ahead of time with
-                    ;; the right overrides...
-                    (if ((make ,@bflags
-                               ,(conc "LDLIBS=" (spaced '(-static-pie -lcrypto)))
-                               -C tools/fiptool all)))
-                    (if ((make ,@bflags
-                               ,(conc "DOIMAGE_LD_FLAGS=" (spaced '(-static-pie)))
-                               -C tools/marvell/doimage all)))
-                    (if ((make ,@mflags "SCP_BL2=/src/mrvl_scp_bl2.img" all fip)))
-                    (install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin)))))))
+         (patches    (patch* atf-truncate-fixup mv-ddr-fixup))
+	 (dir        (string-append "/" name "-" ver))
+	 ;; symlink the mv_ddr source into the atf source tree:
+	 (mv-ddr-lnk (interned-symlink
+		      (filepath-join dir "drivers/marvell/mv_ddr")
+		      (conc "/mv-ddr-marvell-" mv-ddr-ver))))
+    (cc-package
+     name ver
+     "https://github.com/ARM-software/$name/archive/v$version.tar.gz"
+     "Pxwp8bIs5lmYYmedB8SjKH-3bLNV5_1b0TKdAZCGWm4="
+     raw-output: "/boot/flash-image.bin"
+     use-native-cc: #t
+     patches: patches
+     extra-src: (list mv-ddr-src
+		      mv-ddr-lnk
+		      mv-ddr-localversion
+		      marvell-scp-bl2-blob)
+     env:       '((MAKEFLAGS . "")) ;; do not inherit jobserver; parallel build is broken
+     tools:     (list libressl)
+     libs:      (list uboot-mcbin)
+     no-libc:   #t ; freestanding target
+     build:   (let ((mflags `(V=1 (CROSS_COMPILE= ,$cross-compile)
+				  SCP_BL2=/src/mrvl_scp_bl2.img
+				  PLAT=a80x0_mcbin
+				  (BL33= ,$sysroot /boot/u-boot.bin)))
+		    (bflags `(V=1 (CROSS_COMPILE= ,$cross-compile)
+				  (HOSTCC= ,$build-CC)
+				  (HOSTLD= ,$build-LD)
+				  (HOSTCCFLAGS= ,$build-CFLAGS))))
+		   (cmd*
+		     '(cp /src/mv_ddr_build_message.c drivers/marvell/mv_ddr/)
+		     ;; do not force a clean on every make invocation:
+		     '(sed "-i" -e "/^mrvl_clean:/,+3d" plat/marvell/marvell.mk)
+		     '(sed "-i" -e "s/mrvl_clean//g" plat/marvell/marvell.mk)
+		     ;; the top-level makefile doesn't invoke these sub-makes
+		     ;; correctly, so invoke them ahead of time with
+		     ;; the right overrides...
+		     `(make ,@bflags "LDLIBS=-static-pie -lcrypto"
+			    -C tools/fiptool all)
+		     `(make ,@bflags "DOIMAGE_LD_FLAGS=-static-pie"
+			    -C tools/marvell/doimage all)
+		     `(make ,@mflags "SCP_BL2=/src/mrvl_scp_bl2.img" all fip)
+		     '(install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin))))))
 
 (define (mcbin-sdimage-platform conf kernel)
   (lambda (rootpkgs)
     (uniq-setparts-script
-      "mcbin-sdimage-"
-      ((config->builder conf)
-       atf-mcbin               ;; mmcblk1p1
-       (ext2fs "mcbin/boot"
-          "14bcce9f-5096-4fa8-bdb6-51b0b12823f1"
-          "1G"
-          ; contents:
-          kernel)              ;; mmcblk1p2
-       (squashfs rootpkgs))))) ;; mmcblk1p3
+     "mcbin-sdimage-"
+     ((config->builder conf)
+      atf-mcbin               ;; mmcblk1p1
+      (ext2fs "mcbin/boot"
+	      "14bcce9f-5096-4fa8-bdb6-51b0b12823f1"
+	      "1G"
+	      kernel)         ;; mmcblk1p2
+      (squashfs rootpkgs))))) ;; mmcblk1p3
 
 ;; mcbin-sdimage is a platform for the Solid Run MacchiatoBin
 ;; that produces a script for creating a bootable SD card image
@@ -193,7 +208,7 @@ EOF
 			   ;; flag for any compiler/architecture except aarch64,
 			   ;; so builds will fail if this flag leaks into the
 			   ;; wrong CFLAGS arguments
-			   extra-cflags: '(-mcpu=cortex-a72))
+			   extra-cflags: '(-mcpu=cortex-a72 -ffunction-sections "-Wl,--gc-sections"))
     (linux/config-static "mcbin" "7T9BGGKMOBpAtgHatOv8gRA2Nf92jDWptxrJLV9T3ms="
                          dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
 
