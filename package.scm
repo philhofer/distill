@@ -8,20 +8,6 @@
    ((and ppc64 little-endian) 'ppc64le)
    ((and ppc64 big-endian) 'ppc64)))
 
-(: <package> vector)
-(define <package>
-  (make-kvector-type
-   label:
-   src:
-   tools:
-   inputs:
-   prebuilt:
-   patches:
-   build:
-   dir:
-   env:
-   raw-output:))
-
 (define <meta-package> (list 'meta-package))
 
 ;; make-metapackage is an alternative for
@@ -39,28 +25,22 @@
 (define-memoized (meta-expand mp conf)
   ((vector-ref mp 1) conf))
 
-(: package? (* -> boolean))
-(define package? (kvector-predicate <package>))
+(define inputs? (list-of (disjoin procedure? meta-package? artifact?)))
 
-(: make-package (#!rest * -> vector))
-(define make-package
-  (let* ((input?  (disjoin meta-package? procedure? artifact?))
-	 (perhaps (lambda (ok?)
-		   (lambda (in)
-		     (or (not in) (ok? in)))))
-	 (inputs? (list-of input?)))
-    (kvector-constructor
-     <package>
-     label:      #f  string?
-     src:        '() (disjoin artifact? (list-of artifact?))
-     tools:      '() inputs?
-     inputs:     '() inputs?
-     prebuilt:   #f  (perhaps artifact?)
-     patches:    '() (list-of artifact?)
-     build:      #f  list?   ; todo: valid script?
-     dir:        "/" string? ; todo: valid filepath?
-     env:        '() (list-of (disjoin pair? kvector?))
-     raw-output: #f  (perhaps string?))))
+(define-kvector-type
+  <package>
+  make-package
+  package?
+  (package-label    label:   #f  string?)
+  (package-src      src:     '() (disjoin artifact? (list-of artifact?)))
+  (package-tools    tools:   '() inputs?)
+  (package-inputs   inputs:  '() inputs?)
+  (package-prebuilt prebuilt: #f (perhaps artifact?))
+  (package-patches  patches: '() (list-of artifact?))
+  (package-build    build:   #f  list?)
+  (package-dir      dir:     "/" string?)
+  (package-env      env:     '() (list-of (disjoin pair? kvector?)))
+  (package-raw-output raw-output: #f (perhaps string?)))
 
 ;; vargs takes a list of arguments,
 ;; some of which are functions,
@@ -164,16 +144,16 @@
 (define (cc-package
 	 name version urlfmt hash
 	 #!key
-	 (dir #f)       ;; directory override
+	 (dir #f) ;; directory override
 	 (build #f)
-	 (prebuilt #f)  ;; prebuilt function
-	 (no-libc #f)   ;; do not bring in a libc implicitly
+	 (prebuilt #f) ;; prebuilt function
+	 (no-libc #f)	 ;; do not bring in a libc implicitly
 	 (use-native-cc #f)
 	 (raw-output #f)
-	 (patches '())  ;; patches to apply
-	 (env '())      ;; extra environment
-	 (libs '())     ;; extra libraries beyond libc
-	 (tools '())    ;; extra tools beyond a C toolchain
+	 (patches '()) ;; patches to apply
+	 (env '())	 ;; extra environment
+	 (libs '())	 ;; extra libraries beyond libc
+	 (tools '())	 ;; extra tools beyond a C toolchain
 	 (extra-src '()))
   (let* ((url (url-translate urlfmt name version))
 	 (src (remote-archive url hash)))
@@ -204,10 +184,10 @@
 (define (cmmi-package
 	 name version urlfmt hash
 	 #!key
-	 (dir #f)       ;; directory override
-	 (prebuilt #f)  ;; prebuilt function
-	 (patches '())  ;; patches to apply
-	 (env '())      ;; extra environment
+	 (dir #f)    ;; directory override
+	 (prebuilt #f) ;; prebuilt function
+	 (patches '()) ;; patches to apply
+	 (env '())	 ;; extra environment
 
 	 ;; override-configure, if not #f, takes
 	 ;; precedence over the default configure options;
@@ -219,11 +199,11 @@
 	 (override-install #f)
 	 (out-of-tree #f)
 
-	 (libs '())     ;; extra libraries beyond libc
-	 (tools '())    ;; extra tools beyond a C toolchain
-	 (extra-src '());; extra source
-	 (prepare '())  ;; a place to put sed chicanery, etc.
-	 (cleanup '())  ;; a place to put extra install tweaking
+	 (libs '())	 ;; extra libraries beyond libc
+	 (tools '())	 ;; extra tools beyond a C toolchain
+	 (extra-src '()) ;; extra source
+	 (prepare '())   ;; a place to put sed chicanery, etc.
+	 (cleanup '())   ;; a place to put extra install tweaking
 	 (native-cc #f) ;; should be one of the cc-env/for-xxx functions if not #f
 	 (extra-cflags '()))
   (let* ((default-configure (vargs
@@ -281,45 +261,9 @@
 (: update-package (vector #!rest * -> vector))
 (define (update-package pkg . args)
   (apply make-package
-         (append
+	 (append
 	  (kvector->list pkg)
 	  args)))
-
-(: package-label (vector --> string))
-(define package-label (kvector-getter <package> label:))
-(: package-tools (vector --> (list-of procedure)))
-(define package-tools (kvector-getter <package> tools:))
-(: package-src (vector --> *))
-(define package-src (kvector-getter <package> src:))
-(: package-inputs (vector --> (list-of procedure)))
-(define package-inputs (kvector-getter <package> inputs:))
-(: package-prebuilt (vector --> (or vector false)))
-(define package-prebuilt (kvector-getter <package> prebuilt:))
-(: package-build (vector --> list))
-(define package-build (kvector-getter <package> build:))
-(: package-raw-output (vector --> (or string false)))
-(define package-raw-output (kvector-getter <package> raw-output:))
-(: package-dir (vector --> (or string false)))
-(define package-dir (kvector-getter <package> dir:))
-(: package-patches (vector --> list))
-(define package-patches (kvector-getter <package> patches:))
-(: package-env (vector --> list))
-(define package-env (kvector-getter <package> env:))
-
-(: <config> vector)
-(define <config>
-  (make-kvector-type
-   arch:
-   triple:
-   cc-toolchain:
-   native-cc-toolchain:))
-
-(: <cc-toolchain> vector)
-(define <cc-toolchain>
-  (make-kvector-type
-   tools:
-   libc:
-   env:))
 
 (: <cc-env> vector)
 (define <cc-env>
@@ -344,30 +288,23 @@
 (define cc-env? (kvector-predicate <cc-env>))
 (define make-cc-env (kvector-constructor <cc-env>))
 
-(define make-cc-toolchain
-  (let ((inputs? (list-of (disjoin procedure? artifact? meta-package?))))
-    (kvector-constructor
-     <cc-toolchain>
-     tools: '() inputs?
-     libc:  '() inputs?
-     env:   #f  cc-env?)))
+(define-kvector-type
+  <cc-toolchain>
+  make-cc-toolchain
+  cc-toolchain?
+  (cc-toolchain-tools tools: '() inputs?)
+  (cc-toolchain-libc  libc:  '() inputs?)
+  (cc-toolchain-env   env:   #f  cc-env?))
 
-(: config? (* -> boolean))
-(define config? (kvector-predicate <config>))
+(define-kvector-type
+  <config>
+  make-config
+  config?
+  ($arch         arch:         #f symbol?)
+  ($triple       triple:       #f symbol?)
+  ($cc-toolchain cc-toolchain: #f cc-toolchain?)
+  ($native-toolchain native-cc-toolchain: #f cc-toolchain?))
 
-(: $arch (vector --> symbol))
-(define $arch    (kvector-getter <config> arch:))
-(: $triple (vector --> symbol))
-(define $triple  (kvector-getter <config> triple:))
-(: $cc-toolchain (vector --> vector))
-(define $cc-toolchain (kvector-getter <config> cc-toolchain:))
-(define $native-toolchain (kvector-getter <config> native-cc-toolchain:))
-(: cc-toolchain-env (vector --> vector))
-(define cc-toolchain-env (kvector-getter <cc-toolchain> env:))
-(define cc-toolchain-tools (kvector-getter <cc-toolchain> tools:))
-(define cc-toolchain-libc (kvector-getter <cc-toolchain> libc:))
-
-(: $cc-env (vector --> vector))
 (define $cc-env (o cc-toolchain-env $cc-toolchain))
 
 (define (build-getter kw)
@@ -388,9 +325,6 @@
 (define (build-triple) ($triple (build-config)))
 (define ($build-triple conf) (build-triple))
 (define ($cross-compile conf) (conc ($triple conf) "-"))
-
-(: make-config (#!rest * -> vector))
-(define make-config (kvector-constructor <config>))
 
 (define (triple->sysroot trip)
   (string-append "/sysroot/" (symbol->string trip)))
@@ -680,13 +614,13 @@
   (let loop ((in  lst)
 	     (exp '()))
     (if (null? in)
-        (if (null? exp) '() `((exportall ,(reverse exp))))
+	(if (null? exp) '() `((exportall ,(reverse exp))))
 	(let ((h (car in)))
 	  (cond
 	   ((pair? h)
-            (loop (cdr in) (cons (list (car h) (spaced (cdr h))) exp)))
+	    (loop (cdr in) (cons (list (car h) (spaced (cdr h))) exp)))
 	   ((kvector? h)
-            (loop (cdr in) (kvector-foldl
+	    (loop (cdr in) (kvector-foldl
 			    (car in)
 			    (lambda (k v lst)
 			      (if v (cons (list (##sys#symbol->string k) (spaced v)) lst) lst))

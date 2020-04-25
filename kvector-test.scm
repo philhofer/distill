@@ -7,11 +7,11 @@
 (include "test-helpers.scm")
 
 (define ktd (make-kvector-type
-              first:
-              second:
-              third:
-              fourth:
-              fifth:))
+	     first:
+	     second:
+	     third:
+	     fourth:
+	     fifth:))
 
 (define my-kv? (kvector-predicate ktd))
 (define make-kv (kvector-constructor ktd))
@@ -73,11 +73,13 @@
         (thunk)
         #f))))
 
-(define make-kv2 (kvector-constructor
-                   ktd2
-                   string: #f  string?
-                   symbol: #f  symbol?
-                   list:   '() list?))
+(define-kvector-type
+  ktd2
+  make-kv2
+  ktd2?
+  (kv2-string string: #f string?)
+  (kv2-symbol symbol: #f symbol?)
+  (kv2-list   list:   '() list?))
 
 (test eq? #t ((kvector-predicate ktd2)
               (make-kv2

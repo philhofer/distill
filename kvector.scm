@@ -376,24 +376,27 @@
           (error "kvector-setter: bad input type" v)))
       (error "kvector type does not respond to keyword:" kw))))
 
-(define-syntax kreconf
-  (syntax-rules (+= := ?= =>)
-    ((_ "parse" (conf formals* ...))
-     (kupdate conf formals* ...))
-    ((_ "parse" (conf formals* ...) (kw += lst ...) rest* ...)
-     (kreconf "parse" (conf formals* ... kw (append (kref/default conf kw '())
-                                                    lst ...))
-              rest* ...))
-    ((_ "parse" (conf formals* ...) (kw := val) rest* ...)
-     (kreconf "parse" (conf formals* ... kw val)
-              rest* ...))
-    ((_ "parse" (conf formals* ...) (kw ?= val) rest* ...)
-     (kreconf "parse" (conf formals* ...
-                            kw (or (kref* conf kw) val))
-              rest* ...))
-    ((_ "parse" conf (conf formals* ...) (kw => proc) rest* ...)
-     (kreconf "parse" (conf formals* ... kw (proc (kref* old kw)))
-              rest* ...))
-    ((_ conf (kw op arg) ...)
-     (kreconf "parse" (conf) (kw op arg) ...))))
-
+;; syntactic sugar for defining a kvector type
+(define-syntax define-kvector-type
+  (syntax-rules ()
+    ((_ "splat" (head* ...) (form* ...))
+     (head* ... form* ...))
+    ((_ "splat" (head* ...) (form* ...) rest* ...)
+     (define-kvector-type "splat" (head* ... form* ...) rest* ...))
+    ((_ "constructor" make type (kw default pred) ...)
+     (define make
+       (define-kvector-type "splat" (kvector-constructor type) (kw default pred) ...)))
+    ((_ "getters" type (getter kw) ...)
+     (begin
+       (define getter (kvector-getter type kw)) ...))
+    ((_ type make pred? (kw default pred) ...)
+     (begin
+       (define type (make-kvector-type kw ...))
+       (define pred? (kvector-predicate type))
+       (define-kvector-type "constructor" make type (kw default pred) ...)))
+    ((_ type make pred? (getter kw default pred) ...)
+     (begin
+       (define type (make-kvector-type kw ...))
+       (define pred? (kvector-predicate type))
+       (define-kvector-type "constructor" make type (kw default pred) ...)
+       (define-kvector-type "getters" type (getter kw) ...)))))

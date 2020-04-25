@@ -1,64 +1,20 @@
-(define <user>
-  (make-kvector-type
-    name:
-    uid:
-    gid:
-    home:
-    login:))
+(define-kvector-type
+  <user>
+  make-user
+  user?
+  (user-name  name:  #f symbol?)
+  (user-uid   uid:   #f fixnum?)
+  (user-gid   gid:   #f fixnum?)
+  (user-home  home:  "/var/empty" string?)
+  (user-login login: "/sbin/nologin" string?))
 
-(define valid-user?
-  (kvector/c
-    <user>
-    name:  symbol?
-    uid:   fixnum?
-    gid:   fixnum?
-    home:  string?
-    login: string?))
-
-(define make-user
-  (let ((make (kvector-constructor <user>)))
-    (lambda args
-      (conform
-        valid-user?
-        (apply make args)))))
-
-(: user-name (vector --> symbol))
-(define user-name  (kvector-getter <user> name:))
-(: user-uid (vector --> fixnum))
-(define user-uid   (kvector-getter <user> uid:))
-(: user-gid (vector -> fixnum))
-(define user-gid   (kvector-getter <user> gid:))
-(: user-homem (vector -> string))
-(define user-home  (kvector-getter <user> home:))
-(: user-login (vector -> string))
-(define user-login (kvector-getter <user> login:))
-
-(define <group>
-  (make-kvector-type
-    name:
-    gid:
-    users:))
-
-(define valid-group?
-  (kvector/c
-    <group>
-    name:  symbol?
-    gid:   fixnum?
-    users: (list-of symbol?)))
-
-(define make-group
-  (let ((make (kvector-constructor <group>)))
-    (lambda args
-      (conform
-        valid-group?
-        (apply make args)))))
-
-(: group-name (vector --> symbol))
-(define group-name  (kvector-getter <group> name:))
-(: group-gid (vector --> fixnum))
-(define group-gid   (kvector-getter <group> gid:))
-(: group-users (vector --> (list-of symbol)))
-(define group-users (kvector-getter <group> users:))
+(define-kvector-type
+  <group>
+  make-group
+  group?
+  (group-name  name:  #f  symbol?)
+  (group-gid   gid:   #f  fixnum?)
+  (group-users users: '() (list-of symbol?)))
 
 (: base-users (list-of vector))
 (define base-users
@@ -78,8 +34,8 @@
 
 (define grp/root
   (make-group
-    name: 'root
-    gid: 0
+    name:  'root
+    gid:   0
     users: '(root)))
 
 (define (adduser name #!key

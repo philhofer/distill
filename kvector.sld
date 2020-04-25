@@ -25,7 +25,8 @@
     kvector-constructor
     kvector-predicate
     kvector-getter
-    kvector-setter)
+    kvector-setter
+    define-kvector-type)
   (import
     scheme
     (srfi 69)

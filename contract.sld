@@ -1,6 +1,7 @@
 (define-library (distill contract)
   (export
     conform
+    perhaps
     and/c
     or/c
     false/c
@@ -18,7 +19,7 @@
     scheme)
   (cond-expand
     (chicken (import
-               (only (chicken base) include error)
+               (only (chicken base) include error conjoin disjoin)
                (chicken type)
                (chicken fixnum))))
   (include "contract.scm"))

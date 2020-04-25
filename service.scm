@@ -1,82 +1,50 @@
-(define <longrun>
-  (make-kvector-type
-    type:
-    run:
-    finish:
-    pipeline-name:
-    nosetsid:
-    max-death-tally:
-    down-signal:
-    timeout-up:
-    timeout-down:
-    timeout-kill:
-    timeout-finish:
-    dependencies:
-    notification-fd:
-    producer-for:
-    consumer-for:))
+(define symbolic?       (perhaps symbol?))
+(define maybe-int?      (perhaps integer?))
+(define maybe-string?   (perhaps string?))
+(define maybe-symbolic? (perhaps symbolic?))
 
-(define symbolic?       (or/c string? symbol?))
-(define maybe-int?      (or/c false/c integer?))
-(define maybe-string?   (or/c false/c string?))
-(define maybe-symbolic? (or/c false/c symbolic?))
+;; note: field names for <longrun>, <oneshot>, and <bundle>
+;; correspond precisely to the file names that s6-rc-compile
+;; expects to be present in a service definition directory
 
-(define longrun*
-  (kvector-constructor
-    <longrun>
-    type:   'longrun (eq?/c 'longrun)
-    run:    #f       list?
-    finish: #f       (or/c false/c list?)
-    pipeline-name:   #f maybe-symbolic?
-    nosetsid:        #f maybe-symbolic?
-    max-death-tally: #f maybe-int?
-    down-signal:     #f maybe-int?
-    timeout-up:      #f maybe-int?
-    timeout-down:    #f maybe-int?
-    timeout-kill:    #f maybe-int?
-    timeout-finish:  #f maybe-int?
-    dependencies:    #f maybe-string?
-    notification-fd: #f maybe-int?
-    producer-for:    #f maybe-symbolic?
-    consumer-for:    #f maybe-symbolic?))
+(define-kvector-type
+  <longrun>
+  longrun*
+  longrun?
+  (type:   'longrun (eq?/c 'longrun))
+  (run:    #f       list?)
+  (finish: #f       (perhaps list?))
+  (pipeline-name:   #f maybe-symbolic?)
+  (nosetsid:        #f maybe-symbolic?)
+  (max-death-tally: #f maybe-int?)
+  (down-signal:     #f maybe-int?)
+  (timeout-up:      #f maybe-int?)
+  (timeout-down:    #f maybe-int?)
+  (timeout-kill:    #f maybe-int?)
+  (timeout-finish:  #f maybe-int?)
+  (dependencies:    #f maybe-string?)
+  (notification-fd: #f maybe-int?)
+  (producer-for:    #f maybe-symbolic?)
+  (consumer-for:    #f maybe-symbolic?))
 
-(define longrun? (kvector-predicate <longrun>))
+(define-kvector-type
+  <oneshot>
+  oneshot*
+  oneshot?
+  (type: 'oneshot (eq?/c 'oneshot))
+  (up:   #f       list?)
+  (down: #f       (perhaps list?))
+  (timeout-up:   #f maybe-int?)
+  (timeout-down: #f maybe-int?)
+  (dependencies: #f maybe-string?))
 
-(define <oneshot>
-  (make-kvector-type
-    type:
-    up:
-    down:
-    timeout-up:
-    timeout-down:
-    dependencies:))
+(define-kvector-type
+  <bundle>
+  %make-bundle
+  bundle?
+  (type: 'bundle (eq?/c 'bundle))
+  (contents: #f string?))
 
-(define oneshot*
-  (kvector-constructor
-    <oneshot>
-    type: 'oneshot (eq?/c 'oneshot)
-    up:   #f       list?
-    down: #f       (or/c false/c list?)
-    timeout-up:   #f maybe-int?
-    timeout-down: #f maybe-int?
-    dependencies: #f maybe-string?))
-
-(define oneshot? (kvector-predicate <oneshot>))
-
-(define <bundle>
-  (make-kvector-type
-    type:
-    contents:))
-
-(: %make-bundle (#!rest * -> vector))
-(define %make-bundle
-  (kvector-constructor
-    <bundle>
-    type: 'bundle (eq?/c 'bundle)
-    contents: #f string?))
-
-(: bundle? (* --> boolean))
-(define bundle? (kvector-predicate <bundle>))
 
 (: bundle* (#!rest vector --> vector))
 (define (bundle* . args)
@@ -125,40 +93,16 @@
           build:  `((if ((mkdir -p "/out/etc/s6-rc")))
                     (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services")))))))
 
-(define <service>
-  (make-kvector-type
-    name:
-    inputs:
-    users:
-    groups:
-    after:
-    spec:))
-
-(define service? (kvector-predicate <service>))
-
-(: service-inputs (vector --> (list-of (or procedure vector))))
-(define service-inputs (kvector-getter <service> inputs:))
-(: service-name (vector --> symbol))
-(define service-name (kvector-getter <service> name:))
-(: service-users (vector --> list))
-(define service-users (kvector-getter <service> users:))
-(: service-groups (vector --> list))
-(define service-groups (kvector-getter <service> groups:))
-(: service-after (vector --> (list-of procedure)))
-(define service-after (kvector-getter <service> after:))
-(: service-spec (vector --> vector))
-(define service-spec (kvector-getter <service> spec:))
-
-(: make-service (#!rest * -> vector))
-(define make-service
-  (kvector-constructor
-    <service>
-    name:   #f  symbol?
-    inputs: '() (list-of (or/c procedure? artifact?))
-    users:  '() (list-of procedure?)
-    groups: '() (list-of procedure?)
-    after:  '() (list-of (or/c procedure? string? symbol?))
-    spec:   #f  spec?))
+(define-kvector-type
+  <service>
+  make-service
+  service?
+  (service-name   name:   #f  symbol?)
+  (service-inputs inputs: '() (list-of (or/c procedure? artifact?)))
+  (service-users  users:  '() (list-of procedure?))
+  (service-groups groups: '() (list-of procedure?))
+  (service-after  after:  '() (list-of (or/c procedure? string? symbol?)))
+  (service-spec   spec:   #f  spec?))
 
 (: update-service (vector #!rest * -> vector))
 (define (update-service svc . args)

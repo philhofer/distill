@@ -24,24 +24,25 @@
   (let ((opts   '(rw nosuid nodev noexec noatime data=ordered))
         (mkopts '()))
     (make-service
-      name:   var-mounted-rw
-      inputs: (list e2fsprogs)
-      after:  (list dev)
-      spec:   (oneshot*
-                up: `((fdmove -c 2 1)
-                      (if ((test -b ,dev)))
-                      ;; TODO: figure out a better way
-                      ;; to determine if this device has actually
-                      ;; been formatted yet...
-                      (if ((if -t -n ((fsck.ext4 -p ,dev)))
-                           (foreground ((echo "fsck didn't work; running mkfs.ext4 on /var ...")))
-                           (mkfs.ext4 ,@mkopts ,dev)))
-                      (mount -t ext4 -o ,(join/s "," (list->seq opts)) ,dev /var))
-                down: `((fdmove -c 2 1)
-                        (foreground ((mount -o "ro,remount,noexec,nosuid" ,dev /var)))
-                        (foreground ((sync)))
-                        (foreground ((umount /var)))
-                        (true))))))
+     name:   var-mounted-rw
+     inputs: (list e2fsprogs)
+     after:  (list dev)
+     spec:   (oneshot*
+	      up: `((fdmove -c 2 1)
+		    (if ((test -b ,dev)))
+		    ;; TODO: figure out a better way
+		    ;; to determine if this device has actually
+		    ;; been formatted yet...
+		    (if ((if -t -n ((fsck.ext4 -p ,dev)))
+			 (foreground ((echo "fsck didn't work; running mkfs.ext4 on /var ...")))
+			 (mkfs.ext4 ,@mkopts ,dev)))
+		    (if ((mount -t ext4 -o ,(join/s "," (list->seq opts)) ,dev /var)))
+		    (ln -sf /var/run /run))
+	      down: `((fdmove -c 2 1)
+		      (foreground ((mount -o "ro,remount,noexec,nosuid" ,dev /var)))
+		      (foreground ((sync)))
+		      (foreground ((umount /var)))
+		      (true))))))
 
 ;; kmsg is a super lightweight syslogd-style service
 ;; that reads logs from /dev/kmsg and stores them in
@@ -52,21 +53,21 @@
         (opts '(t n10 s1000000 "!zstd -c -"))
         (nfd  3))
     (make-service
-      name:   'kmsg
-      inputs: (list zstd)
-      after:  (list var-mounted-rw)
-      spec:   (longrun*
-                notification-fd: nfd
-                run: `((fdmove -c 2 1)
-                       (if ((mkdir -p ,dir)))
-                       (if ((chown -R catchlog:catchlog ,dir)))
-                       (if ((chmod "2700" ,dir)))
-                       ;; strip off timestamps and have s6-log prepend tai64n timestamps instead
-                       (pipeline ((redirfd -r -b 0 /dev/kmsg)
-                                  (s6-setuidgid catchlog)
-                                  (sed -e "s/^[0-9].*-;//g")))
-                       (s6-setuidgid catchlog)
-                       (s6-log -b -d ,nfd -- ,@opts /var/log/services/kmsg))))))
+     name:   'kmsg
+     inputs: (list zstd)
+     after:  (list var-mounted-rw)
+     spec:   (longrun*
+	      notification-fd: nfd
+	      run: `((fdmove -c 2 1)
+		     (if ((mkdir -p ,dir)))
+		     (if ((chown -R catchlog:catchlog ,dir)))
+		     (if ((chmod "2700" ,dir)))
+		     ;; strip off timestamps and have s6-log prepend tai64n timestamps instead
+		     (pipeline ((redirfd -r -b 0 /dev/kmsg)
+				(s6-setuidgid catchlog)
+				(sed -e "s/^[0-9].*-;//g")))
+		     (s6-setuidgid catchlog)
+		     (s6-log -b -d ,nfd -- ,@opts /var/log/services/kmsg))))))
 
 ;; log-services creates a mount at /var
 ;; using "var-dev" and then maps the list

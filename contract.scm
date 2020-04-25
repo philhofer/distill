@@ -10,15 +10,14 @@
 (define true/c  (lambda (arg) arg))
 (define any/c   (lambda (arg) #t))
 
+(define (perhaps otherwise)
+  (lambda (in)
+    (or (not in) (otherwise in))))
+
 ;; or/c takes contract parameters and returns a contract
 ;; that passes when any of its input contracts pass
 (: or/c (#!rest (* -> boolean) -> (* -> boolean)))
-(define (or/c . args)
-  (lambda (arg)
-    (let loop ((args args))
-      (and (not (null? args))
-           (or ((car args) arg)
-               (loop (cdr args)))))))
+(define or/c disjoin)
 
 (: cmp/c ((* 'a -> boolean) 'a -> (* -> boolean)))
 (define (cmp/c cmp val)
@@ -35,12 +34,7 @@
 ;; a contract that passes only when *all* of its
 ;; input contracts pass
 (: and/c (#!rest (* -> boolean) -> (* -> boolean)))
-(define (and/c . args)
-  (lambda (arg)
-    (let loop ((args args))
-      (or (null? args)
-          (and ((car args) arg)
-               (loop (cdr args)))))))
+(define and/c conjoin)
 
 ;; list-of takes a contract parameter and
 ;; returns a contract that passes when it

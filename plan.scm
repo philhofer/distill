@@ -139,54 +139,16 @@
 (define (artifact-path art)
   (filepath-join (artifact-dir) (artifact-hash art)))
 
-;; plan is the lowest-level representation of a "package"
-;; or other build step; it simply connects itself to other
-;; inputs plus a recipe for producing the output
-;;
-;; essentially, packages are "compiled" as
-;; package-lambda -> package -> plan
-;;
-;; or, viewed as code:
-;; (%package->plan host-conf target-conf (package-lambda target-conf))
-;;
-;; the entry point for a plan build is the executable "/build"
-;; with the environment from "/env," keeping in mind that
-;; the environment itself is set with /bin/envfile, so you'll
-;; need at least execline-tools in /bin no matter what
-;;
-;; DO NOT USE SETTERS on this structure; you will invalidate
-;; the saved-* values that are used to reduce the amount
-;; of dependency graph traversal necessary to produce plan input and output hashes
-(define <plan>
-  (make-kvector-type
-    name:
-    inputs:
-    saved-hash:
-    saved-output:
-    raw-output:))
-
-(define plan? (kvector-predicate <plan>))
-
-(define make-plan
-  (kvector-constructor
-    <plan>
-    name:         #f string? ;; TODO: validate name further?
-    inputs:       '() (list-of
-                        (pair-of string? (list-of (or/c artifact? plan?))))
-    saved-hash:   #f false/c
-    saved-output: #f false/c
-    raw-output:   #f (or/c string? false/c)))
-
-(: plan-saved-hash (vector --> (or string false)))
-(define plan-saved-hash (kvector-getter <plan> saved-hash:))
-(: plan-inputs (vector --> (list-of (pair string (list-of vector)))))
-(define plan-inputs (kvector-getter <plan> inputs:))
-(: plan-name (vector --> string))
-(define plan-name (kvector-getter <plan> name:))
-(: plan-saved-output (vector --> (or false vector)))
-(define plan-saved-output (kvector-getter <plan> saved-output:))
-(: plan-raw-output (vector --> (or false string)))
-(define plan-raw-output (kvector-getter <plan> raw-output:))
+(define-kvector-type
+  <plan>
+  make-plan
+  plan?
+  (plan-name   name:   #f  string?)
+  (plan-inputs inputs: '() (list-of
+			    (pair-of string? (list-of (or/c artifact? plan?)))))
+  (plan-saved-hash   saved-hash:   #f false/c)
+  (plan-saved-output saved-output: #f false/c)
+  (plan-raw-output   raw-output:   #f (perhaps string?)))
 
 (define plan-saved-hash-set! (kvector-setter <plan> saved-hash:))
 (define plan-saved-output-set! (kvector-setter <plan> saved-output:))
