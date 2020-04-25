@@ -94,8 +94,8 @@
 	 ;; n.b.: we configure our gcc toolchain --with-sysroot=<sysroot>
 	 ;; so it should automatically use the right one anyway
 	 (sysf   (conc "--sysroot=" (triple->sysroot triple)))
-	 (cflags (cons sysf '(-fPIE -static-pie -pipe)))
-	 (lflags (cons sysf '(-static-pie))))
+	 (lflags (cons sysf '(-static-pie "-Wl,--gc-sections")))
+	 (cflags (append lflags '(-fPIE -ffunction-sections -fdata-sections -pipe))))
     (make-cc-toolchain
      tools: (list (gcc-for-triple triple)
 		  (binutils-for-triple triple)
