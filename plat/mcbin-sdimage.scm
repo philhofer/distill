@@ -95,23 +95,6 @@
 EOF
 )
 
-;; busybox truncate(1) doesn't support %size arguments,
-;; and bl1.bin is always under 128kB anyhow
-(define atf-truncate-fixup #<<EOF
---- a/plat/marvell/a8k/common/a8k_common.mk
-+++ b/plat/marvell/a8k/common/a8k_common.mk
-@@ -113,7 +113,7 @@ include ${BLE_PATH}/ble.mk
- $(eval $(call MAKE_BL,e))
-
- mrvl_flash: ${BUILD_PLAT}/${FIP_NAME} ${DOIMAGETOOL} ${BUILD_PLAT}/ble.bin
--	$(shell truncate -s %128K ${BUILD_PLAT}/bl1.bin)
-+	$(shell truncate -s 128K ${BUILD_PLAT}/bl1.bin)
- 	$(shell cat ${BUILD_PLAT}/bl1.bin ${BUILD_PLAT}/${FIP_NAME} > ${BUILD_PLAT}/${BOOT_IMAGE})
- 	${DOIMAGETOOL} ${DOIMAGE_FLAGS} ${BUILD_PLAT}/${BOOT_IMAGE} ${BUILD_PLAT}/${FLASH_IMAGE}
-
-EOF
-)
-
 (define atf-mcbin
   ;; it took some serious yak-shaving to get this to build
   ;; correctly and reproducibly... here's what's going on:
@@ -136,7 +119,7 @@ EOF
                        ;; but marvell has all but abandoned this code...
                        (conc "https://github.com/MarvellEmbeddedProcessors/mv-ddr-marvell/archive/" mv-ddr-ver ".tar.gz")
                        "nV3OhnbmGNAy4JQz60aYjucT1SrMuoVHppiYbyd40zI="))
-         (patches    (patch* atf-truncate-fixup mv-ddr-fixup))
+         (patches    (patch* mv-ddr-fixup))
 	 (dir        (string-append "/" name "-" ver))
 	 ;; symlink the mv_ddr source into the atf source tree:
 	 (mv-ddr-lnk (interned-symlink
@@ -170,6 +153,8 @@ EOF
 		     ;; do not force a clean on every make invocation:
 		     '(sed "-i" -e "/^mrvl_clean:/,+3d" plat/marvell/marvell.mk)
 		     '(sed "-i" -e "s/mrvl_clean//g" plat/marvell/marvell.mk)
+		     ;; busybox truncate(1) doesn't support '%size' format
+		     '(sed "-i" -e "s/ %128K / 128K /" plat/marvell/a8k/common/a8k_common.mk)
 		     ;; the top-level makefile doesn't invoke these sub-makes
 		     ;; correctly, so invoke them ahead of time with
 		     ;; the right overrides...

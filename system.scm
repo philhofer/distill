@@ -1,26 +1,30 @@
-;; write-dd-script writes an execlineb script
+;; write-setparts-script writes an execlineb script
 ;; that takes the destination device as the first argument
 ;; and dd's each given artifact to the device's partitions
 ;; in sequence
 ;; (#f indicates the partition should be skipped)
 (define (write-setparts-script lst)
-  (write-exexpr
-    `((setparts "${1}" ,@(map
-                           (lambda (x)
-                             (if x (abspath (artifact-path x)) "-"))
-                           lst)))
-    shebang: "#!/bin/execlineb -s1"))
+  (let ((exprs (let loop ((n 1)
+			  (in lst))
+		 (cond
+		  ((null? in) '())
+		  ((not (car in)) (loop (+ n 1) (cdr in)))
+		  (else
+		   (cons
+		    (list (string-append "${1}p" (number->string n 10))
+			  (abspath (artifact-path (car in))))
+		    (loop (+ n 1) (cdr in))))))))
+    (write-exexpr
+     `((setparts (,@exprs))
+       ("$@"))
+     shebang: "#!/bin/execlineb -s1")))
 
-(define <system>
-  (make-kvector-type
-    services:
-    packages:))
-
-(define %make-system
-  (kvector-constructor
-    <system>
-    services: '() (list-of service?)
-    packages: '() (list-of procedure?)))
+(define-kvector-type
+  <system>
+  %make-system
+  system?
+  (system-services services: '() (list-of service?))
+  (system-packages packages: '() list?))
 
 ;; build-system takes a platform and a set of keyword+value arguments
 ;; and runs the platform's build function
@@ -30,26 +34,23 @@
 ;;   packages: an additional list of packages to be installed (optional)
 ;;
 (define build-system
-  (let ((services   (kvector-getter <system> services:))
-        (packages   (kvector-getter <system> packages:)))
-    (letrec ((union/eq?  (lambda (a b)
-                           (cond
-                             ((null? a) b)
-                             ((null? b) a)
-                             (else
-                               (let ((fb (car b)))
-                                 (union/eq?
-                                   (if (memq fb a) a (cons fb a))
-                                   (cdr b))))))))
-      (lambda (plat . args)
-        (let* ((sys  (apply %make-system args))
-               (svcs (services sys))
-               (pkgs (packages sys)))
-          ;; TODO: this is only doing basic deduplication
-          ;; of packages; we should probably figure out
-          ;; how to generate friendlier errors when
-          ;; packages conflict (overlap)
-          (plat (union/eq? (services->packages svcs) pkgs)))))))
+  (letrec ((union/eq?  (lambda (a b)
+			 (cond
+			  ((null? a) b)
+			  ((null? b) a)
+			  (else
+			   (let ((fb (car b)))
+			     (union/eq?
+			      (if (memq fb a) a (cons fb a))
+			      (cdr b))))))))
+    (lambda (plat . args)
+      (let ((sys  (apply %make-system args)))
+	;; TODO: this is only doing basic deduplication
+	;; of packages; we should probably figure out
+	;; how to generate friendlier errors when
+	;; packages conflict (overlap)
+	(plat (union/eq? (services->packages (system-services sys))
+			 (system-packages sys)))))))
 
 ;; uniq-setparts-script produces a uniquely-named setparts script
 (define (uniq-setparts-script prefix parts)

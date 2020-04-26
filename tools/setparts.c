@@ -4,9 +4,9 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <err.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <assert.h>
 #include <linux/fs.h>
 
@@ -18,42 +18,50 @@
 #define SEEK_HOLE 4
 #endif
 
+struct partinfo;
+
 struct partinfo {
-        char *dstname;
-        const char *srcname;
-        off_t dstsz;
-        off_t srcsz;
-        int dstfd;
-        int srcfd;
+    struct partinfo *next;
+    int   dstfd;
+    int   srcfd;
+    off_t copy;
 };
+
+const char *usagestr = \
+    "usage: setparts { part contents ... } prog ...\n" \
+    "    setparts copies data from 'contents' into 'part'\n" \
+    "    for each of the named part + contents pairs, taking care\n" \
+    "    not to copy holes in 'contents,' and finally exec-ing into 'prog'\n" \
+    "    for example:\n" \
+    "    # execlineb -c 'setparts { /dev/sda1 /boot/efi.img /dev/sda2 /path/to/rootfs.img } echo done!'\n";
 
 static void
 usage(void)
 {
-        dprintf(2, "usage: setparts <disk> <parts>...\n");
-        _exit(1);
+    dprintf(2, usagestr);
+    _exit(1);
 }
 
 static void
 copy_range(int dstfd, int srcfd, off_t off, off_t end, char *buf, size_t bufsz)
 {
-        ssize_t rc;
-        off_t width;
-        assert(end >= off);
+    ssize_t rc;
+    off_t width;
+    assert(end >= off);
 
-        width = end - off;
-        while (off < end) {
-                rc = pread(srcfd, buf, width < bufsz ? width : bufsz, off);
-                if (rc < 0)
-                        err(1, "pread(%d, ...)", srcfd);
-                if (rc == 0)
-                        errx(1, "unexpected EOF");
-                rc = pwrite(dstfd, buf, rc, off);
-                if (rc < 0)
-                        err(1, "pwrite(%d, ...)", dstfd);
-                off += rc;
-                width = end - off;
-        }
+    width = end - off;
+    while (off < end) {
+	rc = pread(srcfd, buf, width < bufsz ? width : bufsz, off);
+	if (rc < 0)
+	    err(1, "pread(%d, ...)", srcfd);
+	if (rc == 0)
+	    errx(1, "unexpected EOF");
+	rc = pwrite(dstfd, buf, rc, off);
+	if (rc < 0)
+	    err(1, "pwrite(%d, ...)", dstfd);
+	off += rc;
+	width = end - off;
+    }
 }
 
 static void
@@ -79,58 +87,81 @@ fdcopy(int dstfd, int srcfd, off_t bytes)
                 err(1, "fsync(%d)", dstfd);
 }
 
-int
-main(int argc, const char **argv)
+off_t
+getsize(int fd)
 {
-        const char *disk;
-        struct partinfo *parts;
-        const char **partnames;
-        struct stat st;
-        int nparts;
+    struct stat st;
+    off_t out = 0;
 
-        if (argc < 3)
-                usage();
+    if (fstat(fd, &st) == 0)
+	out = st.st_size;
+    if (!out && st.st_rdev)
+	out = ioctl(fd, BLKGETSIZE64, &out) == 0 ? out : 0;
+    return out;
+}
 
-        disk = argv[1];
-        partnames = argv+2;
-        nparts = argc-2;
+int
+main(int argc, char * const* argv)
+{
+    struct partinfo *head, *tail, *part;
+    const char *partname;
+    const char *contents;
+    off_t srcsz, dstsz;
+    int srcfd, dstfd;
 
-        /* TODO: allow custom partition naming?
-         * some mtd and emmc schemes do not use
-         * the typical <dev>p<part> formatting... */
-        parts = calloc(sizeof(struct partinfo), nparts);
-        assert(parts);
-        for (int i=0; i<nparts; i++) {
-                asprintf(&parts[i].dstname, "%sp%d", disk, i+1);
-                parts[i].srcname = partnames[i];
-        }
+    argc--; argv++;
+    if (argc <= 0)
+	usage();
 
-        for (int i=0; i<nparts; i++) {
-                if (parts[i].dstname == NULL)
-                        errx(1, "out of memory");
-                if (strcmp(parts[i].srcname, "-") == 0)
-                        continue;
-                if ((parts[i].dstfd = open(parts[i].dstname, O_WRONLY)) < 0)
-                        err(1, "open %s", parts[i].dstname);
-                if ((parts[i].srcfd = open(parts[i].srcname, O_RDONLY)) < 0)
-                        err(1, "open %s", parts[i].srcname);
-                if (fstat(parts[i].dstfd, &st) < 0)
-                        err(1, "stat %s", parts[i].dstname);
-                parts[i].dstsz = st.st_size;
-                if (parts[i].dstsz == 0)
-                        ioctl(parts[i].dstfd, BLKGETSIZE64, &parts[i].dstsz);
+    head = tail = NULL;
+    while (argc && strcmp(argv[0], "")) {
+	if (argc < 2)
+	    usage();
+	partname = *argv++;
+	contents = *argv++;
+	argc -= 2;
+	if (*partname++ != ' ' || *contents++ != ' ')
+	    usage();
+	if ((dstfd = open(partname, O_WRONLY|O_CLOEXEC)) < 0)
+	    err(1, "open(%s)", partname);
+	if ((srcfd = open(contents, O_RDONLY|O_CLOEXEC)) < 0)
+	    err(1, "open(%s)", contents);
+	dstsz = getsize(dstfd);
+	srcsz = getsize(srcfd);
 
-                if (fstat(parts[i].srcfd, &st) < 0)
-                        err(1, "stat %s", parts[i].srcname);
-                parts[i].srcsz = st.st_size;
+	if (dstsz < srcsz || !dstsz)
+	    err(1, "%s doesn't fit in %s", contents, partname);
+	if (srcsz) {
+	    part = calloc(1, sizeof(struct partinfo));
+	    part->srcfd = srcfd;
+	    part->dstfd = dstfd;
+	    part->copy = srcsz;
+	    if (tail)
+		tail->next = part;
+	    else
+		head = part;
+	    tail = part;
+	} else {
+	    dprintf(3, "setparts: warning: %s is zero-sized (skipping)\n", contents);
+	    close(dstfd);
+	    close(srcfd);
+	}
+    }
+    if (!argc-- || strcmp(*argv++, ""))
+	usage();
 
-                if (parts[i].srcsz > parts[i].dstsz)
-                        errx(1, "part %d: file %s won't fit in %llu", i+1, parts[i].srcname, (unsigned long long)parts[i].dstsz);
-        }
+    /* now that we've parsed the arguments, do the work
+     * (just leak the partinfo mem; we're about to exit) */
+    while (head) {
+	fdcopy(head->dstfd, head->srcfd, head->copy);
+	close(head->dstfd);
+	close(head->srcfd);
+	head = head->next;
+    }
 
-        /* now that we've done some cursory validation,
-         * do the actual copying */
-        for (int i=0; i<nparts; i++)
-                if (parts[i].srcsz) fdcopy(parts[i].dstfd, parts[i].srcfd, parts[i].srcsz);
-        return 0;
+    if (!argc)
+	return 0;
+    execvp(argv[0], argv);
+    err(1, "execve");
+    return 1;
 }

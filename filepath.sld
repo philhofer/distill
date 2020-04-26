@@ -1,5 +1,7 @@
 (define-library (distill filepath)
   (export
+    string-prefix?
+    string-suffix?
     filepath-join
     dirname
     basename

@@ -17,6 +17,22 @@
         ((char=? (string-ref str i) #\/) (##sys#substring str 0 i))
         (else (loop (- i 1)))))))
 
+;; see srfi 13
+(: string-prefix? (string string --> boolean))
+(define (string-prefix? pre str)
+  (let ((plen (string-length pre))
+	(slen (string-length str)))
+    (and (<= plen slen)
+	 (string=? pre (##sys#substring str 0 plen)))))
+
+;; see srfi 13
+(: string-suffix? (string string --> boolean))
+(define (string-suffix? suff str)
+  (let ((elen (string-length suff))
+	(slen (string-length str)))
+    (and (<= elen slen)
+	 (string=? suff (##sys#substring str (- slen elen) slen)))))
+
 (: basename (string --> string))
 (define (basename str)
   (let ((end (string-length str)))
@@ -25,13 +41,6 @@
         ((< i 0) str)
         ((char=? (string-ref str i) #\/) (##sys#substring str (+ i 1) end))
         (else (loop (- i 1)))))))
-
-(define (suffixed? str suf)
-  (and-let* ((slen   (string-length str))
-             (suflen (string-length suf))
-             (_      (>= slen suflen))
-             (tail   (##sys#substring str (- slen suflen) slen)))
-    (string=? suf tail)))
 
 ;; core filepath normalization routine
 ;;
@@ -49,7 +58,7 @@
                           ((or (string=? part "") (string=? part "."))
                            out)
                           ((string=? part "..")
-                           (if (suffixed? out "..")
+                           (if (string-suffix? ".." out)
                              (string-append out "/..")
                              (dirname out)))
                           ((string=? out "/") (string-append out part))

@@ -97,15 +97,15 @@
           (cons old lst)
           (let ((ospec  (service-spec old))
                 (oafter (service-after old))
-                (lname  (conc (service-name old) "-log"))
+                (lname  (string->symbol (conc (service-name old) "-log")))
                 (dir    (logdir old)))
             (cons
               (make-service
                 name:   lname
                 inputs: log-inputs
-                after: (list var-mounted-rw)
-                spec:  (longrun*
-                         consumer-for: (service-name old)
+                after:  (list var-mounted-rw)
+                spec:   (longrun*
+			 consumer-for: (service-name old)
                          dependencies: (conc var-mounted-rw "\n")
                          notification-fd: 3
                          run: `((if ((mkdir -p ,dir)))
@@ -117,7 +117,9 @@
               (cons
                 (update-service
                   old
-                  after: (cons var-mounted-rw oafter)
+                  after: (if (memq var-mounted-rw oafter)
+			     oafter
+			     (cons var-mounted-rw oafter))
                   spec:  (kupdate ospec producer-for: lname))
                 lst)))))
       (list (var-mount var-dev)

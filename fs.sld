@@ -3,7 +3,8 @@
     kmsg
     swapon
     var-mount
-    var-mounted-rw)
+    var-mounted-rw
+    var-log-services)
   (import
     scheme
     (srfi 88)
