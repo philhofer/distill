@@ -14,23 +14,23 @@
     (let loop ((i end))
       (cond
         ((<= i 0) (if (eqv? (string-ref str 0) #\/) "/" "."))
-        ((char=? (string-ref str i) #\/) (substring/shared str 0 i))
+        ((char=? (string-ref str i) #\/) (##sys#substring str 0 i))
         (else (loop (- i 1)))))))
 
 (: basename (string --> string))
 (define (basename str)
-  (let ((end (- (string-length str) 1)))
-    (let loop ((i end))
+  (let ((end (string-length str)))
+    (let loop ((i (- end 1)))
       (cond
         ((< i 0) str)
-        ((char=? (string-ref str i) #\/) (substring/shared str (+ i 1)))
+        ((char=? (string-ref str i) #\/) (##sys#substring str (+ i 1) end))
         (else (loop (- i 1)))))))
 
 (define (suffixed? str suf)
   (and-let* ((slen   (string-length str))
              (suflen (string-length suf))
              (_      (>= slen suflen))
-             (tail   (substring/shared str (- slen suflen) slen)))
+             (tail   (##sys#substring str (- slen suflen) slen)))
     (string=? suf tail)))
 
 ;; core filepath normalization routine

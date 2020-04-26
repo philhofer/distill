@@ -22,8 +22,7 @@
   (import
     scheme
     (srfi 4)
-    (srfi 11)
-    (srfi 13))
+    (srfi 11))
   (cond-expand
     (chicken (import
                (only (chicken base) include error)

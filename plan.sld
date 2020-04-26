@@ -56,7 +56,6 @@
     (srfi 6)  ;; string ports
     (srfi 11) ;; let-values
     (srfi 12)
-    (only (srfi 13) string-prefix? string-suffix? string< substring/shared string-any)
     (srfi 26) ;; cut, cute
     (srfi 39) ;; parameters
     (srfi 69) ;; hash tables

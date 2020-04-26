@@ -7,7 +7,6 @@
   (import
     scheme
     (srfi 2)
-    (srfi 13)
     (srfi 26) ;; cut
     (distill sequence))
   (cond-expand

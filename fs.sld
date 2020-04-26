@@ -6,7 +6,6 @@
     var-mounted-rw)
   (import
     scheme
-    (only (srfi 13) substring/shared)
     (srfi 88)
     (distill plan)
     (distill base)

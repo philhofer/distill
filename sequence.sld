@@ -29,8 +29,7 @@
     ->lines+spaces)
   (import
     scheme
-    (srfi 69)
-    (only (srfi 13) substring/shared))
+    (srfi 69))
   (cond-expand
     (chicken (import
                (chicken type)

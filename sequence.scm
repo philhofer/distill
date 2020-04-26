@@ -233,7 +233,7 @@
         (if (>= i end)
           v
           (let ((seg (scan i)))
-            (loop (+ seg 1) (kons (substring/shared str i seg) v))))))))
+            (loop (+ seg 1) (kons (##sys#substring str i seg) v))))))))
 
 (define empty-seq (lambda (kons seed) seed))
 

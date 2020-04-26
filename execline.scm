@@ -7,7 +7,7 @@
     ;; number of tabs become constant string refs
     ((eqv? n 0) "")
     ((<= n 8) (let ((v "\t\t\t\t\t\t\t\t"))
-                (substring/shared v (- 8 n))))
+                (##sys#substring v 0 n)))
     (else (string-append "\t" (tabs (- n 1))))))
 
 (: %dsp-string (string --> undefined))

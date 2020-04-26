@@ -3,7 +3,6 @@
 (import
   scheme
   (srfi 12)
-  (only (srfi 13) substring/shared)
   (srfi 69)
   (chicken process)
   (distill eprint)
@@ -34,7 +33,7 @@
 (define (write-full fd str)
   (let ((ret (fdwrite fd str)))
     (or (= ret (string-length str))
-        (let ((sub (substring/shared str ret)))
+        (let ((sub (##sys#substring str ret (string-length str))))
           (write-full fd sub)))))
 
 ;; simple case: no yielding at all

@@ -35,7 +35,10 @@
 
 ;; short-hash is a 6-character hash prefix
 (define (short-hash h)
-  (substring/shared h 0 6))
+  (let ((n (string-length h)))
+    (if (> n 6)
+	(##sys#substring h 0 6)
+	(error "bad argument to short-hash" h))))
 
 (define info-prefix (make-parameter ""))
 
@@ -47,6 +50,18 @@
 (: artifact-repr (forall (a) (string (vector a string *) --> (vector string a string))))
 (define (artifact-repr root v)
   (vector root (artifact-format v) (artifact-hash v)))
+
+(define (string-prefix? pre str)
+  (let ((plen (string-length pre))
+	(slen (string-length str)))
+    (and (<= plen slen)
+	 (string=? pre (##sys#substring str 0 plen)))))
+
+(define (string-suffix? suff str)
+  (let ((elen (string-length suff))
+	(slen (string-length str)))
+    (and (<= elen slen)
+	 (string=? suff (##sys#substring str (- slen elen) slen)))))
 
 ;; guess the format of a remote source bundle
 (define (impute-format src)

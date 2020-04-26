@@ -5,7 +5,6 @@
   (import
     scheme
     (srfi 4)
-    (srfi 13)
     (srfi 26))
   (cond-expand
     (chicken
