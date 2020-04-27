@@ -80,7 +80,7 @@
          (users    (let loop ((in  ups)
                               (out '())
                               (uid start-uid))
-                     (if (null? out)
+                     (if (null? in)
                        out
                        (loop (cdr in)
                              (cons ((car in) uid getgroup) out)
