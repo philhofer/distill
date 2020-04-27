@@ -10,7 +10,8 @@
    "SE9rx8lnJG7UyJMz8kbJ8affBfFBp4YCMwLwNB_1ErE="
    tools: (list perl)
    libs:  (list libressl zlib)
-   extra-configure: '(--without-libidn
+   extra-configure: '(--with-ca-bundle=/etc/ssl/cert.pem
+		      --without-libidn
 		      --without-libidn2
 		      --without-nghttp2
 		      --disable-ldap

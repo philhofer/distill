@@ -7,7 +7,6 @@
   (distill base)
   (chicken file)
   (chicken process-context)
-  (only (srfi 13) substring/shared)
 
   (pkg chicken))
 
@@ -33,9 +32,9 @@
          (suflen (string-length suff))
          (diff   (- strlen suflen)))
     (and (>= diff 0)
-         (let ((end (substring/shared str diff strlen)))
+         (let ((end (##sys#substring str diff strlen)))
            (and (string=? end suff)
-                (substring/shared str 0 diff))))))
+                (##sys#substring str 0 diff))))))
 
 ;; alist of arch-limited packages
 ;; (i.e. packages that only support
