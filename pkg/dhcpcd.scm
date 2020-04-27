@@ -5,9 +5,9 @@
 
 (define dhcpcd
   (cmmi-package
-   "dhcpcd" "9.0.0"
+   "dhcpcd" "9.0.2"
    "https://roy.marples.name/downloads/$name/$name-$version.tar.xz"
-   "xbigG7WN0bju7nhpU3moMoiHlZRzu5PZAFOwZr2Xf6s="
+   "2g-1hzbyiNaNewwW8-72GQv82GpP3aKdEWbpo7igfTQ="
    libs: (list linux-headers)
    ;; not autoconf
    override-configure: (vargs `((--build= ,$build-triple)
@@ -22,4 +22,5 @@
 				--enable-privsep
 				--privsepuser=dhcpcd
 				--without-udev))
-   cleanup: '((if ((rm -rf /out/usr/etc))))))
+   ;; we do not use the built-in hooks; just give us /usr/sbin/dhcpcd
+   cleanup: '((if ((rm -rf /out/usr/etc /out/usr/libexec /out/usr/share))))))
