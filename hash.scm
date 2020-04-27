@@ -20,10 +20,10 @@
 (: hasher->output-port (u8vector -> output-port))
 (define (hasher->output-port h)
   (make-output-port
-    (lambda (str)
-      (hash-write! h str)
+   (lambda (str)
+     (hash-write! h str)
       (string-length str))
-    (lambda () #t)))
+   (lambda () #t)))
 
 ;; with-output-to-hash calls (thunk) with
 ;; current-output-port set to a hasher;

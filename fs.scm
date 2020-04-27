@@ -36,7 +36,7 @@
 		    (if ((if -t -n ((fsck.ext4 -p ,dev)))
 			 (foreground ((echo "fsck didn't work; running mkfs.ext4 on /var ...")))
 			 (mkfs.ext4 ,@mkopts ,dev)))
-		    (if ((mount -t ext4 -o ,(join/s "," /(list->seq opts)) ,dev /var)))
+		    (if ((mount -t ext4 -o ,(join/s "," (list->seq opts)) ,dev /var)))
 		    (if ((forx -p dir ((/var/empty /var/db)))
 			 (importas "-i" -u dir dir)
 			 (mkdir -p $dir)))

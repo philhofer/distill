@@ -61,7 +61,12 @@
       (unless (eq? (artifact-kind art) 'file)
         (info "warning: artifact" (short-hash (artifact-hash art)) "is of kind" (artifact-kind art))))
     parts)
-  (let* ((h (apply string-append (map artifact-hash parts)))
+  (let* ((h (with-output-to-hash
+	     (lambda ()
+	       (for-each
+		(lambda (part)
+		  (display (artifact-hash part)))
+		parts))))
          (f (string-append prefix (substring h 0 10))))
     (info "writing final privileged script to" f)
     (with-output-to-file

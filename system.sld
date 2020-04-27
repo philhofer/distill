@@ -10,6 +10,7 @@
     (distill contract)
     (distill service)
     (distill eprint)
+    (distill hash)
     (distill plan))
   (cond-expand
     (chicken (import
