@@ -1097,11 +1097,10 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.0.2"
+   "libressl" "3.1.0"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "klypcg5zlwvSTOzTQZ7M-tBZgcb3tPe72gtWn6iMTR8="
+   "cHEFVDGIUxRBRs64A9_ap1jzVOkWv3VF-cyNGYpJvMM="
    cleanup: '((if ((ln -s openssl /out/usr/bin/libressl))))))
-
 
 (define libarchive
   (cmmi-package
