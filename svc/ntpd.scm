@@ -30,4 +30,4 @@
      after:  (list var-mounted-rw)
      spec:   (longrun*
 	      run: `((fdmove -c 2 1)
-		     (/usr/sbin/ntpd -d -f ,confpath))))))
+		     (/usr/sbin/ntpd -s -d -f ,confpath))))))
