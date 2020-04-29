@@ -206,21 +206,23 @@
       (export LC_ALL "C.UTF-8")
       (/bin/umask "022")
       ,@(fg*
-          (echo "init starting")
-          (mount -t proc -o "noexec,nosuid,nodev,hidepid=2" proc /proc)
-          (mount -t sysfs -o "noexec,nosuid,nodev" sysfs /sys)
-          ;; note: some kernels are configured to automagically mount /dev,
-          ;; so no worries if this doesn't mount on its own
-          (mount -t devtmpfs -o "exec,nosuid,mode=0755,size=2M" devtmpfs /dev)
-          (mkdir -p /dev/pts)
-          (mount -t devpts -o "gid=5,mode=0620,noexec,nosuid" devpts /dev/pts)
-          (mkdir -p /dev/shm)
-          (mount -t tmpfs -o "nodev,nosuid,noexec,size=5%,mode=1777" shm /dev/shm)
-          (mount -t tmpfs -o "exec,nosuid,nodev,mode=0755" tmpfs /run)
-          ;; to keep world-writeable /tmp from being a trivial DoS vector,
-          ;; limit the size of the mount to some fixed % of RAM
-          ;; TODO: make this configurable?
-          (mount -t tmpfs -o "noexec,nosuid,nodev,mode=1777,size=10%" tmpfs /tmp))
+	 (echo "init starting")
+	 ;; for some reason, hidepid=2 doesn't take without remounting:
+	 (mount -t proc -o "rw,nosuid,nodev,noexec,relatime" proc /proc)
+	 (mount -t proc -o "remount,rw,nosuid,nodev,noexec,relatime,hidepid=2" proc /proc)
+	 (mount -t sysfs -o "noexec,nosuid,nodev" sysfs /sys)
+	 ;; note: some kernels are configured to automagically mount /dev,
+	 ;; so no worries if this doesn't mount on its own
+	 (mount -t devtmpfs -o "exec,nosuid,mode=0755,size=2M" devtmpfs /dev)
+	 (mkdir -p /dev/pts)
+	 (mount -t devpts -o "gid=5,mode=0620,noexec,nosuid" devpts /dev/pts)
+	 (mkdir -p /dev/shm)
+	 (mount -t tmpfs -o "nodev,nosuid,noexec,size=5%,mode=1777" shm /dev/shm)
+	 (mount -t tmpfs -o "exec,nosuid,nodev,mode=0755" tmpfs /run)
+	 ;; to keep world-writeable /tmp from being a trivial DoS vector,
+	 ;; limit the size of the mount to some fixed % of RAM
+	 ;; TODO: make this configurable?
+	 (mount -t tmpfs -o "noexec,nosuid,nodev,mode=1777,size=10%" tmpfs /tmp))
       (if ((mkdir -p ,*service-dir*)))
       ;; elglob won't match leading '.' characters,
       ;; so we have to use an extra glob to make sure
