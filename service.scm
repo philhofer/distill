@@ -310,4 +310,13 @@
           (interned-dir "/proc" #o555)
           (interned-dir "/sys" #o555)
           (interned-dir "/boot" #o755)
+	  ;; TODO: vendor these:
+	  (remote-file
+	   "https://salsa.debian.org/md/netbase/-/raw/master/etc/services"
+	   "nw1h7RChZb_XKCID72w_9sFUXE3Nluej6ZC9TWEuOq8="
+	   "/etc/services" #o644)
+	  (remote-file
+	   "https://salsa.debian.org/md/netbase/-/raw/master/etc/protocols"
+	   "gykO3waWpzCvDqGEFidDstWolF4YoIjMyvOkG16y1b4="
+	   "/etc/protocols" #o644)
           s6 s6-rc execline-tools busybox-full hard)))

@@ -20,6 +20,11 @@
 ;;
 ;; note that the var-mount service is a requirement
 ;; for persistent logs when the system has a read-only rootfs
+;;
+;; TODO: mounting /var ends up being in the critical path
+;; for many services, like dhcpcd and sshd, so a busted
+;; disk would make remote debugging really tough...
+;; perhaps we should mount /var as a tmpfs as a last resort?
 (define (var-mount dev)
   (let ((opts   '(rw nosuid nodev noexec noatime data=ordered))
         (mkopts '()))
@@ -37,9 +42,7 @@
 			 (foreground ((echo "fsck didn't work; running mkfs.ext4 on /var ...")))
 			 (mkfs.ext4 ,@mkopts ,dev)))
 		    (if ((mount -t ext4 -o ,(join/s "," (list->seq opts)) ,dev /var)))
-		    (if ((forx -p dir ((/var/empty /var/db)))
-			 (importas "-i" -u dir dir)
-			 (mkdir -p $dir)))
+		    (if ((mkdir -p /var/empty /var/db)))
 		    (if -t -n ((test -L /var/run)))
 		    (foreground ((rm -rf /var/run)))
 		    (foreground ((ln -Tnsf /run /var/run)))
@@ -69,11 +72,11 @@
 		     (if ((chown -R catchlog:catchlog ,dir)))
 		     (if ((chmod "2700" ,dir)))
 		     ;; strip off timestamps and have s6-log prepend tai64n timestamps instead
-		     (pipeline ((redirfd -r -b 0 /dev/kmsg)
+		     (pipeline ((redirfd -r 0 /dev/kmsg)
 				(s6-setuidgid catchlog)
 				(sed -e "s/^[0-9].*-;//g")))
 		     (s6-setuidgid catchlog)
-		     (s6-log -b -d ,nfd -- ,@opts /var/log/services/kmsg))))))
+		     (s6-log -d ,nfd -- ,@opts /var/log/services/kmsg))))))
 
 ;; log-services creates a mount at /var
 ;; using "var-dev" and then maps the list
