@@ -312,6 +312,8 @@
           (interned-dir "/proc" #o555)
           (interned-dir "/sys" #o555)
           (interned-dir "/boot" #o755)
+	  (interned-dir "/root" #o755)
+	  (interned-dir "/home" #o755)
 	  ;; TODO: vendor these:
 	  (remote-file
 	   "https://salsa.debian.org/md/netbase/-/raw/master/etc/services"
