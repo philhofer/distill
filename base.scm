@@ -637,7 +637,7 @@ EOF
 
 
 (define *linux-major* 5.4)
-(define *linux-patch* 34)
+(define *linux-patch* 38)
 
 (define *linux-source*
   (list
@@ -646,7 +646,7 @@ EOF
      "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
     (remote-file
      (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" *linux-major* "." *linux-patch* ".xz")
-     "AKCPylvqBG3cRwNfx86K6GJoDcBJla2mAM0Ug9ZL1xc="
+     "a2aiMwabuTV--YDWbMLBL1opPWteKpg5vmchPJ2Furk="
      "/src/linux.patch"
      #o644)))
 
