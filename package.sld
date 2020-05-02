@@ -81,6 +81,7 @@
     $LD
     $NM
     $CFLAGS
+    $CXXFLAGS
     $LDFLAGS
     $ARFLAGS
     $RANLIB

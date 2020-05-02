@@ -471,6 +471,7 @@
 (: kvexport (vector --> list))
 (define (kvexport kvec)
   `((exportall ,(kvector-map
+		 kvec
 		 (lambda (k v)
 		   (list (##sys#symbol->string k) (spaced v)))))))
 
