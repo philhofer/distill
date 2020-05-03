@@ -985,24 +985,6 @@ EOF
 	     '(rm -rf /out/usr/share/man)
 	     '(find /out -name ".*" -delete)))))
 
-;; busybox xxd doesn't recognize '-i'
-;; but we can achieve a similar result
-;; using busybox's hexdump
-(define no-xxd-patch #<<EOF
---- a/Makefile
-+++ b/Makefile
-@@ -1831,7 +1831,7 @@
- 	 grep -v '^$$' | \
- 	 tr '\n' '\0' | \
- 	 sed -e 's/\\\x0/\n/g' | \
--	 xxd -i ; echo ", 0x00" ; )
-+	 hexdump -v -e '/1 "0x%X, "' ; echo "0x00" ; )
- endef
-
- $(version_h): include/config/uboot.release FORCE
-EOF
-)
-
 ;; uboot/config accepts 4 arguments:
 ;;  - name: a suffix added to the package name
 ;;    (the package will be named "uboot-<version>-<name>"
@@ -1018,12 +1000,12 @@ EOF
 	(dotconf (remote-file
 		  #f hash "/src/uboot-config" #o644)))
     (cc-package
-     "u-boot" "2020.04-rc3"
+     "u-boot" "2020.04"
      "https://ftp.denx.de/pub/$name/$name-$version.tar.bz2"
-     "-se2Ch0_yG0gCjtkTSEUmOYrle8860Gg887w3f7I8yI="
+     "lDUHMuGJodiUbDG80Pq2uKUbMclFpohyWPjIwSKddtE="
      no-libc:   #t
      use-native-cc: #t
-     patches:   (patch* no-xxd-patch portable-lexer-patch)
+     patches:   (patch* portable-lexer-patch)
      extra-src: (list envfile dotconf)
      tools:     (list byacc reflex)
      build: (lambda (conf)
@@ -1039,6 +1021,10 @@ EOF
 		  ,@(fix-dtc-script
 		     fix-lex-options: 'scripts/kconfig/zconf.l
 		     fix-yacc-cmdline: 'scripts/Makefile.lib)
+		  ;; busybox xxd doesn't support '-i'; emulate it with hexdump
+		  (if ((sed "-i"
+			    -e "s/xxd -i/hexdump -v -e '\\/1 \"0x%X, \"'/g"
+			    -e "s/echo \", 0x00\"/echo \" 0x00\"/g" Makefile)))
 		  ;; we're using yacc -d, so the zconf.tab.c needs to #include the generated definitions
 		  (if ((sed "-i"
 			    -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)))
