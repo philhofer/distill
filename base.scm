@@ -1090,9 +1090,9 @@ EOF
 
 (define libarchive
   (cmmi-package
-   "libarchive" "3.4.1"
+   "libarchive" "3.4.2"
    "https://github.com/libarchive/$name/releases/download/v$version/$name-$version.tar.gz"
-   "dfot337ydQKCCABhpdrALARa6QFrjqzYxFSAPSiflFk="
+   "t3aJd9_ChlLWsDKodSqu7kjPB_4UaCrSb29EqmGq0T8="
    libs: (list bzip2 zlib xz-utils lz4 libressl zstd)
    extra-configure: '(--without-xml2 --without-acl --without-attr --without-expat)))
 
