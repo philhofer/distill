@@ -1105,9 +1105,9 @@ EOF
 
 (define libnftnl
   (cmmi-package
-   "libnftnl" "1.1.5"
+   "libnftnl" "1.1.6"
    "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-   "R3Dq9wvV2TNUcXSy_KDTNcR4G8fm_ypLB9xLc0OfEBc="
+   "I_fTUHv8QpyNI5OlM_INMUDXHWsI6V-WzHKhCcfEenA="
    libs: (list linux-headers libmnl)
    extra-configure: '(LIBMNL_CFLAGS=-lmnl
 		      LIBMNL_LIBS=-lmnl)))
