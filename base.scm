@@ -946,9 +946,9 @@ EOF
                       '((echo "Fri Apr 3 20:09:47 UTC 2020"))
                       shebang: "#!/bin/execlineb -s0")))))
     (cc-package
-     "perl" "5.30.1"
+     "perl" "5.30.2"
      "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
-     "EBvfwKXjX_aaet0AXxwJKJGpGy4RnUrrYjh-qLeZ8ts="
+     "1LHYN7a4aIRWLowcJRJWNNTMSLl5btVOydsEyFCL2Yo="
      tools: (list samedate)
      libs:  (list bzip2 zlib)
      env:   (lambda (conf)
