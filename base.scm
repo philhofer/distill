@@ -1147,9 +1147,9 @@ EOF
 		       "%.o: %.c"
 		       "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))))
 	(cc-package
-	 "iproute2" "5.5.0"
+	 "iproute2" "5.6.0"
 	 "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
-	 "zVeW6PtWecKE9Qlx9l4NrfnQcIZNAW4HocbzuLiJOpo="
+	 "bziQSr_HXdEGLJPNH0jdUOKiuehV0HY1KI95UkV4cC0="
 	 patches: (list
 		   (remote-file
 		    "https://git.alpinelinux.org/aports/plain/main/iproute2/musl-fixes.patch"
