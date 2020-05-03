@@ -1033,9 +1033,9 @@ EOF
 
 (define xz-utils
   (cmmi-package
-   "xz" "5.2.4"
+   "xz" "5.2.5"
    "https://tukaani.org/$name/$name-$version.tar.xz"
-   "xbmRDrGbBvg_6BxpAPsQGBrFFAgpb0FrU3Yu1zOf4k8="))
+   "-jw6foy_zDVKZ8pXQV2O2i1_6Zcs3efYVg31jflUtcQ="))
 
 (define lz4
   (cc-package
