@@ -10,10 +10,10 @@
     (srfi 88)
     (distill plan)
     (distill base)
+    (distill text)
     (distill service)
     (distill filepath)
-    (distill kvector)
-    (distill sequence))
+    (distill kvector))
   (cond-expand
     (chicken (import
                (only (chicken base) include error foldl)

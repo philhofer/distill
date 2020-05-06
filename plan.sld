@@ -10,6 +10,12 @@
     remote-file
     overlay
 
+    make-input
+    input-link
+    input-basedir
+    input-wrap
+    input?
+
     build-plan!
     build-graph!
     plan?
@@ -42,11 +48,12 @@
         (only (chicken string) conc)
 	(only (chicken file) file-exists? directory-exists? create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
 	(chicken file posix)
-        (only (chicken base) include error unless when flatten void current-error-port exit identity)
+        (only (chicken base) include error unless when flatten void current-error-port exit identity disjoin)
 	(only (chicken io) read-string write-string)
         (only (chicken port) make-broadcast-port)
         (only (chicken process-context) current-directory)
         (only (chicken condition) print-error-message)
+	(only (chicken time) current-milliseconds)
 	(chicken process)
 	(only (chicken sort) sort))))
 
@@ -62,7 +69,6 @@
     (distill memo)
     (distill nproc)
     (distill filepath)
-    (distill sequence)
     (distill eprint)
     (distill coroutine)
     (distill contract)

@@ -274,6 +274,19 @@ EOF
                                       (%procexit box 'exn exn))))
                      (apply proc args)))))))
 
+(: with-spawn (procedure list procedure ->  (vector symbol * list)))
+(define (with-spawn proc args handle)
+  (let* ((box (vector 'started #f '()))
+	 (_   (handle box)))
+    (call/cc
+     (lambda (ret)
+       (pushcont! (lambda () (ret box)))
+       (%procexit box 'done
+		  (parameterize ((current-exception-handler
+				  (lambda (exn)
+				    (%procexit box 'exn exn))))
+		    (apply proc args)))))))
+
 (define (wait-any-nohang)
   (call/cc
    (lambda (ret)

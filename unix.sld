@@ -7,10 +7,10 @@
     scheme
     (srfi 26)
     (srfi 69)
+    (distill text)
     (distill plan)
     (distill kvector)
-    (distill contract)
-    (distill sequence))
+    (distill contract))
   (cond-expand
     (chicken (import
                (chicken type)

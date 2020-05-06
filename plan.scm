@@ -142,13 +142,25 @@
 (define (artifact-path art)
   (filepath-join (artifact-dir) (artifact-hash art)))
 
+(define plan?)
+
+(define-kvector-type
+  <input>
+  make-input
+  input?
+  (input-basedir basedir: "/" string?)
+  (input-link    link:    #f  (disjoin artifact? plan?))
+  (input-wrap    wrap:    #f  (perhaps procedure?)))
+
+(define input-set-link! (kvector-setter <input> link:))
+(define input-set-wrap! (kvector-setter <input> wrap:))
+
 (define-kvector-type
   <plan>
   make-plan
   plan?
   (plan-name   name:   #f  string?)
-  (plan-inputs inputs: '() (list-of
-			    (pair-of string? (list-of (or/c artifact? plan?)))))
+  (plan-inputs inputs: '() (list-of input?))
   (plan-saved-hash   saved-hash:   #f false/c)
   (plan-saved-output saved-output: #f false/c)
   (plan-raw-output   raw-output:   #f (perhaps string?)))
@@ -156,18 +168,67 @@
 (define plan-saved-hash-set! (kvector-setter <plan> saved-hash:))
 (define plan-saved-output-set! (kvector-setter <plan> saved-output:))
 
-;; input-seq generates a sequence from plan inputs
-(define (input-seq pl)
-  (lambda (kons seed)
-    (let outer ((inputs (plan-inputs pl))
-                (out    seed))
-      (if (null? inputs)
-        out
-        (let inner ((lst  (cdar inputs))
-                    (out  out))
-          (if (null? lst)
-            (outer (cdr inputs) out)
-            (inner (cdr lst) (kons (car lst) out))))))))
+;; input-resolve! returns the artifact associated with
+;; an input, or #f if it points to a plan with unknown outputs
+(: input-resolve! (vector -> (or vector false)))
+(define (input-resolve! in)
+  (let ((link (input-link in)))
+    (cond
+     ((artifact? link)
+      link)
+     ((plan? link)
+      (begin
+	;; cause recursive resolution to fail:
+	(input-set-link! in #f)
+	(let ((wrap (or (input-wrap in) identity))
+	      (out  (plan-outputs link)))
+	  (if out
+	      (let ((val (wrap out)))
+		(or (artifact? val) (error "input-resolve! - not an artifact" val))
+		(input-set-link! in val)
+		(input-set-wrap! in #f)
+		val)
+	      (begin
+		(input-set-link! in link) #f)))))
+     ((not link)
+      (error "no <input> link; recursive input resolution?"))
+     (else (error "unexpected <input> link value" link)))))
+
+(: fold-unresolved (vector procedure * -> *))
+(define (fold-unresolved plan proc seed)
+  (let loop ((out seed)
+	     (lst (plan-inputs plan)))
+    (if (null? lst)
+	out
+	(let ((head (car lst)))
+	  (loop
+	   (if (input-resolve! head)
+	       out
+	       (proc (input-link head) out))
+	   (cdr lst))))))
+
+(: map-unresolved (vector (vector -> *) -> *))
+(define (map-unresolved plan proc)
+  (fold-unresolved
+   plan
+   (lambda (inplan lst)
+     (cons (proc inplan) lst))
+   '()))
+
+(: foldl1 (procedure * list -> *))
+(define (foldl1 proc init lst)
+  (let loop ((out init)
+	     (lst lst))
+    (if (null? lst)
+	out
+	(loop (proc (car lst) out) (cdr lst)))))
+
+(: andmap1 (procedure list -> *))
+(define (andmap1 pred? lst)
+  (let loop ((lst lst))
+    (or (null? lst)
+	(and (pred? (car lst))
+	     (loop (cdr lst))))))
 
 ;; not defined in R7RS, but trivial enough to implement
 (: call-with-output-string ((output-port -> *) -> string))
@@ -204,27 +265,28 @@
 ;; (i.e. artifacts or plans with known outputs)
 (: plan-resolved? (vector -> boolean))
 (define (plan-resolved? p)
-  (all/s? (lambda (in)
-            (or (artifact? in)
-                (plan-outputs in)))
-          (input-seq p)))
+  (andmap1 input-resolve! (plan-inputs p)))
 
 ;; canonicalize takes plan-inputs and
 ;; produces those inputs in canonicalized form
 ;; (used for calculating plan hashes)
-(: canonicalize (list -> (list-of vector)))
-(define (canonicalize inputs)
+;;
+;; note that input-resolve! is called on the inputs
+;; as part of the canonicalization process
+(: canonicalize ((list-of vector) -> (list-of vector)))
+(define (canonicalize! inputs)
 
   ;; turn an input into an artifact unconditionally
-  (define (->artifact in)
-    (if (plan? in)
-      (or (plan-outputs in)
-          (error "plan not resolved"))
-      in))
+  (: ->repr (vector -> vector))
+  (define (->repr in)
+    (let ((art (input-resolve! in)))
+      (unless (artifact? art)
+	(error "expected an artifact; got" art (plan-name (input-link in))))
+      (artifact-repr (input-basedir in) art)))
 
   ;; sort input artifacts by extraction directory,
   ;; then by content hash
-  (: art<? (artifact artifact --> boolean))
+  (: art<? ((vector string vector string) --> boolean))
   (define (art<? a b)
     (let ((aroot (vector-ref a 0))
           (broot (vector-ref b 0))
@@ -234,24 +296,11 @@
           (and (string=? aroot broot)
                (string<? ahash bhash)))))
 
-  ;; pair->inseq produces a sequence from an input pair like
-  ;;  ("/" . (artifacts ...))
-  ;; where the sequence elements are the external representation
-  ;; of the artifacts in the cdr of the pair
-  (define (pair->inseq p)
-    (let ((rt  (car p))
-          (lst (cdr p)))
-      (s/map
-        (lambda (in)
-          (artifact-repr rt (->artifact in)))
-        (list->seq lst))))
-
   ;; write plans in a format that can be deserialized;
   ;; that way we can build old plans even if we don't
   ;; have the code that generated them (as long as
   ;; we have the original artifacts)
-  (let ((inputs ((list->seq inputs) ((k/map pair->inseq) (k/recur cons)) '())))
-    (sort inputs art<?)))
+  (sort (map ->repr inputs) art<?))
 
 ;; plan-hash returns the canonical hash of a plan,
 ;; or #f if any of its inputs have unknown outputs
@@ -261,7 +310,7 @@
       (and (plan-resolved? p)
            (let* ((h   (with-interned-output
                          (lambda ()
-                           (write (canonicalize (plan-inputs p))))))
+                           (write (canonicalize! (plan-inputs p))))))
                   (dir (filepath-join (plan-dir) h))
                   (lfd (string-append dir "/label")))
              (unless (file-exists? lfd)
@@ -627,23 +676,13 @@
       (define outdir (filepath-join root "out"))
       (create-directory outdir #t)
       (for-each
-        (lambda (p)
-          (let ((dir (filepath-join root (car p))))
-            (for-each
-              (lambda (in)
-                (unpack!
-                  (if (plan? in)
-                    (or
-                      (begin
-                        (infoln "unpacking" (plan-name in) (short-hash (plan-hash in)))
-                        (plan-outputs in))
-                      (fatal "unbuilt plan prerequisite:" (plan-name in)))
-                    in)
-                  dir))
-              (cdr p))))
-        (plan-inputs p))
+       (lambda (in)
+	 (let ((art (input-resolve! in))
+	       (dir (input-basedir in)))
+	   (unpack! art (filepath-join root dir))))
+       (plan-inputs p))
 
-      (infoln "running build script ...")
+      (infoln "building")
       (let ((outfile (filepath-join
                        (plan-dir) (plan-hash p)
                        (string-append "build@" (tai64n->string (tai64n-now)) ".log.zst"))))
@@ -673,119 +712,86 @@
   (and-let* ((art (plan-outputs p)))
     (file-exists? (artifact-path art))))
 
-;; k/unbuilt is a reducer-transformer
-;; that yields only unbuilt plans to its reducer
-(define k/unbuilt
-  (let ((unbuilt? (lambda (in)
-                    (and (plan? in) (not (plan-built? in))))))
-    (k/filter unbuilt?)))
-
-;; k/unbuilt-dfs is a reducer-transformer
-;; that walks unbuilt plans in DFS order
-(define k/unbuilt-dfs
-  (kompose
-    (label top)
-    (k/uniq test: eq? hash: eq?-hash)
-    k/unbuilt
-    (k/postorder top input-seq)))
-
-;; for-each/unbuilt-dfs walks a list of plans
-;; in depth-first order and calls (proc p) on
-;; each plan that is unbuilt
-(: for-each/unbuilt-dfs ((vector -> *) (list-of vector) -> undefined))
-(define (for-each/unbuilt-dfs proc pl)
-  ((list->seq pl)
-   (k/unbuilt-dfs
-     (lambda (in out)
-       (proc in)
-       out))
-   (void)))
-
-(define (loop-check lst)
-  (letrec ((check-one (lambda (p stk)
-                        (cond
-                          ((artifact? p)
-                           stk)
-                          ((memq p stk)
-                           (error "circular plan dependency" (plan-name p) (map plan-name stk)))
-                          (else
-                            ((input-seq p) check-one (cons p stk))
-                            stk)))))
-    (let ((check-top (lambda (p)
-                       (check-one p '()))))
-      (for-each check-top lst))))
-
 (: build-graph! ((list-of vector) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
-  ;(loop-check lst)
-  (let* ((plan->proc     (make-hash-table test: eq? hash: eq?-hash))
+  (let* ((duration       (lambda (from to)
+			   (string-append
+			    (number->string (exact->inexact (/ (- to from) 1000))) "s")))
+	 (plan->proc     (make-hash-table test: eq? hash: eq?-hash))
          (hash->plan     (make-hash-table test: string=? hash: string-hash))
          (err            #f)
-         ;; join-dep takes a plan input and
-         ;; waits for it to complete (if it is a plan),
-         ;; and returns #t if the input was built successfully
-         ;; or #f otherwise
-         (join-dep       (lambda (in)
-                           (cond
-                             ((plan? in)
-                              (or (plan-built? in)
-                                  (let* ((proc (hash-table-ref plan->proc in))
-                                         (ret  (join/value proc)))
-                                    (and (not err)
-                                         (if (eq? (proc-status proc) 'exn)
-                                           (begin (set! err ret) #f)
-                                           #t)))))
-                             (else (not err)))))
-         ;; only build a plan if we haven't seen its hash
-         ;; before in this graph; we can safely skip building
-         ;; "different" plans with the same hash; they are equivalent
-         (unique?        (lambda (p)
-                           (let ((winner (hash-table-update!/default hash->plan (plan-hash p) identity p)))
-                             (or (eq? p winner)
-                                 (begin
-                                   ;; just wait for the equivalent plan to finish building
-                                   (info "merging equivalent" (plan-name p) (short-hash (plan-hash p)))
-                                   (join-dep winner)
-                                   #f)))))
-         ;; only build plans if
-         ;;  1) all inputs are built
-         ;;  2) this plan doesn't have a known output already
-         ;;  3) another plan in this graph isn't equivalent to this one
-         ;;  4) no build errors have been encountered
-         (should-build?  (lambda (p)
-                           (and (all/s? join-dep (input-seq p))
-                                (not (plan-built? p))
-                                (unique? p)))))
+	 (done+ok?       (lambda (proc)
+			   (let* ((ret (join/value proc))
+				  (st  (proc-status proc)))
+			     (and (not (eq? st 'exn)) ret))))
+	 ;; for a given plan hash, we should only issue one build;
+	 ;; we use hash->plan to deduplicate equivalent builds
+         (sibling?        (lambda (p)
+			    (let* ((hash   (plan-hash p))
+				   (winner (hash-table-update!/default hash->plan hash identity p)))
+                             (if (eq? p winner) #f winner)))))
+    (define (build-proc p)
+      (or (hash-table-ref/default plan->proc p #f)
+	  ;; even though this yields to the child,
+	  ;; it guarantees that this plan->proc entry
+	  ;; is visible before other procs are scheduled
+	  (with-spawn
+	   build-one!
+	   (list p)
+	   (lambda (box)
+	     (hash-table-set! plan->proc p box)))))
     (define (build-one! p)
       (push-exception-wrapper
         (lambda (exn)
           (plan-exn p exn))
         (lambda ()
-          (and (should-build? p)
-               (parameterize ((info-prefix (string-append (plan-name p) "-" (short-hash (plan-hash p)) " |")))
-                 (call-with-job
-                   (lambda ()
-                     (infoln "building")
-                     (save-plan-outputs! p (plan->outputs! p))
-                     (infoln "completed")))
-                 #t)))))
-    ;; spawn a builder coroutine for each unbuilt package
+          (and
+	   ;; start all dependencies and ensure they complete ok
+	   (andmap1 done+ok? (map-unresolved p build-proc))
+	   (not err)
+	   (cond
+	    ;; if we've built this before, we're done
+	    ((plan-built? p) #t)
+	    ;; if this plan isn't unique, its exit status
+	    ;; should be equivalent to that of its identical twin
+	    ((sibling? p) => done+ok?)
+	    (else
+	     (parameterize ((info-prefix (string-append (plan-name p) "-" (short-hash (plan-hash p)) " |")))
+	       (infoln "queued")
+	       (let ((qtime (current-milliseconds)))
+		 (call-with-job
+		  (lambda ()
+		    (let ((stime (current-milliseconds)))
+		      (infoln "starting; queued" (duration qtime stime))
+		      (save-plan-outputs! p (plan->outputs! p))
+		      (infoln "completed; ran" (duration stime (current-milliseconds))))
+		    #t))))))))))
     (with-new-jobserver
-      (lambda ()
-        (jobserver+ maxprocs)
-        (for-each/unbuilt-dfs
-          (lambda (p)
-            (hash-table-set! plan->proc p (spawn build-one! p)))
-          lst)
-        ;; wait for every coroutine to exit; the jobserver
-        ;; must live at least this long
-        (for-each
-          (lambda (p)
-            (let ((ret (join/value p)))
-              (if (eq? (proc-status p) 'exn)
-                (or err (set! err ret)))))
-          (hash-table-values plan->proc))))
-    (if err (fatal-plan-failure err) #t)))
+     (lambda ()
+       (jobserver+ maxprocs)
+       ;; for each (unbuilt) explicit package, spawn
+       ;; a build coroutine, and then wait for all of them
+       (for-each
+	join/value
+	(foldl1
+	 (lambda (in lst)
+	   (if (and (plan? in) (not (plan-built? in)))
+	       (cons (build-proc in) lst)
+	       lst))
+	 '()
+	 lst))
+       ;; now ensure that every plan has exited,
+       ;; and determine if we encountered any errors
+       (let loop ((err #f)
+		  (lst (hash-table-values plan->proc)))
+	 (if (null? lst)
+	     (if err (fatal-plan-failure err) #t)
+	     (let ((head (car lst)))
+	       (let* ((ret    (join/value head))
+		      (threw? (eq? (proc-status head) 'exn)))
+		 (loop
+		  (or err (and threw? ret))
+		  (cdr lst))))))))))
 
 ;; build-plan! unconditionally builds a plan
 ;; and produces its output artifact
@@ -821,12 +827,10 @@
                       (with-input-from-file fp read)
                       #f)))
          (vec->in (lambda (v)
-                    (cons (vector-ref v 0)
-                          (list
-                            (vector
-                              (vector-ref v 1)
-                              (vector-ref v 2)
-                              #f)))))
+		    (make-input
+		     basedir: (vector-ref v 0)
+		     link: (vector
+			    (vector-ref v 1) (vector-ref v 2) #f))))
          (inputs  (map vec->in vinput))
          (plan    (make-plan
                     name:   label

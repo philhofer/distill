@@ -9,8 +9,7 @@
   (import
     scheme
     (srfi 2)
-    (srfi 26) ;; cut
-    (distill sequence))
+    (srfi 26)) ;; cut
   (cond-expand
     (chicken
       (import

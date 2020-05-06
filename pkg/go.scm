@@ -64,6 +64,7 @@
 	       ;; until we can figure out how to make go
 	       ;; cooperate with parallel builds, do serial builds
 	       '(GOMAXPROCS . 1)
+	       '(GO_GCFLAGS . "-c=1")
 	       '(HOME . /tmp/build-home)
 	       '(CGO_ENABLED . 0)
 	       '(GOROOT_FINAL . /usr/lib/go)

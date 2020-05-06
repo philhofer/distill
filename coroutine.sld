@@ -6,6 +6,7 @@
     proc-status
     proc-return
     spawn
+    with-spawn
     fdwrite
     fdread
     fdpipe

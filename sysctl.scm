@@ -18,43 +18,42 @@
 ;;       (ipv4 (tcp_syncookies 1)
 ;;             (tcp_rfc1337    1)))
 ;;
-;; sysctl->text takes a lisit of sysctls and yields
-;; a sequence of strings of the form "foo.bar.baz = value"
-;; for each sysctl value implied by the list
-(define (sysctl->text lst)
-  (lambda (kons seed)
-    (let loop ((out seed)
-               (lst lst)
-               (str ""))
-      (if (null? lst)
-        out
+;; each-sysctl-text calls 'proc'
+;; for each string that ought to
+;; appear as textual lines
+(define (each-sysctl-text proc lst)
+  (let loop ((lst lst)
+	     (str ""))
+    (or (null? lst)
         (let ((head (car lst))
               (rest (cdr lst)))
           (cond
-            ((pair? head)
-             (loop (loop out head str)
-                   rest
-                   str))
-            ((null? rest)
-             (kons
-               (string-append str " = "
-                              (cond
-                                ((number? head)  (number->string head))
-                                ((symbol? head)  (symbol->string head))
-                                ((string? head)  head)
-                                ((boolean? head) (if head "1" "0"))
-                                (else (error "malformed sysctl" lst))))
-               out))
-            ((symbol? head)
-             (loop out (cdr lst)
-                   (if (string=? str "")
-                     (symbol->string head)
-                     (string-append str "." (symbol->string head)))))
-            (else (error "malformed sysctl" lst))))))))
+	   ((pair? head)
+	    (begin
+	      (loop head str)
+	      (loop rest str)))
+	   ((null? rest)
+	    (proc
+	     (string-append str " = "
+			    (cond
+			     ((number? head)  (number->string head))
+			     ((symbol? head)  (symbol->string head))
+			     ((string? head)  head)
+			     ((boolean? head) (if head "1" "0"))
+			     (else (error "malformed sysctl" lst))))))
+	   ((symbol? head)
+	    (loop (cdr lst)
+		  (if (string=? str "")
+		      (symbol->string head)
+		      (string-append str "." (symbol->string head)))))
+	   (else (error "malformed sysctl" lst)))))))
 
 (define (sysctls->string lst)
-  (lines/s (s/bind (list->seq lst)
-                   (kompose (k/map sysctl->text) k/recur))))
+  (let ((line (lambda (c)
+		(display c) (newline))))
+    (with-output-to-string
+      (lambda ()
+	(each-sysctl-text line lst)))))
 
 ;; sysctl-service creates a service with the given name
 ;; that toggles the provided sysctl spec

@@ -49,19 +49,13 @@
 (: bundle* (#!rest vector --> vector))
 (define (bundle* . args)
   (%make-bundle
-    contents: (lines/s (s/bind (list->seq args) service-name))))
+    contents: (map-lines service-name args)))
 
 (: spec? (* -> boolean))
 (define spec?
   (or/c longrun? oneshot? bundle?))
 
-;; spec->artifact-seq takes an s6-rc service specification
-;; and yields a sequence of artifacts that need to be present
-;; for s6-rc-compile to produce the correct s6-rc database entry
-;;
-;; e.g. (spec->artifact-seq (s6-svc "foo" up: ... down: ...))
-;; produces artifacts for /src/services/foo/up, etc.
-(define (spec->artifact-seq name spec)
+(define (prepend-spec-artifacts name spec lst)
   (let* ((dir         name)
          (field->file (lambda (kw val)
                         (let ((file (keyword->string kw)))
@@ -72,26 +66,22 @@
                               (lambda () (if (pair? val)
                                            (write-exexpr val)
                                            (begin (display val) (newline))))))))))
-    (lambda (kons seed)
-      (kvector-foldl spec
-                     (lambda (kw val lst)
-                       (if val
-                         (kons (field->file kw val) lst)
-                         lst))
-                     seed))))
+    (kvector-foldl
+     spec
+     (lambda (kw val lst)
+       (if val (cons (field->file kw val) lst) lst))
+     lst)))
 
-(define s6-rc-db
-  (lambda (art-seq)
-    (let ((artifacts (art-seq (k/recur cons) '())))
-      (lambda (conf)
-        (make-package
-          label:  "s6-rc-db"
-          src:    artifacts
-          dir:    "/"
-          tools:  (list busybox-core execline-tools s6 s6-rc)
-          inputs: '()
-          build:  `((if ((mkdir -p "/out/etc/s6-rc")))
-                    (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services")))))))
+(define (s6-rc-db artifacts)
+  (lambda (conf)
+    (make-package
+     label:  "s6-rc-db"
+     src:    artifacts
+     dir:    "/"
+     tools:  (list busybox-core execline-tools s6 s6-rc)
+     inputs: '()
+     build:  `((if ((mkdir -p "/out/etc/s6-rc")))
+	       (s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services")))))
 
 (define-kvector-type
   <service>
@@ -109,15 +99,6 @@
   (apply make-service
          (append (kvector->list svc) args)))
 
-(: s/packages ((list-of vector) -> procedure))
-(define (s/packages lst)
-  (s/bind (list->seq lst)
-          (kompose
-            (k/map service-inputs)
-            (k/map list->seq)
-            k/recur
-            (k/uniq test: eq? hash: eq?-hash))))
-
 (: named* (string -> (vector -> boolean)))
 (define (named* pat)
   (let ((sre (glob->sre pat)))
@@ -128,7 +109,7 @@
 ;; a sequence of all service and yields
 ;; a sequence of services that must be
 ;; started before 'svc'
-(define (service-depends svc all-seq)
+(define (service-depends svc all)
   (let ((after (service-after svc)))
     (if (null? after)
       '()
@@ -146,49 +127,55 @@
                                    ((procedure? head)
                                     (head svc))
                                    (else (fatal "invalid 'service#after' element" head)))
-                                 (loop rest)))))))
-             (seq    (s/bind all-seq (k/filter match?))))
-        (seq cons '())))))
+                                 (loop rest))))))))
+        (letrec ((filter (lambda (pred? lst)
+			   (if (null? lst)
+			       '()
+			       (let ((head (car lst)))
+				 (if (pred? head)
+				     (cons head (filter pred? (cdr lst)))
+				     (filter pred? (cdr lst))))))))
+	  (filter match? all))))))
 
-(define (service->artifact-seq svc svc-seq)
-  (let ((depends (service-depends svc svc-seq))
+(define (prepend-service-artifacts svc all lst)
+  (let ((depends (service-depends svc all))
         (spec    (service-spec svc)))
-    (spec->artifact-seq
+    (prepend-spec-artifacts
       (service-name svc)
       (if (null? depends)
         spec
         (kupdate
           spec
-          dependencies: (lines/s (s/map service-name (list->seq depends))))))))
-
-(define (k/field-list proc)
-  (kompose
-    (k/map proc)
-    (k/map list->seq)
-    k/recur))
+          dependencies: (map-lines service-name depends)))
+      lst)))
 
 ;; services->packages takes a list of services
 ;; and produces a complete list of packages
 ;; that the services depend upon, including
 ;; the necessary init scripts and binaries
 (: services->packages ((list-of vector) -> (list-of procedure)))
-(define (services->packages lst)
-  (let* ((tail     ((s/packages lst) cons '()))
-         (all      (list->seq lst))
-         (k/users  (k/field-list service-users))
-         (k/groups (k/field-list service-groups))
+(define (services->packages all)
+  (let* ((fold     (lambda (proc init lst)
+		     (let loop ((out init)
+				(lst lst))
+		       (if (null? lst) out (loop (proc (car lst) out) (cdr lst))))))
+	 (sublists (lambda (lst field)
+		     (fold (lambda (svc lst) (append (field svc) lst)) '() lst)))
+	 (tail     (sublists all service-inputs))
          (default  (make-service
                      name: 'default
                      spec: (%make-bundle
                              type: 'bundle
-                             contents: (lines/s (s/map service-name all)))))
-         (->art    (cut service->artifact-seq <> all))
-         (db       (s6-rc-db (s/map ->art (s/cons* default all))))
-         (users    (all (k/users cons) '()))
-         (groups   (all (k/groups cons) '())))
+                             contents: (map-lines service-name all))))
+         (arts     (fold
+		    (lambda (svc lst)
+		      (prepend-service-artifacts svc all lst))
+		    '() (cons default all)))
+         (db       (s6-rc-db arts)))
     (append
       (cons db tail)
-      (groups+users->artifacts groups users)
+      (groups+users->artifacts (sublists all service-groups)
+			       (sublists all service-users))
       (init-artifacts))))
 
 (define *service-dir* "/run/service")

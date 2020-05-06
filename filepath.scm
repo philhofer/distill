@@ -42,6 +42,21 @@
         ((char=? (string-ref str i) #\/) (##sys#substring str (+ i 1) end))
         (else (loop (- i 1)))))))
 
+(define (strsep proc str sep seed)
+  (let* ((end  (string-length str))
+	 (scan (lambda (start)
+		 (let loop ((i start))
+		   (cond
+		    ((>= i end) end)
+		    ((eqv? (string-ref str i) sep) i)
+		    (else (loop (+ i 1))))))))
+    (let loop ((i 0)
+	       (v seed))
+      (if (>= i end)
+          v
+          (let ((seg (scan i)))
+            (loop (+ seg 1) (proc (##sys#substring str i seg) v)))))))
+
 ;; core filepath normalization routine
 ;;
 ;; join one or more filepath components together
@@ -51,7 +66,10 @@
   ;; allocate the inner reducing function closure just once
   ;; (these produce a single-pass reducer from path components
   ;; to output path string)
-  (let* ((add-part  (lambda (part out)
+  (let* ((fold      (lambda (proc init lst)
+		      (let loop ((out init) (lst lst))
+			(if (null? lst) out (loop (proc (car lst) out) (cdr lst))))))
+	 (add-part  (lambda (part out)
                       (if (string=? out "")
                         part
                         (cond
@@ -63,19 +81,17 @@
                              (dirname out)))
                           ((string=? out "/") (string-append out part))
                           (else (string-append out "/" part))))))
-         (k/part    (kompose
-                      (k/map stringify)
-                      (k/map (cut string-sep->seq <> #\/))
-                      k/recur))
-         (cons-arg  (k/part add-part)))
+	 (add-arg   (lambda (arg out)
+		      (strsep add-part (stringify arg) #\/ out))))
     (lambda (first . rest)
-      ((list->seq (cons first rest))
-       cons-arg
+      (fold
+       add-arg
        ;; if the first component begins with "/", then
        ;; the result begins with "/"
        (if (eqv? (string-ref (stringify first) 0) #\/)
          "/"
-         "")))))
+         "")
+       (cons first rest)))))
 
 ;; convert a relative path to an absolute path
 ;; if it is not one already (by prepending the current directory)

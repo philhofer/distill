@@ -4,7 +4,7 @@
   (distill filepath)
   (distill base)
   (distill plan)
-  (distill sequence)
+  (distill text)
   (distill service))
 
 ;; busybox crond
@@ -33,7 +33,7 @@
 			(interned
 			 (filepath-join dir (car p))
 			 #o644
-			 (->lines+spaces (cron-lines (cdr p)))))
+			 (lines (cron-lines (cdr p)))))
 		      alist)))
     (make-service
      name:   'cron

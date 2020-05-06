@@ -41,7 +41,7 @@
 		    (if ((if -t -n ((fsck.ext4 -p ,dev)))
 			 (foreground ((echo "fsck didn't work; running mkfs.ext4 on /var ...")))
 			 (mkfs.ext4 ,@mkopts ,dev)))
-		    (if ((mount -t ext4 -o ,(join/s "," (list->seq opts)) ,dev /var)))
+		    (if ((mount -t ext4 -o ,(join-with "," opts) ,dev /var)))
 		    (if ((mkdir -p /var/empty /var/db)))
 		    (if -t -n ((test -L /var/run)))
 		    (foreground ((rm -rf /var/run)))

@@ -2,7 +2,6 @@
   (distill plan)
   (distill hash)
   (distill filepath)
-  (srfi 13)
   (chicken process-context)
   (chicken file)
   (chicken io))
@@ -23,8 +22,8 @@
     #:action (lambda (f state)
                (let* ((name  (file->text f))
                       (phash (basename
-                               (substring/shared f 0 (- (string-length f)
-                                                        (string-length "/label")))))
+			      (##sys#substring f 0 (- (string-length f)
+						      (string-length "/label")))))
                       (ofile (filepath-join
                                (plan-dir) phash "outputs.scm"))
                       (odata (if (file-exists? ofile)

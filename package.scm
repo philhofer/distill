@@ -23,7 +23,8 @@
        (eq? (vector-ref arg 0) <meta-package>)))
 
 (define-memoized (meta-expand mp conf)
-  ((vector-ref mp 1) conf))
+  (let ((res ((vector-ref mp 1) conf)))
+    (if (list? res) res (list res))))
 
 (define inputs? (list-of (disjoin procedure? meta-package? artifact?)))
 
@@ -509,18 +510,19 @@
 ;; and returns a function that builds the package
 ;; and yields its output artifact
 (define (config->builder env)
-  (let* ((host  (conform config? env))
-	 (build (build-config))
+  (let* ((host   (conform config? env))
+	 (build  (build-config))
+	 (expand (package-expander build host))
 	 (->plan/art (lambda (in)
 		       (cond
 			((artifact? in) in)
 			((meta-package? in) (meta-expand in host))
-			((procedure? in) (package->plan in build host))
+			((procedure? in) (expand in))
 			(else "bad item provided to plan builder" in))))
 	 (->out (lambda (pln)
 		  (cond
 		   ((artifact? pln) pln)
-		   ((procedure? pln) (let ((plan (package->plan pln build host)))
+		   ((procedure? pln) (let ((plan (expand pln)))
 				       (if (artifact? plan) plan (plan-outputs plan))))
 		   ;; TODO: meta-packages
 		   (else #f)))))
@@ -531,33 +533,65 @@
 	(map ->out args)))))
 
 
-;; package->plan is the low-level package expansion code;
-;; it recursively simplifies packges into plans, taking care
-;; to only expand packges once for each (build, host) configuration tuple
-(define package->plan
-  (memoize-lambda
-   (pkg-proc build host)
-   (let ((pkg (pkg-proc host)))
-     (or (package-prebuilt pkg)
-	 (let* ((expander (lambda (conf)
-			    (lambda (in)
-			      (cond
-			       ((artifact? in) in)
-			       ((meta-package? in) (meta-expand in conf))
-			       (else (package->plan in build conf))))))
-		(->tool  (expander build))
-		(->input (expander host))
-		(tools   (package-tools pkg))
-		(inputs  (package-inputs pkg)))
-	   (make-plan
-	    raw-output: (package-raw-output pkg)
-	    name:   (package-label pkg)
-	    inputs: (list
-		     (cons "/" (cons*
-				(package-buildfile pkg)
-				(expandl ->tool (flatten (package-src pkg) tools))))
-		     ;; build headers+libraries live here
-		     (cons ($sysroot host) (expandl ->input inputs)))))))))
+;; package-expander returns a function that expands
+;; package-lambdas into plans, taking care to
+;; memoize the result of package expansions so
+;; that package-lambdas that are 'eq?' equivalent
+;; yield plans that are 'eq?' equivalent
+;;
+(define (package-expander build host)
+  (define in-root
+    (let ((fn (memoize-eq
+	       (lambda (obj)
+		 (make-input basedir: "/" link: obj)))))
+      (lambda (obj conf) (fn obj))))
+  (define in-sysroot
+    ;; rather than memoizing across all configs,
+    ;; just switch on the two configs we know
+    ;; we ought to see...
+    (let* ((host-sysroot  ($sysroot host))
+	   (build-sysroot ($sysroot build))
+	   (in-host-sysroot (memoize-eq
+			     (lambda (obj)
+			       (make-input basedir: host-sysroot link: obj))))
+	   (in-build-sysroot (memoize-eq
+			      (lambda (obj)
+				(make-input basedir: build-sysroot link: obj)))))
+      (lambda (obj conf)
+	(cond
+	 ((eq? conf host)
+	  (in-host-sysroot obj))
+	 ((eq? conf build)
+	  (in-build-sysroot obj))
+	 (else (error "unexpected config" conf))))))
+  (define package->plan
+    (memoize-lambda
+     (pkg-proc host)
+     (let ((pkg (pkg-proc host)))
+       (or (package-prebuilt pkg)
+	   (let* ((expander (lambda (where conf)
+			      (lambda (in)
+				(cond
+				 ((artifact? in) (where in conf))
+				 ((meta-package? in) (meta-expand in conf))
+				 (else (where (package->plan in conf) conf))))))
+		  (->tool  (expander in-root build))
+		  (->input (expander in-sysroot host))
+		  (tools   (package-tools pkg))
+		  (inputs  (package-inputs pkg)))
+	     (make-plan
+	      raw-output: (package-raw-output pkg)
+	      name:   (package-label pkg)
+	      inputs: (cons
+		       (make-input
+			basedir: "/"
+		        link: (package-buildfile pkg))
+		       (append
+			(expandl ->tool (flatten (package-src pkg) tools))
+			(expandl ->input inputs)))))))))
+  (lambda (pkg-proc)
+    (parameterize ((build-config build))
+      (package->plan pkg-proc host))))
 
 (: package-buildfile (vector -> vector))
 (define (package-buildfile r)

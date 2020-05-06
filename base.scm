@@ -996,7 +996,7 @@ EOF
   (let ((envfile (interned
 		  "/src/uboot-env"
 		  #o644
-		  (lines/s (list->seq env))))
+		  (lines env)))
 	(dotconf (remote-file
 		  #f hash "/src/uboot-config" #o644)))
     (cc-package
@@ -1131,21 +1131,20 @@ EOF
 		  (interned
 		   "/src/config.mk"
 		   #o644
-		   (lines/s
-		    (list->seq
-		     (append
-		      '("YACC=yacc")
-		      (splat
-		       ($cc-env conf)
-		       CC: LDFLAGS: AR:)
-		      (list
-		       "TC_CONFIG_IPSET:=y"
-		       "TC_CONFIG_NO_XT:=y"
-		       "HAVE_MNL:=y"
-		       "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
-		       "LDLIBS += -lelf -lmnl -lz"
-		       "%.o: %.c"
-		       "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))))
+		   (lines
+		    (append
+		     '("YACC=yacc")
+		     (splat
+		      ($cc-env conf)
+		      CC: LDFLAGS: AR:)
+		     (list
+		      "TC_CONFIG_IPSET:=y"
+		      "TC_CONFIG_NO_XT:=y"
+		      "HAVE_MNL:=y"
+		      "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
+		      "LDLIBS += -lelf -lmnl -lz"
+		      "%.o: %.c"
+		      "\t$(CC) $(CFLAGS) -c -o $@ $<"))))))))
 	(cc-package
 	 "iproute2" "5.6.0"
 	 "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"

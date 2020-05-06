@@ -3,6 +3,8 @@
  (distill kvector)
  (distill package))
 
+(include "test-helpers.scm")
+
 (define ($vars conf)
   (kvector*
    ARCH: ($arch conf)

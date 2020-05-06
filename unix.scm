@@ -106,7 +106,7 @@
                        (user-login u)))))
     (interned "/etc/passwd"
               #o644
-              (lines/s (s/bind (list->seq users) (k/map usr->line))))))
+              (map-lines usr->line users))))
 
 (: etc/group ((list-of vector) --> vector))
 (define (etc/group groups)
@@ -116,9 +116,8 @@
                        ":x:"
                        (number->string (group-gid g))
                        ":"
-                       (join/s "," (list->seq (group-users g)))))))
+                       (join-with "," (group-users g))))))
     (interned "/etc/group"
               #o644
-              (lines/s (s/bind (list->seq groups)
-                               (k/map grp->line))))))
+              (map-lines grp->line groups))))
 

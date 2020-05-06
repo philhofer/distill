@@ -42,6 +42,13 @@
 (let ((s0 (spawn bin/true 1)))
   (test 1 (join/value s0)))
 
+(let* ((seen #f)
+       (box  (with-spawn bin/true (list 1)
+			 (lambda (box)
+			   (set! seen box)))))
+  (test eq? seen box)
+  (test 1 (join/value box)))
+
 (let* ((s0 (spawn bin/true 1))
        (s1 (spawn bin/true 2))
        (s2 (spawn bin/true 3))

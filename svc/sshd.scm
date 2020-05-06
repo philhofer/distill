@@ -5,7 +5,7 @@
   (distill unix)
   (distill service)
   (distill fs)
-  (only (distill sequence) ->lines+spaces)
+  (distill text)
   (pkg openssh))
 
 ;; sshd runs the sshd service
@@ -15,7 +15,7 @@
   (let* ((confpath "/etc/sshd_config")
 	 (config   (interned
 		    confpath #o644
-		    (->lines+spaces config-lines))))
+		    (lines config-lines))))
     (make-service
      name:   'sshd
      users:  (list (adduser 'sshd group: 'sshd home: "/var/empty"))

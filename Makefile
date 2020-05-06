@@ -13,7 +13,7 @@ MODS:=$(SLDS:%.sld=%.mod.scm)
 UNITS:=distill.hash distill.nproc \
 	distill.plan distill.package distill.execline \
 	distill.filepath distill.eprint distill.memo \
-	distill.sequence distill.base distill.system \
+	distill.text distill.base distill.system \
 	distill.image distill.unix distill.tai64 \
 	distill.service distill.sysctl distill.fs \
 	distill.net distill.kvector distill.contract
@@ -48,7 +48,7 @@ tools:
 
 TESTS:=$(wildcard *-test.scm)
 test: distill $(TESTS)
-	./distill $(TESTS)
+	@for x in $(TESTS); do echo $$x; ./distill $$x || exit 1; done
 
 clean:
 	$(RM) distill Makefile.dep *.types *.import.scm *.mod.scm *.so *.o *.link

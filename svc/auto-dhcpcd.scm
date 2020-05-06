@@ -1,13 +1,13 @@
 (import
- scheme
- (distill service)
- (distill execline)
- (only (distill filepath) filepath-join)
- (only (distill unix) adduser addgroup)
- (only (distill plan) interned)
- (only (distill sequence) ->lines+spaces)
- (distill fs)
- (pkg dhcpcd))
+  scheme
+  (distill text)
+  (distill service)
+  (distill execline)
+  (only (distill filepath) filepath-join)
+  (only (distill unix) adduser addgroup)
+  (only (distill plan) interned)
+  (distill fs)
+  (pkg dhcpcd))
 
 
 (define hook-script-path "/usr/libexec/dhcpcd/distill-run-hooks")
@@ -51,7 +51,7 @@
      name:   'net.dhcpcd
      inputs: (list dhcpcd
 		   hook-script
-		   (interned "/etc/dhcpcd.conf" #o644 (->lines+spaces lst)))
+		   (interned "/etc/dhcpcd.conf" #o644 (lines lst)))
      users:  (list (adduser 'dhcpcd group: 'dhcpcd home: chroot-dir)) ; see '--with-privsep-user'
      groups: (list (addgroup 'dhcpcd '(dhcpcd)))
      after:  (list var-mounted-rw)

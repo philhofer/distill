@@ -6,7 +6,7 @@
   (distill service)
   (distill fs)
   (distill unix)
-  (only (distill sequence) ->lines+spaces)
+  (distill text)
 
   (pkg ip-wait)
   (pkg openntpd))
@@ -18,11 +18,11 @@
     (sensor "*")
     (constraints from "\"https://www.google.com/\"")))
 
-(define (ntpd lines)
+(define (ntpd cfg)
   (let* ((confpath "/etc/ntpd.conf")
 	 (conf     (interned
 		    confpath #o644
-		    (->lines+spaces lines))))
+		    (lines cfg))))
     (make-service
      name:   'ntpd
      inputs: (list openntpd ip-wait conf)
