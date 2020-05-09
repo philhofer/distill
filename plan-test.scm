@@ -27,4 +27,22 @@
   (test path (file-exists? path))
   (test text (with-input-from-file path read-string)))
 
-(display "plan artifact test OK.\n")
+(let* ((foo  (interned
+	      "/etc/foo" #o755 "file is foo"))
+       (frob (interned
+	      "/etc/frob" #o755 "file is frob"))
+       (pln (make-plan
+	     name: "test-match-plan"
+	     null-build: #t
+	     inputs: (list
+		      (make-input
+		       basedir: "/out"
+		       link: foo)
+		      (make-input
+		       basedir: "/out"
+		       link: frob)))))
+  (build-graph! (list pln))
+  (let ((art (plan-outputs pln)))
+    (test equal?
+	  '("./etc/frob" "./etc/foo")
+	  (archive-match art '("./etc/f*")))))

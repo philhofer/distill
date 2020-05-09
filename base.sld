@@ -3,6 +3,7 @@
     scheme
     (srfi 2)
     (srfi 26) ; cut/cute
+    (srfi 39) ; parameterize
     (srfi 69)
     (srfi 88)
     (distill eprint)
@@ -18,18 +19,18 @@
       (import
         (only (chicken syntax) er-macro-transformer)
         (only (chicken port) with-output-to-string)
-        (only (chicken base) include error flatten foldl unless)
+        (only (chicken base) include error flatten foldl unless delay-force)
         (only (chicken string) conc))
       (import-for-syntax
         (only (chicken io) read-string))))
   (export
-    bootstrap-base!
     ; libc:
     musl
     libssp-nonshared
 
     ; config:
     default-config
+    default-build-config
     gcc+musl-static-config
 
     ; gcc deps:
@@ -57,6 +58,8 @@
     cc-for-target
     native-toolchain
 
+    gcc
+    
     ; skaware
     skalibs
     execline-tools
@@ -91,5 +94,6 @@
     ; filesystem tools
     e2fsprogs
     squashfs-tools
+
     )
   (include "base.scm"))

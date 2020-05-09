@@ -16,14 +16,13 @@
     (ppc64le . "PWaueP-AiG9w1pDNYPOZ4igLS8YqCcJ7MRW_3VJjjIw=")))
 
 (define go-bootstrap
-  (make-meta-package
-   (lambda (conf)
-     (let ((c (assq ($arch conf) go-bootstrap-hashes)))
-       (if c
-	   (remote-archive
-	    (string-append "https://b2cdn.sunfi.sh/files/pub-cdn/" (cdr c))
-	    (cdr c) kind: 'tar.zst)
-	   (error "no go-bootstrap for arch" ($arch conf)))))))
+  (lambda (conf)
+    (let ((c (assq ($arch conf) go-bootstrap-hashes)))
+      (if c
+	  (remote-archive
+	   (string-append "https://b2cdn.sunfi.sh/files/pub-cdn/" (cdr c))
+	   (cdr c) kind: 'tar.zst)
+	  (error "no go-bootstrap for arch" ($arch conf))))))
 
 (define ($GOARCH conf)
   (case ($arch conf)
@@ -56,7 +55,8 @@
 	       (conc "https://dl.google.com/go/go" ver ".src.tar.gz")
 	       "c_Qn6BrbxHUKEeZ7ZdYlUnGUtjqqgXjYmHiTInzjFpU=")))
     (lambda (conf)
-      (make-package
+      (expand-package
+       conf
        label: (conc "go-" ver "-" ($arch conf))
        dir:   "/go"
        src:   (list src)

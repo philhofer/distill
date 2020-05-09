@@ -32,32 +32,28 @@
     script-apply-patches
     strip-binaries-script
     $strip-cmd
-    build-config
     config->builder
     make-config
     vargs
     csubst
     cmd*
 
-    make-meta-package
-    meta-package?
-    package?
-    make-package
-    update-package
-    package-label
-    package-tools
-    package-inputs
-    package-build
-    package-prebuilt
+    expander
+    configure
 
-
+    expand-package
     url-translate
     cc-package
     cmmi-package
+    libs
+    binaries
 
     $arch
     $sysroot
     $triple
+    $build
+    $native?
+    $leaf
     $cc-toolchain
     $native-toolchain
     make-cc-toolchain
@@ -69,8 +65,8 @@
     triple->sysroot
     $make-overrides
     $cc-env
-    build-triple
     $build-triple
+    $build-toolchain
     $cross-compile
     $build-CC
     $build-LD
@@ -87,8 +83,8 @@
     $RANLIB
     $READELF
     cc-env/build
-    cc-env/for-build
-    cc-env/for-kbuild
+    $cc-env/for-build
+    $cc-env/for-kbuild
     spaced
     splat
     k=v*

@@ -4,53 +4,6 @@
     (aarch64 . ,(include "prebuilt-aarch64.scm"))
     (ppc64le . ,(include "prebuilt-ppc64le.scm"))))
 
-(define (maybe-prebuilt conf ref)
-  (and-let* ((_ (eq? conf default-build-config))
-             (c (assq *this-machine* *prebuilts*))
-             (c (assq ref (cdr c))))
-    (cdr c)))
-
-(define (bootstrap-base!)
-  (let* ((host   (build-config))
-         (build! (config->builder host))
-         (built  (cdr (assq *this-machine* *prebuilts*)))
-         (->boot (lambda (pkg)
-                   (lambda (conf)
-                     (let ((old (pkg conf)))
-                       (unless (package-prebuilt old)
-                         (error "expected package to have a prebuilt binary:" (package-label old)))
-                       (update-package old prebuilt: #f)))))
-         (pkgs   `((make . ,(->boot make))
-		   (exportall . ,(->boot exportall))
-                   (busybox . ,(->boot busybox-core))
-                   (execline . ,(->boot execline-tools))
-                   (binutils . ,(->boot (binutils-for-triple ($triple host))))
-                   (gcc . ,(->boot (gcc-for-triple ($triple host))))))
-         (remake! (lambda ()
-                    (let ((lhs (map car pkgs))
-                          (rhs (apply build! (map cdr pkgs))))
-                      (map cons lhs rhs))))
-         (stable? (lambda (alist)
-                    ;; check if the given alist and built alist are equivalent
-                    (let loop ((lst alist))
-                      (or (null? lst)
-                          (let* ((p    (car lst))
-                                 (name (car p))
-                                 (art  (cdr p))
-                                 (rest (cdr lst)))
-                            (and (string=? (artifact-hash art)
-                                           (artifact-hash (cdr (assq name built))))
-                                 (loop rest))))))))
-    (let ((stage-1 (remake!)))
-      (if (and (= (length pkgs) (length built)) (stable? stage-1))
-        (display "prebuilts already equivalent.\n")
-        (begin
-          (display "outputting new prebuilts.\n")
-          (with-output-to-file
-            (conc "prebuilt-" *this-machine* ".scm")
-            (lambda ()
-              (write (list 'quote stage-1)))))))))
-
 ;; for a triple, create the ordinary gcc, ld, as, etc.
 ;; binaries that are either symlinks or thin wrappers
 ;; for the actual binaries (i.e. x86_64-linux-musl-gcc, etc.)
@@ -73,22 +26,38 @@
      (wrap "ld")
      (map ln '("as" "ar" "ranlib" "strip" "readelf" "objcopy")))))
 
-;; native-toolchain is a meta-package
-;; for "native" C/C++ tools (e.g. a regular gcc(1) with --sysroot=/)
 (define native-toolchain
-  (make-meta-package
-   (lambda (conf)
-     (let ((tc ($native-toolchain conf)))
-       (flatten
-	(cc-toolchain-tools tc)
-	(cc-toolchain-libc tc))))))
+  ;; NOTE: we are presuming that $native-toolchain
+  ;; is just wrappers for stuff provided by $cc-toolchain
+  (lambda (host)
+    (let ((htc ($cc-toolchain host))
+	  (ntc ($native-toolchain host)))
+      (flatten (cc-toolchain-tools htc)
+	       (cc-toolchain-libc htc)
+	       (cc-toolchain-tools ntc)
+	       (cc-toolchain-libc ntc)))))
+
+;; gcc is a pseudo-package that provides
+;; a gcc for build=host plus wrappers that
+;; provide /usr/bin/gcc, etc
+(define gcc
+  (lambda (host)
+    (let ((tri ($triple host)))
+      (list
+       (gcc-for-triple tri)
+       (binutils-for-triple tri)
+       (native-gcc-toolchain-wrappers tri)))))
 
 (define *default-build-triple*
   (string->symbol (conc *this-machine* "-linux-musl")))
 
 ;; gcc+musl-toolchain is a toolchain that produces
 ;; statically-linked PIE binaries using gcc and musl libc
-(define (gcc+musl-toolchain triple #!key (CFLAGS '()) (CXXFLAGS '()) (LDFLAGS '()))
+(define (gcc+musl-toolchain triple #!key
+			    (CFLAGS '())
+			    (CXXFLAGS '())
+			    (LDFLAGS '())
+			    (prebuilt #f))
   (let* ((plat   (lambda (bin)
 		   (conc triple "-" bin)))
 	 ;; n.b.: we configure our gcc toolchain --with-sysroot=<sysroot>
@@ -97,18 +66,18 @@
 	 (lflags (cons sysf '(-static-pie "-Wl,--gc-sections")))
 	 (cflags (append lflags '(-fPIE -ffunction-sections -fdata-sections -pipe))))
     (make-cc-toolchain
-     tools: (list (gcc-for-triple triple)
-		  (binutils-for-triple triple)
-		  exportall
-		  make
-		  execline-tools
-		  busybox-core)
+     tools: (or prebuilt
+		(list
+		 (gcc-for-triple triple)
+		 (binutils-for-triple triple)
+		 exportall
+		 make
+		 execline-tools
+		 busybox-core))
+     ;; it must be possible to build these with only 'tools:'
      libc: (list musl libssp-nonshared)
      env: (make-cc-env
-	   ;; there's a circular dependency issue here:
-	   ;; (build-triple) calls (build-config) which
-	   ;; can be constructed using gcc+musl-toolchain ...
-	   CBUILD:   (let ((bld (build-config))) (if bld ($triple bld) *default-build-triple*))
+	   CBUILD:   *default-build-triple* ; FIXME
 	   CHOST:    triple
 	   CC:       (plat "gcc")
 	   CFLAGS:   (append cflags CFLAGS)
@@ -125,12 +94,10 @@
 	   READELF:  (plat "readelf")
 	   OBJCOPY:  (plat "objcopy")))))
 
-(define (gcc+musl-native-toolchain triple)
+(define (gcc-native-toolchain triple)
   (make-cc-toolchain
-   tools: (cons* (gcc-for-triple triple)
-		 (binutils-for-triple triple)
-		 (native-gcc-toolchain-wrappers triple))
-   libc: (list musl libssp-nonshared)
+   tools: (native-gcc-toolchain-wrappers triple)
+   libc:  '()
    env: (make-cc-env
 	 CBUILD:   #f
 	 CHOST:    #f
@@ -161,7 +128,10 @@
 				#!key
 				(optflag '-O2)
 				(sspflag '-fstack-protector-strong)
-				(extra-cflags '()))
+				(extra-cflags '())
+				(build #f)
+				(bootstrap #f)
+				(prebuilt #f))
   (let ((badfl  '(-march=native -mtune=native -mcpu=native))
 	(triple (string->symbol (conc arch "-linux-musl")))
 	(cflags (cons*
@@ -176,10 +146,12 @@
 	      (error "CFLAGS breaks reproducibility" (car fl))
 	      (loop (cdr fl)))))
     (make-config
-     arch: arch
-     triple: triple
-     cc-toolchain: (gcc+musl-toolchain triple CFLAGS: cflags CXXFLAGS: cflags)
-     native-cc-toolchain: (gcc+musl-native-toolchain triple))))
+     arch:         arch
+     triple:       triple
+     build:        build
+     bootstrap:    bootstrap
+     cc-toolchain: (gcc+musl-toolchain triple CFLAGS: cflags CXXFLAGS: cflags prebuilt: prebuilt)
+     native-cc-toolchain: (gcc-native-toolchain triple))))
 
 ;; cc-for-target produces a list of packages
 ;; that together constitute a C/C++ toolchain
@@ -217,20 +189,23 @@
 ;; that makes libc headers appear at a particular sysroot
 (define musl-headers-for-triple
   (memoize-eq
-    (lambda (target-triple)
-      (lambda (host)
-        (make-package
-	 src:   (remote-archive
-		 (url-translate *musl-url* "musl" *musl-version*)
-		 *musl-hash*)
-	 dir:   (string-append "musl-" *musl-version*)
-	 env:   '()
-	 label: (conc "musl-headers-" (triple->arch target-triple))
-	 tools: (list make execline-tools busybox-core)
-	 inputs: '()
-	 build: `((make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
-		    ,(conc "ARCH=" (musl-arch-name target-triple))
-		    "prefix=/usr" install-headers)))))))
+   (lambda (target-triple)
+     (lambda (host)
+       (if (eq? ($triple host) target-triple)
+	   (error "musl-headers-for-triple native will cause bootstrap loops"))
+       (expand-package
+	host
+	src:   (remote-archive
+		(url-translate *musl-url* "musl" *musl-version*)
+		*musl-hash*)
+	dir:   (string-append "musl-" *musl-version*)
+	env:   '()
+	label: (conc "musl-headers-" (triple->arch target-triple))
+	tools: (list make execline-tools busybox-core)
+	inputs: '()
+	build: `((make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
+		   ,(conc "ARCH=" (musl-arch-name target-triple))
+		   "prefix=/usr" install-headers)))))))
 
 (define musl
   (cc-package
@@ -246,22 +221,23 @@
 
 (define libssp-nonshared
   (lambda (conf)
-    (make-package
-      label:   (conc "libssp-nonshared-" ($arch conf))
-      tools:   (cc-for-target conf)
-      inputs:  '()
-      dir:     "/src"
-      src:     (interned "/src/ssp-nonshared.c" #o644 #<<EOF
-                         extern void __stack_chk_fail(void);
-                         void __attribute__((visibility ("hidden"))) __stack_chk_fail_local(void) { __stack_chk_fail(); }
+    (expand-package
+     conf
+     label:   (conc "libssp-nonshared-" ($arch conf))
+     tools:   (cc-for-target conf)
+     inputs:  '()
+     dir:     "/src"
+     src:     (interned "/src/ssp-nonshared.c" #o644 #<<EOF
+			extern void __stack_chk_fail(void);
+			void __attribute__((visibility ("hidden"))) __stack_chk_fail_local(void) { __stack_chk_fail(); }
 EOF
-                         )
-      build: `((if ((,($CC conf) ,@($CFLAGS conf) -c ssp-nonshared.c -o __stack_chk_fail_local.o)))
-               (if ((,($AR conf) -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
-               (if ((mkdir -p /out/usr/lib)))
-               (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))
+)
+     build: `((if ((,($CC conf) ,@($CFLAGS conf) -c ssp-nonshared.c -o __stack_chk_fail_local.o)))
+	      (if ((,($AR conf) -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
+	      (if ((mkdir -p /out/usr/lib)))
+	      (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))
 
-;; dependencies necessary to statically link an ordinary C executable
+;; Dependencies necessary to statically link an ordinary C executable
 (define libc (list musl libssp-nonshared))
 
 ;; exportall(1) is an execline tool for exporting a block of variables
@@ -273,7 +249,6 @@ EOF
      "exportall" "0.1"
      (string-append "https://b2cdn.sunfi.sh/pub-cdn/files/" hash)
      hash
-     prebuilt: (cut maybe-prebuilt <> 'exportall)
      build: (cmd*
 	     `(make DESTDIR=/out (CC= ,$CC) (CFLAGS= ,$CFLAGS) install)
 	     $strip-cmd))))
@@ -301,9 +276,8 @@ EOF
    env: (lambda (conf)
 	  ;; gmp's configure script ignores CFLAGS_FOR_BUILD,
 	  ;; so we have to shove everything into CC_FOR_BUILD
-	  (let ((env (cc-env/for-build)))
-	    `((CC_FOR_BUILD . ,(cons (kref env CC_FOR_BUILD:)
-				     (kref env CFLAGS_FOR_BUILD:))))))
+	  `((CC_FOR_BUILD . ,(cons ($build-CC conf)
+				   ($build-CFLAGS conf)))))
    tools: (list m4 native-toolchain)
    extra-configure: '(--with-pic)))
 
@@ -335,13 +309,11 @@ EOF
 (define (ska-cmmi-package
 	 name version hash
 	 #!key
-	 (prebuilt #f)
 	 (libs '())
 	 (extra-configure '()))
   (cmmi-package
    name version
    "https://skarnet.org/software/$name/$name-$version.tar.gz" hash
-   prebuilt: prebuilt
    libs:     libs
    prepare:  '((if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure))))
    override-configure: (vargs
@@ -366,7 +338,6 @@ EOF
   (ska-cmmi-package
    "execline" "2.6.0.1"
    "0AwX9jiwZt0b0KiHeuWYvuzZdHlP22cZ0088gDI_iRc="
-   prebuilt: (cut maybe-prebuilt <> 'execline)
    libs: (list skalibs)
    extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
 		      --enable-pedantic-posix
@@ -422,9 +393,8 @@ EOF
    "make" "4.3"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
    "HaL2VGA5mzktijZa2L_IyOv2OTKTGkf8D-AVI_wvARc="
-   prebuilt: (cut maybe-prebuilt <> 'make)
    ;; can't call exit(3) inside a procedure registered with atexit(3);
-   ;; just exit promptly
+    ;; just exit promptly
    prepare: '((if ((sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c))))))
 
 (define binutils-for-triple
@@ -434,11 +404,9 @@ EOF
       "binutils" "2.34"
       "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
       "laZMIwGW3GAXUFMyvWCaHwBwgnojWVXGE94gWH164A4="
-      prebuilt: (lambda (conf)
-		  (and (eq? ($triple conf) target-triple) (maybe-prebuilt conf 'binutils)))
       tools: (list byacc reflex)
       libs:  (list zlib)
-      native-cc: cc-env/for-build
+      native-cc: $cc-env/for-build
       prepare: '((if ((sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in))))
       override-configure: (vargs `(--disable-nls
 				   --disable-shared --enable-static
@@ -468,28 +436,31 @@ EOF
   (memoize-eq
     (lambda (target-triple)
       (lambda (host)
+	(if (eq? target-triple ($triple host))
+	  (error "fake-musl for build machine will cause a bootstrap loop"))
         (let* ((hash "GpFZDYJsPUIYcsfZe-22Qk90kJ9albSjYSf_qTfzuuA=")
                (leaf (remote-archive
                        (conc "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
                        hash kind: 'tar.zst))
                (version '0.1))
-          (make-package
-            label: (conc "fakemusl-" version "-" (triple->arch target-triple))
-            src:   leaf
-            dir:   (conc "fakemusl-" version)
-	    ;; so, we're hard-coding binutils here rather than
-	    ;; getting the toolchain from the host <config>
-	    ;; because we actually need an assembler, and
-	    ;; clang doesn't come with one
-            tools: (list (binutils-for-triple target-triple)
-                         make
-                         execline-tools
-                         busybox-core)
-            inputs: '()
-            build: (let* ((outdir (filepath-join "/out" (triple->sysroot target-triple))))
-                     `((if ((make ,@(k=v* AS: (conc target-triple "-as")
-					  AR: (conc target-triple "-ar")) all)))
-                       (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
+          (expand-package
+	   host
+	   label: (conc "fakemusl-" version "-" (triple->arch target-triple))
+	   src:   leaf
+	   dir:   (conc "fakemusl-" version)
+	   ;; so, we're hard-coding binutils here rather than
+	   ;; getting the toolchain from the host <config>
+	   ;; because we actually need an assembler, and
+	   ;; clang doesn't come with one
+	   tools: (list (binutils-for-triple target-triple)
+			make
+			execline-tools
+			busybox-core)
+	   inputs: '()
+	   build: (let* ((outdir (filepath-join "/out" (triple->sysroot target-triple))))
+		    `((if ((make ,@(k=v* AS: (conc target-triple "-as")
+					 AR: (conc target-triple "-ar")) all)))
+		      (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
 
 (define (if-native-target? tg yes no)
   (lambda (conf)
@@ -510,11 +481,9 @@ EOF
 	"https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
 	"Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="
 	patches: (patch* (include-file-text "patches/gcc/pie-gcc.patch"))
-	prebuilt: (lambda (conf)
-		    ;; only use prebuilts for build=host=target
-		    (and (eq? ($triple conf) target-triple)
-			 (eq? target-triple (build-triple))
-			 (maybe-prebuilt conf 'gcc)))
+	;; we depend on cc-for-build automatically,
+	;; so we only need additional target tools
+	;; if target!=build
 	tools: (if-native-target?
 		target-triple
 		(list byacc reflex gawk)
@@ -524,12 +493,12 @@ EOF
 	libs: (list libgmp libmpfr libmpc libisl zlib)
 	out-of-tree: #t
 	extra-cflags: '(-DCROSS_DIRECTORY_STRUCTURE)
-	native-cc: cc-env/for-build
+	native-cc: $cc-env/for-build
 	env:  (lambda (conf)
-		(list ($make-overrides conf)
-		      '(gcc_cv_no_pie . no)
-		      '(gcc_cv_c_no_pie . no)
-		      '(gcc_cv_c_no_fpie . no)))
+		 (list ($make-overrides conf)
+		       '(gcc_cv_no_pie . no)
+		       '(gcc_cv_c_no_pie . no)
+		       '(gcc_cv_c_no_fpie . no)))
 	prepare: '((if ((find "." -name Makefile.in -exec sed "-i"
 			      -e "/^AR = ar/d"        ; please don't hard-code AR
 			      -e "/^ARFLAGS = cru/d"  ; please don't hard-code ARFLAGS
@@ -541,7 +510,7 @@ EOF
 		   ;; for those targets; the configure scripts
 		   ;; make sure of that...
 		   ;;
-		   ;; you can repro this build failure by
+		    ;; you can repro this build failure by
 		   ;; cross-building a "native" GCC with
 		   ;; CFLAGS that are invalid for the *build* system
 		   (if ((sed "-i"
@@ -580,18 +549,15 @@ EOF
 			       (--build= ,$build-triple)
 			       (--target= ,target-triple)
 			       (--host= ,$triple)))
-	cleanup: (if-native-target?
-		  target-triple
-		  ;; native targets still shouldn't keep /usr/bin/gcc, etc.;
-		  ;; we'll install those as symlinks when native-cc is required
-		  `((if ((find /out/usr/bin -type f ! -name ,(conc target-triple "*") -delete))))
-		  ;; only the native version of gcc should have
-		  ;; the python gdb helpers
-		  '((if ((elglob dir "/out/usr/share/gcc-*/python")
-			 (rm -rf $dir))))))))))
-
-(define ($cc-env/for-kbuild conf)
-  (cc-env/for-kbuild))
+	 cleanup: (if-native-target?
+		   target-triple
+		   ;; native targets still shouldn't keep /usr/bin/gcc, etc.;
+		   ;; we'll install those as symlinks when native-cc is required
+		   `((if ((find /out/usr/bin -type f ! -name ,(conc target-triple "*") -delete))))
+		   ;; only the native version of gcc should have
+		   ;; the python gdb helpers
+		   '((if ((elglob dir "/out/usr/share/gcc-*/python")
+			  (rm -rf $dir))))))))))
 
 (define (busybox/config config-hash extra-inputs)
   (cc-package
@@ -625,16 +591,7 @@ EOF
 ;; it doesn't include system utilities that would require
 ;; linux headers
 (define busybox-core
-  (lambda (conf)
-    ;; busybox-core is a prebuilt bootstrap package,
-    ;; so we have to update the package struct to reflect that
-    (let* ((config "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=")
-           (bbpkg  ((busybox/config config '()) conf))
-           (pre    (maybe-prebuilt conf 'busybox)))
-      (if pre
-        (update-package bbpkg prebuilt: pre)
-        bbpkg))))
-
+  (busybox/config "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=" '()))
 
 (define *linux-major* 5.4)
 (define *linux-patch* 39)
@@ -667,22 +624,23 @@ EOF
 
 (define linux-headers
   (lambda (conf)
-    (make-package
-      src:    *linux-source*
-      dir:    (conc "linux-" *linux-major*)
-      label:  (conc "linux-headers-" *linux-major* "." *linux-patch* "-" ($arch conf))
-      tools:  (list native-toolchain execline-tools busybox-core make xz-utils)
-      inputs: '()
-      build:  `((if ((pipeline ((xzcat /src/linux.patch)))
-                     (patch -p1)))
-                (if ((make ,(conc 'ARCH= (linux-arch-name ($arch conf)))
-                           ,@(kvargs (cc-env/for-kbuild))
-                           headers)))
-                ;; headers_install uses rsync, which is a
-                ;; silly large dependency to pull in
-                ;; at this stage...
-                (if ((cp -r usr /out)))
-                (find /out -type f ! -name "*.h" -delete)))))
+    (expand-package
+     conf
+     src:    *linux-source*
+     dir:    (conc "linux-" *linux-major*)
+     label:  (conc "linux-headers-" *linux-major* "." *linux-patch* "-" ($arch conf))
+     tools:  (list xz-utils native-toolchain)
+     inputs: '()
+     build:  `((if ((pipeline ((xzcat /src/linux.patch)))
+		    (patch -p1)))
+	       (if ((make ,(conc 'ARCH= (linux-arch-name ($arch conf)))
+		      ,@(kvargs ($cc-env/for-kbuild conf))
+		      headers)))
+	       ;; headers_install uses rsync, which is a
+	       ;; silly large dependency to pull in
+	       ;; at this stage...
+	       (if ((cp -r usr /out)))
+	       (find /out -type f ! -name "*.h" -delete)))))
 
 (define (installkernel* script)
   (interned "/sbin/installkernel" #o755
@@ -790,44 +748,45 @@ EOF
         (install (installkernel* install))
         (patches (patch* portable-lexer-patch)))
     (lambda (conf)
-      (make-package
-        src:   (append (list install config) *linux-source* patches)
-        dir:   (conc "linux-" *linux-major*)
-        label: (conc "linux-" *linux-major* "." *linux-patch* "-" name)
-        tools: (cons*
-		perl xz-utils reflex byacc libelf zlib linux-headers
-                (cc-for-target conf #t))
-        inputs: '()
-	env:   `((KCONFIG_NOTIMESTAMP . 1)
-		 (KBUILD_BUILD_TIMESTAMP . "@0")
-		 (KBUILD_BUILD_USER . distill)
-		 (KBUILD_BUILD_HOST . distill)
-		 (CROSS_COMPILE . ,($cross-compile conf)))
-	patches: patches
-        build: (let ((make-args (append
-                                  (kvargs (cc-env/for-kbuild))
-                                  (k=v*
-                                    YACC: 'yacc ;; not bison -y
-                                    ARCH: (linux-arch-dir-name ($arch conf))
-                                    HOST_LIBELF_LIBS: '(-lelf -lz)))))
-                 `((if ((pipeline ((xzcat /src/linux.patch)))
-                        (patch -p1)))
-                   ,@(fix-dtc-script
-                       fix-lex-options: 'scripts/kconfig/lexer.l
-                       fix-yacc-cmdline: 'scripts/Makefile.host)
-                   ;; libelf is built with zlib, so -lelf should imply -lz
-                   (if ((find "." -type f -name "Make*"
-                              -exec sed "-i" -e
-                              "s/-lelf/-lelf -lz/g" "{}" ";")))
-                   (if ((make
-                          V=1 KCONFIG_ALLCONFIG=/src/config
-                          ,@make-args
-                          allnoconfig)))
-                   (if ((make V=1 ,@make-args)))
-                   ,@(if dtb
-                       `((if ((install -D -m "644" -t /out/boot ,dtb))))
-                       '())
-                   (make V=1 ,@make-args install)))))))
+      (expand-package
+       conf
+       src:   (append (list install config) *linux-source* patches)
+       dir:   (conc "linux-" *linux-major*)
+       label: (conc "linux-" *linux-major* "." *linux-patch* "-" name)
+       tools: (cons*
+	       perl xz-utils reflex byacc libelf zlib linux-headers
+	       (cc-for-target conf #t))
+       inputs: '()
+       env:   `((KCONFIG_NOTIMESTAMP . 1)
+		(KBUILD_BUILD_TIMESTAMP . "@0")
+		(KBUILD_BUILD_USER . distill)
+		(KBUILD_BUILD_HOST . distill)
+		(CROSS_COMPILE . ,($cross-compile conf)))
+       patches: patches
+       build: (let ((make-args (append
+				(kvargs ($cc-env/for-kbuild conf))
+				(k=v*
+				 YACC: 'yacc ;; not bison -y
+				 ARCH: (linux-arch-dir-name ($arch conf))
+				 HOST_LIBELF_LIBS: '(-lelf -lz)))))
+		`((if ((pipeline ((xzcat /src/linux.patch)))
+		       (patch -p1)))
+		  ,@(fix-dtc-script
+		     fix-lex-options: 'scripts/kconfig/lexer.l
+		     fix-yacc-cmdline: 'scripts/Makefile.host)
+		  ;; libelf is built with zlib, so -lelf should imply -lz
+		  (if ((find "." -type f -name "Make*"
+			     -exec sed "-i" -e
+			     "s/-lelf/-lelf -lz/g" "{}" ";")))
+		  (if ((make
+			   V=1 KCONFIG_ALLCONFIG=/src/config
+			   ,@make-args
+			   allnoconfig)))
+		  (if ((make V=1 ,@make-args)))
+		  ,@(if dtb
+			`((if ((install -D -m "644" -t /out/boot ,dtb))))
+			'())
+		  (make V=1 ,@make-args install)))))))
 
 (define linux-virt-x86_64
   (linux/config-static "virt-x86_64" "FTMQoxE4ClKOWLDdcDVzWt8UuizXfMmR4duX8Z-5qlY="))
@@ -909,20 +868,20 @@ EOF
 (define e2fsprogs
   ;; e2fsprogs is unusual and uses BUILD_CC, BUILD_CFLAGS, etc.
   ;; in order to indicate which CC to use for building tools
-  (let* ((buildcc-env  (lambda ()
+  (let (($buildcc-env  (lambda (conf)
 			 (cc-env/build
+			  conf
 			  (lambda (kw)
 			    (string->keyword
 			     (string-append
 			      "BUILD_"
-			      (keyword->string kw)))))))
-	 ($buildcc-env (lambda (conf) (buildcc-env))))
+			      (keyword->string kw))))))))
     (cmmi-package
      "e2fsprogs" "1.45.5"
      "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
      "w7R6x_QX6QpTEtnNihjwlHLBBtfo-r9RrWVjt9Nc818="
      patches: (patch* mke2fs-repro-patch)
-     native-cc: buildcc-env
+     native-cc: $buildcc-env
      libs: (list linux-headers)
      ;; atypical:
      ;; e2fsprogs wants BUILD_CC, etc. to be specified
@@ -1213,12 +1172,30 @@ EOF
 (define (default-config arch)
   (or (memq arch '(x86_64 aarch64 ppc64le))
       (info "WARNING: un-tested architecture" arch))
-  (gcc+musl-static-config arch optflag: '-Os sspflag: '-fstack-protector-strong))
+  (if (eq? arch *this-machine*)
+      (force default-build-config)
+      (gcc+musl-static-config arch
+			      optflag: '-Os
+			      sspflag: '-fstack-protector-strong
+			      build:   (force default-build-config))))
 
 ;; set package#build-config to
 ;; the default config for this machine
-;;
-;; default-build-config is special because
-;; it is the config used for bootstrapping toolchain(s)
-(define default-build-config (default-config *this-machine*))
-(build-config default-build-config)
+(define default-build-config
+  (delay
+    (let* ((optflag '-Os)
+	   (sspflag '-fstack-protector-strong)
+	   (config* (lambda args
+		      (apply gcc+musl-static-config
+			     *this-machine*
+			     optflag: optflag
+			     sspflag: sspflag
+			     args)))
+	   (stage0  (config*
+		     prebuilt: (map cdr (cdr (assq *this-machine* *prebuilts*)))
+		     bootstrap: #f
+		     build: #f))
+	   (stage1  (config*
+		     bootstrap: stage0
+		     build: #f)))
+      (config* build: #f bootstrap: stage1))))

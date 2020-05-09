@@ -74,7 +74,8 @@
 
 (define (s6-rc-db artifacts)
   (lambda (conf)
-    (make-package
+    (expand-package
+     conf
      label:  "s6-rc-db"
      src:    artifacts
      dir:    "/"
@@ -159,9 +160,20 @@
 		     (let loop ((out init)
 				(lst lst))
 		       (if (null? lst) out (loop (proc (car lst) out) (cdr lst))))))
-	 (sublists (lambda (lst field)
-		     (fold (lambda (svc lst) (append (field svc) lst)) '() lst)))
-	 (tail     (sublists all service-inputs))
+	 (sublists (lambda (lst field init)
+		     (fold (lambda (svc lst)
+			     (let loop ((items (field svc))
+					(lst   lst))
+			       (if (null? items)
+				   lst
+				   (let ((i (car items)))
+				     (loop
+				      (cdr items)
+				      (if (memq i lst) lst (cons i lst)))))))
+			   init
+			   lst)))
+	 (reqpkgs  (list s6 s6-rc busybox-full execline-tools hard))
+	 (tail     (sublists all service-inputs reqpkgs))
          (default  (make-service
                      name: 'default
                      spec: (%make-bundle
@@ -174,9 +186,10 @@
          (db       (s6-rc-db arts)))
     (append
       (cons db tail)
-      (groups+users->artifacts (sublists all service-groups)
-			       (sublists all service-users))
-      (init-artifacts))))
+      (groups+users->artifacts
+       (sublists all service-groups '())
+       (sublists all service-users '()))
+      (boot-scripts))))
 
 (define *service-dir* "/run/service")
 (define *catchall-fifo* "/run/service/s6-svscan-log/fifo")
@@ -240,10 +253,7 @@
       (fdmove -c 2 1)
       (s6-svscan -d 4 -St0 ,*service-dir*)))))
 
-;; init-artifacts is the list of artifacts and package-lambdas
-;; that are the contents of a working s6-rc init system,
-;; absent the actual compiled service database
-(define (init-artifacts)
+(define (boot-scripts)
   (let* ((script*  (lambda (path body)
                      (interned path #o744
                                (with-output-to-string
@@ -309,5 +319,4 @@
 	  (remote-file
 	   "https://salsa.debian.org/md/netbase/-/raw/master/etc/protocols"
 	   "gykO3waWpzCvDqGEFidDstWolF4YoIjMyvOkG16y1b4="
-	   "/etc/protocols" #o644)
-          s6 s6-rc execline-tools busybox-full hard)))
+	   "/etc/protocols" #o644))))

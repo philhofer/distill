@@ -112,7 +112,7 @@
 
 (let* ((config  (let ((args (command-line-arguments)))
                   (if (null? args)
-                    (build-config)
+                    (force default-build-config)
                     (default-config (string->symbol (car args))))))
        (build!  (config->builder config))
        (loaded  (map (lambda (name)

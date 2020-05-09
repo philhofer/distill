@@ -6,13 +6,12 @@
   (only (chicken string) conc))
 
 (define ncurses
-  (let* ((cc-for-build  (lambda ()
+  (let (($cc-for-build  (lambda (conf)
 			  (cc-env/build
+			   conf
 			   (lambda (kw)
 			     (string->keyword
-			      (string-append "BUILD_" (keyword->string kw)))))))
-	 ($cc-for-build (lambda (conf)
-			  (cc-for-build))))
+			      (string-append "BUILD_" (keyword->string kw))))))))
     (cmmi-package
      "ncurses" "6.2"
      "https://invisible-mirror.net/archives/$name/$name-$version.tar.gz"
@@ -20,10 +19,10 @@
      ;; the ncurses installation process needs a runnable
      ;; ncurses binary, and we won't get that when cross-compiling
      tools: (lambda (conf)
-	      (if (eq? ($triple conf) (build-triple))
+	      (if (eq? ($triple conf) ($build-triple conf))
 		  '()
 		  (list ncurses)))
-     native-cc: cc-for-build
+     native-cc: $cc-for-build
      cleanup: (let ((libs '(ncurses form panel menu)))
 		(cons
 		 `(if ((ln -s libncurses.a /out/usr/lib/libcurses.a)))

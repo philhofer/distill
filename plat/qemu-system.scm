@@ -14,16 +14,16 @@
 
 (export qemu-x86_64-kvm)
 
-;; take a kernel package and yield the raw kernel image
-(define (raw-vmlinuz kernpkg)
+;; vmlinuz wraps a kernel package
+;; and produces /boot/vmlinuz as a raw output
+(define (vmlinuz kernpkg)
   (lambda (conf)
-    (make-package
-      dir: "/"
-      raw-output: "/boot/vmlinuz"
-      label:  (conc "raw-vmlinuz-" ($arch conf))
-      inputs: (list kernpkg)
-      tools:  (list execline-tools busybox-core)
-      build:  `((cp -r ,(filepath-join ($sysroot conf) "/boot") /out)))))
+    (let ((kernplan (configure kernpkg conf)))
+      (make-plan
+       name:   (string-append "vmlinuz-" (plan-name kernplan))
+       inputs: (list (make-input basedir: "/out" link: kernplan))
+       null-build: #t
+       raw-output: "/boot/vmlinuz"))))
 
 (define (qemu-system arch kernel
                      #!key
@@ -64,4 +64,4 @@
 ;; qemu-x86_64-kvm creates a script for running
 ;; a x86_64 KVM guest on an x86_64 host
 (define (qemu-x86_64-kvm . opts)
-  (apply qemu-system 'x86_64 (raw-vmlinuz linux-virt-x86_64) use-kvm: #t opts))
+  (apply qemu-system 'x86_64 (vmlinuz linux-virt-x86_64) use-kvm: #t opts))

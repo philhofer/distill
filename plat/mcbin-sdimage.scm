@@ -193,7 +193,8 @@ EOF
 			   ;; flag for any compiler/architecture except aarch64,
 			   ;; so builds will fail if this flag leaks into the
 			   ;; wrong CFLAGS arguments
-			   extra-cflags: '(-mcpu=cortex-a72 -ffunction-sections "-Wl,--gc-sections"))
+			   extra-cflags: '(-mcpu=cortex-a72)
+			   build: (force default-build-config))
     (linux/config-static "mcbin" "7T9BGGKMOBpAtgHatOv8gRA2Nf92jDWptxrJLV9T3ms="
                          dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
 

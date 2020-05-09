@@ -8,40 +8,135 @@
    ((and ppc64 little-endian) 'ppc64le)
    ((and ppc64 big-endian) 'ppc64)))
 
-(define <meta-package> (list 'meta-package))
+;; expand-package is a helper
+;; for writing package definitions
+;; as raw lambdas
+(define (expand-package host
+			#!key
+			label
+			build
+			(src '())
+			(tools '())
+			(inputs '())
+			(patches '())
+			(dir "/")
+			(env '())
+			(raw-output #f))
+  (let* ((bld       ($build host))
+	 (strap     (%bootstrap bld))
+	 (ex        (%current-expander))
+	 (boot      (cc-toolchain-tools ($cc-toolchain bld)))
+	 ;; tools are built with the 'build' config,
+	 ;; unless they are part of the build config toolchain,
+	 ;; in which case they are built with the bootstrap config
+	 (exp/build (lambda (item)
+		      (cond
+		       ((artifact? item) item)
+		       ((plan? item) item)
+		       ((memq item boot)
+			(if strap
+			    (ex item strap)
+			    (error "cannot expand item (no bootstrap in <config>)" item)))
+		       (else (ex item bld)))))
+	 (exp/host  (lambda (item)
+		      (ex item host)))
+	 (->tool  (lambda (link)
+		    (make-input
+		     basedir: "/"
+		     link: link)))
+	 (->input (let ((sysroot ($sysroot host)))
+		    (lambda (link)
+		      (make-input
+		       basedir: sysroot
+		       link: link)))))
+    (make-plan
+     raw-output: raw-output
+     name:       label
+     inputs: (cons
+	      (make-input
+	       basedir: "/"
+	       link: (buildfile dir env patches build))
+	      (append
+	       (map ->tool (expandl exp/build (flatten src tools)))
+	       (map ->input (expandl exp/host inputs)))))))
 
-;; make-metapackage is an alternative for
-;; make-package that simply returns a list
-;; of other packages and/or artifacts
-(define (make-meta-package proc)
-  (vector <meta-package> proc))
+(define (buildfile dir env patches build)
+  (interned
+   "/build" #o744
+   (lambda ()
+     (write-exexpr
+      (begin
+	(cons
+	 `(cd ,dir)
+	 (append
+	  (script-apply-patches (or patches '()))
+	  (exports->script (or env '()))
+	  (if (list? build) build (error "expected build")))))))))
 
-(: meta-package? (* -> boolean))
-(define (meta-package? arg)
-  (and (vector? arg)
-       (= (vector-length arg) 2)
-       (eq? (vector-ref arg 0) <meta-package>)))
+;; new-memoizer creates a new memoizer for package expansion
+(define (new-memoizer)
+  (let ((expand (memoize-lambda (obj conf) (obj conf))))
+    (lambda (obj conf)
+      (let loop ((obj obj))
+	(cond
+	 ((procedure? obj)
+	  (loop (expand obj conf)))
+	 ((list? obj) obj)
+	 ((plan? obj) obj)
+	 ((artifact? obj) obj)
+	 (else (error "unexpected expansion value" obj)))))))
 
-(define-memoized (meta-expand mp conf)
-  (let ((res ((vector-ref mp 1) conf)))
-    (if (list? res) res (list res))))
+;; %current-expander is the current memoization
+;; context, which is used to recursively expand
+;; package lambdas into plans an artifacts
+(define %current-expander (make-parameter #f))
 
-(define inputs? (list-of (disjoin procedure? meta-package? artifact?)))
+;; (configure x conf) expands x with 'conf'
+;; using the current expansion environment
+(: configure (* vector -> *))
+(define (configure x conf) ((%current-expander) x conf))
 
-(define-kvector-type
-  <package>
-  make-package
-  package?
-  (package-label    label:   #f  string?)
-  (package-src      src:     '() (disjoin artifact? (list-of artifact?)))
-  (package-tools    tools:   '() inputs?)
-  (package-inputs   inputs:  '() inputs?)
-  (package-prebuilt prebuilt: #f (perhaps artifact?))
-  (package-patches  patches: '() (list-of artifact?))
-  (package-build    build:   #f  list?)
-  (package-dir      dir:     "/" string?)
-  (package-env      env:     '() (list-of (disjoin pair? kvector?)))
-  (package-raw-output raw-output: #f (perhaps string?)))
+;; expander returns a monoid that expands
+;; lambdas into plan or artifact objects
+(: expander (vector -> (* -> *)))
+(define (expander host)
+  (let ((memo (new-memoizer)))
+    (lambda (obj)
+      (parameterize ((%current-expander memo))
+	(memo obj host)))))
+
+(: subpackage (string * #!rest string -> (vector -> vector)))
+(define (subpackage prefix sub . globs)
+  (lambda (conf)
+    (let ((child (configure sub conf)))
+      (make-plan
+       label: (string-append
+	       prefix
+	       (if (plan? child)
+		   (plan-name child)
+		   "unknown"))
+       inputs: (list
+		(make-input
+		 basedir: "/out"
+		 link: child))
+       null-build: #t))))
+
+;; clibs wraps a package and yields
+;; only the parts of its outputs that
+;; are in conventional locations for C library files
+(define (libs pkg)
+  (subpackage "lib-" pkg
+	      "./usr/lib/" "./lib/"
+	      "./usr/include/" "./include/"))
+
+;; binaries produces a subpackage
+;; by matching common binary directories
+(define (binaries pkg)
+  (subpackage "bin-" pkg
+	      "./usr/bin/" "./bin/"
+	      "./usr/sbin/" "./sbin/"
+	      "./usr/libexec/" "./libexec/"
+	      "./usr/share/" "./share/"))
 
 ;; vargs takes a list of arguments,
 ;; some of which are functions,
@@ -160,10 +255,13 @@
 	 (src (remote-archive url hash)))
     (lambda (conf)
       (let* ((ll  (lambda (l) (if (procedure? l) (l conf) l)))
-	     (ctc ($cc-toolchain conf)))
-	(make-package
+	     (bld ($build conf))
+	     (ctc ($cc-toolchain conf))
+	     (al  (lambda (item msg)
+		    (if (list? item) item (error msg)))))
+	(expand-package
+	 conf
 	 raw-output: raw-output
-	 prebuilt: (ll prebuilt)
 	 patches: patches
 	 label:   (conc name "-" version "-" ($arch conf))
 	 src:     (cons src (append patches extra-src))
@@ -172,8 +270,13 @@
 	 tools:   (append (cc-toolchain-tools ctc)
 			  (ll tools)
 			  (if use-native-cc
-			      (let ((ntc ($native-toolchain (build-config))))
-				(append (cc-toolchain-tools ntc) (cc-toolchain-libc ntc)))
+			      ;; xxx reimplementation of base#native-toolchain
+			      (let ((btc ($cc-toolchain bld))
+				    (ntc ($native-toolchain bld)))
+				(append (cc-toolchain-tools btc)
+					(cc-toolchain-libc btc)
+					(cc-toolchain-tools ntc)
+					(cc-toolchain-libc ntc)))
 			      '()))
 	 inputs:  (append (if no-libc '() (cc-toolchain-libc ctc)) (ll libs))
 	 build:   (if build (ll build) (error "cc-package needs build: argument")))))))
@@ -213,10 +316,7 @@
 			       --disable-nls
 			       --prefix=/usr
 			       --sysconfdir=/etc
-			       ;; delay the evaluation of the build machine
-			       ;; in case build-config is re-parameterized
-			       --build ,(lambda (conf)
-					  ($triple (build-config)))
+			       --build ,$build-triple
 			       --host ,$triple)))
 	 (make-args (or override-make (vargs (list $make-overrides)))))
     (cc-package
@@ -237,7 +337,7 @@
 			     CFLAGS: (+= extra-cflags)
 			     CXXFLAGS: (+= extra-cflags)))
 		  (if native-cc
-		      (cons (native-cc) (ll env))
+		      (cons (ll native-cc) (ll env))
 		      (ll env)))))
      build:   (cdelay
 	       (lambda (ll)
@@ -258,13 +358,6 @@
 		  (ll cleanup)
 		  (ll (lambda (conf)
 			(strip-binaries-script ($triple conf))))))))))
-
-(: update-package (vector #!rest * -> vector))
-(define (update-package pkg . args)
-  (apply make-package
-	 (append
-	  (kvector->list pkg)
-	  args)))
 
 (: <cc-env> vector)
 (define <cc-env>
@@ -293,8 +386,8 @@
   <cc-toolchain>
   make-cc-toolchain
   cc-toolchain?
-  (cc-toolchain-tools tools: '() inputs?)
-  (cc-toolchain-libc  libc:  '() inputs?)
+  (cc-toolchain-tools tools: '() list?)
+  (cc-toolchain-libc  libc:  '() list?)
   (cc-toolchain-env   env:   #f  cc-env?))
 
 (define-kvector-type
@@ -303,28 +396,32 @@
   config?
   ($arch         arch:         #f symbol?)
   ($triple       triple:       #f symbol?)
+  ;; C toolchain that builds for host=triple
   ($cc-toolchain cc-toolchain: #f cc-toolchain?)
-  ($native-toolchain native-cc-toolchain: #f cc-toolchain?))
+  ;; C toolchain (wrappers) that builds for build=host=triple
+  ($native-toolchain native-cc-toolchain: #f cc-toolchain?)
+  ;; config for tool prerequisites:
+  (%build         build:        #f (perhaps config?))
+  ;; config for toolchain prerequisites:
+  (%bootstrap     bootstrap:    #f (perhaps config?)))
+
+(define ($build conf)
+  (or (%build conf) conf))
+
+(define ($native? conf)
+  (not (%build conf)))
+
+(define ($leaf conf)
+  (cond
+   ((%build conf) => $leaf)
+   ((%bootstrap conf) => $leaf)
+   (else conf)))
+
+(define $build-toolchain (o $native-toolchain $build))
+(define $build-triple (o $triple $build))
 
 (define $cc-env (o cc-toolchain-env $cc-toolchain))
 
-(define (build-getter kw)
-  (let ((get (kvector-getter <cc-env> kw)))
-    (lambda (_)
-      (get (cc-toolchain-env ($native-toolchain (build-config)))))))
-
-(define $build-CC (build-getter CC:))
-(define $build-LD (build-getter LD:))
-(define $build-CFLAGS (build-getter CFLAGS:))
-
-;; sort of a hack to keep a circular dependency
-;; between base.scm and package.scm from creeping in:
-;; have package.scm declare the 'build-config'
-;; parameter, but have 'base.scm' set it as soon
-;; as it declares default-config
-(: build-triple (-> symbol))
-(define (build-triple) ($triple (build-config)))
-(define ($build-triple conf) (build-triple))
 (define ($cross-compile conf) (conc ($triple conf) "-"))
 
 (define (triple->sysroot trip)
@@ -362,11 +459,22 @@
      RANLIB: STRIP: NM: READELF: OBJCOPY: AR: ARFLAGS:)
     $cc-env)))
 
+(define $build-CC)
+(define $build-CFLAGS)
+(define $build-LD)
+(let ((buildenv (lambda (kw)
+		  (o (kvector-getter <cc-env> kw)
+		     cc-toolchain-env
+		     $build-toolchain))))
+  (set! $build-CC (buildenv CC:))
+  (set! $build-LD (buildenv LD:))
+  (set! $build-CFLAGS (buildenv CFLAGS:)))
+
 ;; cc-env/build produces a C environment
 ;; by transforming the usual CC, LD, etc.
 ;; variables using (frob-kw key) for each keyword
-(: cc-env/build ((keyword -> keyword) -> vector))
-(define (cc-env/build frob-kw)
+(: cc-env/build (vector (keyword -> keyword) -> vector))
+(define (cc-env/build conf frob-kw)
   (let ((folder (lambda (kw arg lst)
 		  ;; ignore cc-env values that are #f
 		  (if arg
@@ -374,29 +482,33 @@
 		      lst))))
     (list->kvector
      (kvector-foldl
-      (cc-toolchain-env ($native-toolchain (build-config)))
+      (cc-toolchain-env ($native-toolchain ($build conf)))
       folder
       '()))))
 
 ;; cc-env/for-build is a C environment
 ;; with CC_FOR_BUILD, CFLAGS_FOR_BUILD, etc.
 ;; (this is typical for autotools-based configure scripts)
-(define (cc-env/for-build)
-  (cc-env/build (lambda (kw)
-		  (string->keyword
-		   (string-append
-		    (keyword->string kw)
-		    "_FOR_BUILD")))))
+(define ($cc-env/for-build conf)
+  (cc-env/build
+   conf
+   (lambda (kw)
+     (string->keyword
+      (string-append
+       (keyword->string kw)
+       "_FOR_BUILD")))))
 
 ;; cc-env/for-kbuild is a C environment
 ;; with HOSTCC, HOSTCFLAGS, etc.
 ;; (this is typical for Kbuild-based build systems)
-(define (cc-env/for-kbuild)
-  (cc-env/build (lambda (kw)
-		  (string->keyword
-		   (string-append
-		    "HOST"
-		    (keyword->string kw))))))
+(define ($cc-env/for-kbuild conf)
+  (cc-env/build
+   conf
+   (lambda (kw)
+     (string->keyword
+      (string-append
+       "HOST"
+       (keyword->string kw))))))
 
 (: spaced (* -> string))
 (define (spaced lst)
@@ -476,12 +588,6 @@
 		 (lambda (k v)
 		   (list (##sys#symbol->string k) (spaced v)))))))
 
-;; build-config is the configuration
-;; for artifacts produced for *this* machine (tools, etc)
-;; (this is set to a reasonable value when base.scm is loaded)
-(define build-config
-  (make-parameter #f))
-
 ;; recursively apply 'proc' to items of lst
 ;; while the results are lists, and deduplicate
 ;; precisely-equivalent items along the way
@@ -511,104 +617,15 @@
 ;; and yields its output artifact
 (define (config->builder env)
   (let* ((host   (conform config? env))
-	 (build  (build-config))
-	 (expand (package-expander build host))
-	 (->plan/art (lambda (in)
-		       (cond
-			((artifact? in) in)
-			((meta-package? in) (meta-expand in host))
-			((procedure? in) (expand in))
-			(else "bad item provided to plan builder" in))))
-	 (->out (lambda (pln)
-		  (cond
-		   ((artifact? pln) pln)
-		   ((procedure? pln) (let ((plan (expand pln)))
-				       (if (artifact? plan) plan (plan-outputs plan))))
-		   ;; TODO: meta-packages
-		   (else #f)))))
+	 (expand (expander host))
+	 (->out  (lambda (final)
+		   (if (artifact? final)
+		       final
+		       (plan-outputs final)))))
     (lambda args
-      (let ((plans (expandl ->plan/art args)))
-	(unless (null? plans)
-		(build-graph! plans))
-	(map ->out args)))))
-
-
-;; package-expander returns a function that expands
-;; package-lambdas into plans, taking care to
-;; memoize the result of package expansions so
-;; that package-lambdas that are 'eq?' equivalent
-;; yield plans that are 'eq?' equivalent
-;;
-(define (package-expander build host)
-  (define in-root
-    (let ((fn (memoize-eq
-	       (lambda (obj)
-		 (make-input basedir: "/" link: obj)))))
-      (lambda (obj conf) (fn obj))))
-  (define in-sysroot
-    ;; rather than memoizing across all configs,
-    ;; just switch on the two configs we know
-    ;; we ought to see...
-    (let* ((host-sysroot  ($sysroot host))
-	   (build-sysroot ($sysroot build))
-	   (in-host-sysroot (memoize-eq
-			     (lambda (obj)
-			       (make-input basedir: host-sysroot link: obj))))
-	   (in-build-sysroot (memoize-eq
-			      (lambda (obj)
-				(make-input basedir: build-sysroot link: obj)))))
-      (lambda (obj conf)
-	(cond
-	 ((eq? conf host)
-	  (in-host-sysroot obj))
-	 ((eq? conf build)
-	  (in-build-sysroot obj))
-	 (else (error "unexpected config" conf))))))
-  (define package->plan
-    (memoize-lambda
-     (pkg-proc host)
-     (let ((pkg (pkg-proc host)))
-       (or (package-prebuilt pkg)
-	   (let* ((expander (lambda (where conf)
-			      (lambda (in)
-				(cond
-				 ((artifact? in) (where in conf))
-				 ((meta-package? in) (meta-expand in conf))
-				 (else (where (package->plan in conf) conf))))))
-		  (->tool  (expander in-root build))
-		  (->input (expander in-sysroot host))
-		  (tools   (package-tools pkg))
-		  (inputs  (package-inputs pkg)))
-	     (make-plan
-	      raw-output: (package-raw-output pkg)
-	      name:   (package-label pkg)
-	      inputs: (cons
-		       (make-input
-			basedir: "/"
-		        link: (package-buildfile pkg))
-		       (append
-			(expandl ->tool (flatten (package-src pkg) tools))
-			(expandl ->input inputs)))))))))
-  (lambda (pkg-proc)
-    (parameterize ((build-config build))
-      (package->plan pkg-proc host))))
-
-(: package-buildfile (vector -> vector))
-(define (package-buildfile r)
-  (interned
-   "/build" #o744
-   (lambda ()
-     (write-exexpr
-      (let ((dir (package-dir r))
-	    (patches (or (package-patches r) '()))
-	    (exports (package-env r)))
-	(unless dir "error: no dir specified" r)
-	(cons
-	 `(cd ,dir)
-	 (append
-	  (script-apply-patches patches)
-	  (exports->script exports)
-	  (package-build r))))))))
+      (let ((plans (map expand args)))
+	(or (null? plans) (build-graph! plans))
+	(map ->out plans)))))
 
 ;; generator for an execline sequence that strips binaries
 (define (strip-binaries-script triple)

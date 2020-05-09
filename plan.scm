@@ -1,3 +1,4 @@
+(foreign-declare "#include <fnmatch.h>")
 (foreign-declare "#include \"copy-sparse.c\"")
 
 ;; we have our own copy-file that preserves sparse files
@@ -79,6 +80,50 @@
     `#(archive ,(or kind (impute-format src)))
     hash
     src))
+
+(: sub-archive (artifact list --> artifact))
+(define (sub-archive art args)
+  (%artifact
+   `#(sub-archive ,(vector-ref (artifact-format art) 1) ,args)
+   (artifact-hash art)
+   #f))
+
+;; subarchive-match takes an archive artifact
+;; and a list of glob expressions and returns
+;; the list of archive members that match 'matches'
+(: subarchive-match (artifact (list-of string) -> (list-of string)))
+(define (archive-match art matches)
+  (let* ((fnmatch (foreign-lambda* int ((nonnull-c-string pat) (nonnull-c-string str))
+		    "C_return(fnmatch(pat, str, FNM_PATHNAME));"))
+	 (file     (artifact-path art))
+	 (matches? (lambda (item)
+		     (let loop ((exprs matches))
+		       (if (null? exprs)
+			   #f
+			   (or (= 0 (fnmatch (car exprs) item))
+			       (loop (cdr exprs))))))))
+    (let-values (((rfd wfd) (create-pipe)))
+      (let* ((child (process-fork
+		     (lambda ()
+		       (fdclose rfd)
+		       (duplicate-fileno wfd 1)
+		       (fdclose wfd)
+		       (process-execute
+			"env"
+			(list "LC_ALL=C.UTF-8" "tar" "-tf" file)))))
+	     (end   (spawn process-wait/yield child))
+	     (inp   (open-input-file* rfd)))
+	(fdclose wfd)
+	(with-cleanup
+	 (lambda () (fdclose rfd))
+	 (lambda ()
+	   (let loop ((out  '())
+		      (line  (read-line inp)))
+	     (if (eof-object? line)
+		 out
+		 (loop
+		  (if (matches? line) (cons line out) out)
+		  (read-line inp))))))))))
 
 (: remote-file ((or false string) string string fixnum --> artifact))
 (define (remote-file src hash abspath mode)
@@ -163,6 +208,7 @@
   (plan-inputs inputs: '() (list-of input?))
   (plan-saved-hash   saved-hash:   #f false/c)
   (plan-saved-output saved-output: #f false/c)
+  (plan-null-build?  null-build:   #f boolean?)
   (plan-raw-output   raw-output:   #f (perhaps string?)))
 
 (define plan-saved-hash-set! (kvector-setter <plan> saved-hash:))
@@ -365,9 +411,8 @@
 
 ;; fork+exec, wait for the process to exit and check
 ;; that it exited successfully
-(: run (string #!rest string -> undefined))
-(define (run prog . args)
-  (trace "run" (cons prog args))
+(: run (string (list-of string) -> undefined))
+(define (run prog args)
   (let-values (((pid ok? status) (process-wait/yield (process-run prog args))))
     (unless (and ok? (= status 0))
       (error "command failed:" (cons prog args)))))
@@ -485,7 +530,7 @@
          (dst (filepath-join (artifact-dir) hash))
          (tmp (string-append dst ".tmp")))
     (infoln "fetching" url)
-    (run "wget" "-q" "-O" tmp url)
+    (run "wget" (list "-q" "-O" tmp url))
     (let ((h (hash-file tmp)))
       (cond
         ((not h)
@@ -561,7 +606,11 @@
       (copy-file (filepath-join (artifact-dir) hash) dstfile #f)
       (set-file-permissions! dstfile mode)))
 
-  (define (unpack-archive dst kind hash src)
+  (define (unpack-sub-archive dst kind hash src args)
+    (unpack-archive dst kind hash src
+		    (archive-match hash args)))
+
+  (define (unpack-archive dst kind hash src tail)
     (let ((comp (case kind
                   ((tar.gz) "-z")
                   ((tar.bz) "-j")
@@ -573,7 +622,7 @@
       (when (not (file-exists? infile))
         (fetch! src hash))
       (create-directory dst #t)
-      (run "tar" comp "-xkf" infile "-C" dst)))
+      (run "tar" (cons* comp "-xkf" infile "-C" dst tail))))
 
   (define (unpack-symlink dst abspath lnk)
     (let ((target (filepath-join dst abspath)))
@@ -596,8 +645,9 @@
     (match format
       (#('file abspath mode)   (unpack-file dst abspath mode hash extra))
       (#('dir abspath mode)    (unpack-dir dst abspath mode))
-      (#('archive kind)        (unpack-archive dst kind hash extra))
+      (#('archive kind)        (unpack-archive dst kind hash extra '()))
       (#('symlink abspath lnk) (unpack-symlink dst abspath lnk))
+      (#('sub-archive kind tail) (unpack-sub-archive dst kind hash extra tail))
       (else (error "unrecognized artifact format" format)))))
 
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
@@ -645,21 +695,22 @@
     ;; is, unfortunately, a minefield
     (run
       "env"
-      "LC_ALL=C.UTF-8" ;; necessary for --sort=name to be stable
-      "tar"
-      ;; TODO: make sure zstd is invoked with explicit
-      ;; compression-level and threading arguments to keep
-      ;; that from being a possible source of reproducibility issues,
-      ;; _or_ calculate the checksum on the uncompressed archive
-      "--zstd"
-      "-cf" (abspath tmp)
-      "--format=ustar"
-      "--sort=name"
-      "--owner=0"
-      "--group=0"
-      "--mtime=@0"
-      "--numeric-owner"
-      "-C" dir ".")
+      (list
+       "LC_ALL=C.UTF-8" ;; necessary for --sort=name to be stable
+       "tar"
+       ;; TODO: make sure zstd is invoked with explicit
+       ;; compression-level and threading arguments to keep
+       ;; that from being a possible source of reproducibility issues,
+       ;; _or_ calculate the checksum on the uncompressed archive
+       "--zstd"
+       "-cf" (abspath tmp)
+       "--format=ustar"
+       "--sort=name"
+       "--owner=0"
+       "--group=0"
+       "--mtime=@0"
+       "--numeric-owner"
+       "-C" dir "."))
     (local-archive format (intern! tmp))))
 
 ;; plan->outputs! builds a plan and yields
@@ -699,7 +750,9 @@
               (create-symbolic-link outfile linkname)
               (infoln "build failed; please see" linkname)))
           (lambda ()
-            (sandbox-run root outfile))))
+            (or
+	     (plan-null-build? p)
+	     (sandbox-run root outfile)))))
 
       ;; now save the actual build outputs
       (let ((raw (plan-raw-output p)))

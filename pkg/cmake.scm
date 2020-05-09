@@ -58,7 +58,7 @@
    tools: (lambda (conf)
 	    (list linux-headers (cmake-toolchain-file conf)))
    build: (lambda (conf)
-	    `((if (,@(kvexport (cc-toolchain-env ($native-toolchain (build-config))))
+	    `((if (,@(kvexport (cc-toolchain-env ($build-toolchain conf)))
 		   (./bootstrap --prefix=/usr
 				--system-zlib
 				--system-expat

@@ -23,7 +23,7 @@
      dir: (string-append "tcl" ver "/unix")
      libs: (list zlib)
      tools: (lambda (conf)
-	      (if (eq? ($triple conf) (build-triple))
+	      (if (eq? ($triple conf) ($build-triple conf))
 		  '()
 		  (list tcl)))
      ;; insert missing #include in generic/tcl.h

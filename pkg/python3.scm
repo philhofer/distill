@@ -428,7 +428,7 @@ EOF
 	    ;; TODO: figure out precisely the conditions under which
 	    ;; the build script requires an external python3 program;
 	    ;; right now we're approximating it as 'build-triple != host-triple'
-	    (if (eq? ($triple conf) (build-triple)) '() (list python3)))
+	    (if (eq? ($triple conf) ($build-triple conf)) '() (list python3)))
    env:   '((ac_cv_file__dev_ptmx . yes)
 	    (ac_cv_file__dev_ptc . no))
    prepare: '((if ((cp /src/py-setup Modules/Setup))))
