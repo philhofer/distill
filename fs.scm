@@ -71,12 +71,12 @@
 		     (if ((mkdir -p ,dir)))
 		     (if ((chown -R catchlog:catchlog ,dir)))
 		     (if ((chmod "2700" ,dir)))
-		     ;; strip off timestamps and have s6-log prepend tai64n timestamps instead
-		     (pipeline ((redirfd -r 0 /dev/kmsg)
-				(s6-setuidgid catchlog)
-				(sed -e "s/^[0-9].*-;//g")))
+		     (pipeline -w ((s6-setuidgid catchlog)
+				   (s6-log -d ,nfd -- ,@opts /var/log/services/kmsg)))
+		     (redirfd -r 0 /dev/kmsg)
 		     (s6-setuidgid catchlog)
-		     (s6-log -d ,nfd -- ,@opts /var/log/services/kmsg))))))
+		     ;; strip off timestamps and have s6-log prepend tai64n timestamps instead;
+		     (sed -e "s/^[0-9].*-;//g"))))))
 
 ;; log-services creates a mount at /var
 ;; using "var-dev" and then maps the list
