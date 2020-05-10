@@ -51,8 +51,7 @@
 			    (make-input
 			     basedir: "/out"
 			     link:    pln
-			     wrap:    (lambda (art)
-					(sub-archive art globs))))))
+			     globs:   globs))))
 	   (art2  (plan-outputs (begin (build-graph! (list deriv)) deriv))))
       (test string=?
 	    (artifact-hash art)

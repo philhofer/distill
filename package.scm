@@ -119,8 +119,7 @@
 		(make-input
 		 basedir: "/out"
 		 link: child
-		 wrap: (lambda (art)
-			 (sub-archive art globs))))
+		 globs: globs))
        null-build: #t))))
 
 ;; clibs wraps a package and yields

@@ -199,10 +199,9 @@
   input?
   (input-basedir basedir: "/" string?)
   (input-link    link:    #f  (disjoin artifact? plan?))
-  (input-wrap    wrap:    #f  (perhaps procedure?)))
+  (input-globs   globs:   #f  (perhaps (list-of string?))))
 
 (define input-set-link! (kvector-setter <input> link:))
-(define input-set-wrap! (kvector-setter <input> wrap:))
 
 (define-kvector-type
   <plan>
@@ -227,21 +226,12 @@
      ((artifact? link)
       link)
      ((plan? link)
-      (begin
-	;; cause recursive resolution to fail:
-	(input-set-link! in #f)
-	(let ((wrap (or (input-wrap in) identity))
-	      (out  (plan-outputs link)))
-	  (if out
-	      (let ((val (wrap out)))
-		(or (artifact? val) (error "input-resolve! - not an artifact" val))
-		(input-set-link! in val)
-		(input-set-wrap! in #f)
-		val)
-	      (begin
-		(input-set-link! in link) #f)))))
-     ((not link)
-      (error "no <input> link; recursive input resolution?"))
+      (let ((art  (plan-outputs link)))
+	(and art
+	     (let* ((g   (input-globs in))
+		    (val (if g (sub-archive art g) art)))
+	       (input-set-link! in val)
+	       val))))
      (else (error "unexpected <input> link value" link)))))
 
 (: fold-unresolved (vector procedure * -> *))
@@ -905,3 +895,4 @@
     (unless (string=? newhash hash)
       (error "loaded plan has different hash:" newhash))
     plan))
+

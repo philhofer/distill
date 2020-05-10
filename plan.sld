@@ -14,7 +14,7 @@
     make-input
     input-link
     input-basedir
-    input-wrap
+    input-globs
     input?
 
     build-plan!
