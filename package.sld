@@ -47,6 +47,7 @@
     cmmi-package
     libs
     binaries
+    subpackage
 
     $arch
     $sysroot

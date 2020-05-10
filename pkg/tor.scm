@@ -19,7 +19,7 @@
 	  (tor_cv_null_is_zero . yes)
 	  (tor_cv_malloc_zero_works . yes) ; malloc(0)!=NULL
 	  (tor_cv_twos_complement . yes))
-   libs: (list linux-headers libevent libressl zlib zstd libcap)
+   libs: (list linux-headers libevent libressl zlib libzstd libcap)
    extra-configure: '(--enable-all-bugs-are-fatal
 		      --enable-zstd
 		      --disable-manpage

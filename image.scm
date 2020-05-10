@@ -51,7 +51,7 @@
      src:    '()
      dir:    ($sysroot conf)
      label:  "initramfs"
-     tools:  (list execline-tools busybox-core zstd libarchive) ;; need bsdtar
+     tools:  (list execline-tools busybox-core zstd bsdtar)
      inputs: inputs
      build:  (let ((compressor (case compress
 				 ;; (see note above about compressor nondeterminism)

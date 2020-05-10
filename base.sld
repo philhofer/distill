@@ -44,6 +44,7 @@
     reflex
     libisl
     bzip2
+    libbz2
     make
 
     ; busybox:
@@ -63,8 +64,11 @@
     ; skaware
     skalibs
     execline-tools
+    libexecline
     s6
+    libs6
     s6-rc
+    libs6rc
 
     ; execline helpers
     exportall
@@ -84,9 +88,14 @@
 
     ; compression/archive tools
     xz-utils
+    xz-tools
+    liblzma
     lz4
+    liblz4
     zstd
+    libzstd
     libarchive
+    bsdtar
 
     ; ssl
     libressl

@@ -54,7 +54,7 @@
    "https://github.com/Kitware/CMake/releases/download/v$version/$name-$version.tar.gz"
    "34AhocPzPUZyt0Ic_2knEbFCKBGW1HCGJOebDceTi-0="
    use-native-cc: #t ;; for bootstrap
-   libs: (list linux-headers zlib libexpat libressl zstd bzip2)
+   libs: (list linux-headers zlib libexpat libressl libzstd libbz2)
    tools: (lambda (conf)
 	    (list linux-headers (cmake-toolchain-file conf)))
    build: (lambda (conf)

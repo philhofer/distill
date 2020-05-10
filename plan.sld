@@ -8,8 +8,8 @@
     local-archive
     remote-archive
     remote-file
+    sub-archive
     overlay
-    archive-match
 
     make-input
     input-link

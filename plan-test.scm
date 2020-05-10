@@ -43,6 +43,17 @@
 		       link: frob)))))
   (build-graph! (list pln))
   (let ((art (plan-outputs pln)))
-    (test equal?
-	  '("./etc/frob" "./etc/foo")
-	  (archive-match art '("./etc/f*")))))
+    (let* ((globs '("./etc/f*"))
+	   (deriv (make-plan
+		   name: "test-deriv"
+		   null-build: #t
+		   inputs: (list
+			    (make-input
+			     basedir: "/out"
+			     link:    pln
+			     wrap:    (lambda (art)
+					(sub-archive art globs))))))
+	   (art2  (plan-outputs (begin (build-graph! (list deriv)) deriv))))
+      (test string=?
+	    (artifact-hash art)
+	    (artifact-hash art2)))))

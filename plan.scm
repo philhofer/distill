@@ -91,11 +91,12 @@
 ;; subarchive-match takes an archive artifact
 ;; and a list of glob expressions and returns
 ;; the list of archive members that match 'matches'
-(: subarchive-match (artifact (list-of string) -> (list-of string)))
-(define (archive-match art matches)
+(: archive-match (string (list-of string) -> (list-of string)))
+(define (archive-match file matches)
+  (unless (file-exists? file)
+    (error "archive-match: file doesn't exist" file))
   (let* ((fnmatch (foreign-lambda* int ((nonnull-c-string pat) (nonnull-c-string str))
 		    "C_return(fnmatch(pat, str, FNM_PATHNAME));"))
-	 (file     (artifact-path art))
 	 (matches? (lambda (item)
 		     (let loop ((exprs matches))
 		       (if (null? exprs)
@@ -115,7 +116,10 @@
 	     (inp   (open-input-file* rfd)))
 	(fdclose wfd)
 	(with-cleanup
-	 (lambda () (fdclose rfd))
+	 (lambda ()
+	   (begin
+	     (fdclose rfd)
+	     (join/value end)))
 	 (lambda ()
 	   (let loop ((out  '())
 		      (line  (read-line inp)))
@@ -608,7 +612,9 @@
 
   (define (unpack-sub-archive dst kind hash src args)
     (unpack-archive dst kind hash src
-		    (archive-match hash args)))
+		    (archive-match
+		     (filepath-join (artifact-dir) hash)
+		     args)))
 
   (define (unpack-archive dst kind hash src tail)
     (let ((comp (case kind

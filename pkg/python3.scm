@@ -422,7 +422,7 @@ EOF
    "https://www.python.org/ftp/python/$version/$name-$version.tar.xz"
    "Fz7sjZlaw3LqjDO4K3IViMKGscHMEH2_7UTIvSmKxfM="
    extra-src: (list (interned "/src/py-setup" #o644 py-setup))
-   libs: (list ncurses libexpat libressl zlib bzip2 xz-utils libffi
+   libs: (list ncurses libexpat libressl zlib libbz2 liblzma libffi
 	       linux-headers gdbm libreadline)
    tools: (lambda (conf)
 	    ;; TODO: figure out precisely the conditions under which

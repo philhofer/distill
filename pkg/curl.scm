@@ -18,3 +18,5 @@
 		      --without-libssh2
 		      --enable-ipv6
 		      --enable-unix-sockets)))
+
+(define libcurl (libs curl))

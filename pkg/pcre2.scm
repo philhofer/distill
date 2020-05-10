@@ -9,7 +9,7 @@
    "pcre2" "10.34"
    "https://ftp.pcre.org/pub/pcre/$name-$version.tar.gz"
    "dUEXxoMgBjr2H6OHV8jRk-dWOqW-XqOnNeFlYZ3mp3A="
-   libs: (list libedit zlib bzip2)
+   libs: (list libedit zlib libbz2)
    extra-configure: '(--disable-dependency-tracking
 		      --enable-pcre2-16
 		      --enable-pcre2-32

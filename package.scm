@@ -110,15 +110,17 @@
   (lambda (conf)
     (let ((child (configure sub conf)))
       (make-plan
-       label: (string-append
-	       prefix
-	       (if (plan? child)
-		   (plan-name child)
-		   "unknown"))
+       name: (string-append
+	      prefix
+	      (if (plan? child)
+		  (plan-name child)
+		  "unknown"))
        inputs: (list
 		(make-input
 		 basedir: "/out"
-		 link: child))
+		 link: child
+		 wrap: (lambda (art)
+			 (sub-archive art globs))))
        null-build: #t))))
 
 ;; clibs wraps a package and yields
@@ -127,7 +129,8 @@
 (define (libs pkg)
   (subpackage "lib-" pkg
 	      "./usr/lib/" "./lib/"
-	      "./usr/include/" "./include/"))
+	      "./usr/include/" "./include/"
+	      "./usr/share/"))
 
 ;; binaries produces a subpackage
 ;; by matching common binary directories

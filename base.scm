@@ -295,7 +295,7 @@ EOF
    "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc="
    libs: (list libgmp libmpfr)))
 
-(define bzip2
+(define %bzip2
   (cc-package
    "bzip2" "1.0.8"
    "https://sourceware.org/pub/$name/$name-$version.tar.gz"
@@ -303,6 +303,9 @@ EOF
    build: (cmd*
 	   `(make PREFIX=/out/usr ,$cc-env ,$make-overrides install)
 	   $strip-cmd)))
+
+(define bzip2  (binaries %bzip2))
+(define libbz2 (libs %bzip2))
 
 ;; wrapper for cmmi-package for skaware,
 ;; since they all need similar treatment
@@ -334,7 +337,7 @@ EOF
    "-GI9LFINaiNdVFzBFvQxD2880lyqLAC2YpWNdRXUPaE="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
-(define execline-tools
+(define libexecline+tools
   (ska-cmmi-package
    "execline" "2.6.0.1"
    "0AwX9jiwZt0b0KiHeuWYvuzZdHlP22cZ0088gDI_iRc="
@@ -342,6 +345,10 @@ EOF
    extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
 		      --enable-pedantic-posix
 		      --enable-static-libc)))
+
+(define execline-tools (binaries libexecline+tools))
+(define libexecline (libs libexecline+tools))
+
 (define byacc
   (cmmi-package
    "byacc" "20200330"
@@ -629,7 +636,7 @@ EOF
      src:    *linux-source*
      dir:    (conc "linux-" *linux-major*)
      label:  (conc "linux-headers-" *linux-major* "." *linux-patch* "-" ($arch conf))
-     tools:  (list xz-utils native-toolchain)
+     tools:  (list xz-tools native-toolchain)
      inputs: '()
      build:  `((if ((pipeline ((xzcat /src/linux.patch)))
 		    (patch -p1)))
@@ -754,7 +761,7 @@ EOF
        dir:   (conc "linux-" *linux-major*)
        label: (conc "linux-" *linux-major* "." *linux-patch* "-" name)
        tools: (cons*
-	       perl xz-utils reflex byacc libelf zlib linux-headers
+	       perl xz-tools reflex byacc libelf zlib linux-headers
 	       (cc-for-target conf #t))
        inputs: '()
        env:   `((KCONFIG_NOTIMESTAMP . 1)
@@ -865,7 +872,7 @@ EOF
 EOF
 )
 
-(define e2fsprogs
+(define %e2fsprogs
   ;; e2fsprogs is unusual and uses BUILD_CC, BUILD_CFLAGS, etc.
   ;; in order to indicate which CC to use for building tools
   (let (($buildcc-env  (lambda (conf)
@@ -894,6 +901,10 @@ EOF
 			       ,$buildcc-env))
      override-install: '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))
 
+(define e2fsprogs
+  (subpackage "tools-" %e2fsprogs
+	      "./usr/sbin/" "./usr/bin/" "./etc/*.conf"))
+
 (define perl
   ;; the perl configure script desperately
   ;; wants to put date(1) output into the build output,
@@ -909,7 +920,7 @@ EOF
      "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
      "1LHYN7a4aIRWLowcJRJWNNTMSLl5btVOydsEyFCL2Yo="
      tools: (list samedate)
-     libs:  (list bzip2 zlib)
+     libs:  (list libbz2 zlib)
      env:   (lambda (conf)
 	      `((BUILD_ZLIB . 0)
 		(BUILD_BZIP2 . 0)
@@ -996,7 +1007,10 @@ EOF
    "https://tukaani.org/$name/$name-$version.tar.xz"
    "-jw6foy_zDVKZ8pXQV2O2i1_6Zcs3efYVg31jflUtcQ="))
 
-(define lz4
+(define xz-tools (binaries xz-utils))
+(define liblzma (libs xz-utils))
+
+(define %lz4
   (cc-package
   "lz4" "1.9.2"
   "https://github.com/lz4/$name/archive/v$version.tar.gz"
@@ -1005,7 +1019,10 @@ EOF
 	  `(make DESTDIR=/out PREFIX=/usr ,$cc-env ,$make-overrides install)
 	  $strip-cmd)))
 
-(define zstd
+(define lz4 (binaries %lz4))
+(define liblz4 (libs %lz4))
+
+(define %zstd
   (cc-package
    "zstd" "1.4.4"
    "https://github.com/facebook/$name/archive/v$version.tar.gz"
@@ -1023,6 +1040,9 @@ EOF
 	       (make ,$cc-env ,$make-overrides ,@makeflags zstd))
 	     '(install -D -m "755" programs/zstd /out/usr/bin/zstd)))))
 
+(define zstd (binaries %zstd))
+(define libzstd (libs %zstd))
+
 (define squashfs-tools
   (let ((ver "4.4"))
     (cc-package
@@ -1032,7 +1052,7 @@ EOF
      ;; non-standard directory:
      dir:   (string-append "squashfs-tools-" ver "/squashfs-tools")
      env:   (csubst (lambda (subst) (list (subst $cc-env))))
-     libs:  (list zstd lz4 xz-utils zlib)
+     libs:  (list libzstd liblz4 liblzma zlib)
      build: (cmd*
 	     `(make XZ_SUPPORT=1 LZO_SUPPORT=0
 		    LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0 ,$make-overrides)
@@ -1047,13 +1067,16 @@ EOF
    "cHEFVDGIUxRBRs64A9_ap1jzVOkWv3VF-cyNGYpJvMM="
    cleanup: '((if ((ln -s openssl /out/usr/bin/libressl))))))
 
-(define libarchive
+(define libarchive+tools
   (cmmi-package
    "libarchive" "3.4.2"
    "https://github.com/libarchive/$name/releases/download/v$version/$name-$version.tar.gz"
    "t3aJd9_ChlLWsDKodSqu7kjPB_4UaCrSb29EqmGq0T8="
-   libs: (list bzip2 zlib xz-utils lz4 libressl zstd)
+   libs: (list libbz2 zlib liblzma liblz4 libressl libzstd)
    extra-configure: '(--without-xml2 --without-acl --without-attr --without-expat)))
+
+(define libarchive (libs libarchive+tools))
+(define bsdtar (binaries libarchive+tools))
 
 (define libmnl
   (cmmi-package
@@ -1131,21 +1154,27 @@ EOF
                  '(rm -rf /out/usr/share/man)
 		 $strip-cmd))))
 
-(define s6
+(define libs6+tools
   (ska-cmmi-package
    "s6" "2.9.1.0"
    "-YjvL_kpeegF4FFOlDizjsxkC8gSqPftHDsII5sDmEc="
-   libs: (list skalibs execline-tools)
+   libs: (list skalibs libexecline)
    extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
 		      --enable-static-libc)))
 
-(define s6-rc
+(define s6 (binaries libs6+tools))
+(define libs6 (libs libs6+tools))
+
+(define libs6rc+tools
   (ska-cmmi-package
    "s6-rc" "0.5.1.2"
    "y8awbxd6B7btH4qmlyx2FWwhdlysT4n19Twc-x0lotc="
-   libs: (list s6 skalibs execline-tools)
+   libs: (list libs6 skalibs libexecline)
    extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
 		      --enable-static-libc)))
+
+(define s6-rc (binaries libs6rc+tools))
+(define libs6rc (libs libs6rc+tools))
 
 ;; hard(8) command; an alternative to busybox halt(8)/reboot(8)/poweroff(8)
 (define hard
