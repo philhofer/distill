@@ -1,67 +1,52 @@
 (import
   scheme
-  (distill plan)
-  (distill eprint)
-  (distill filepath)
   (srfi 69)
-  (chicken file))
+  (distill filepath)
+  (distill plan)
+  (chicken file)
+  (chicken file posix))
 
-;; this script
-;;  1) removes plans that never built successfully, and
-;;  2) removes artifacts that aren't referenced by any plan
+(define (outlink? f)
+  (and (symbolic-link? f)
+       (let ((base (basename f)))
+	 (string=? (substring base 0 7) "output:"))))
 
-(define (note-inputs f ht)
-  (let ((lst (if (file-exists? f) (with-input-from-file f read) '())))
-    (or (eof-object? lst)
-        (for-each
-          (lambda (vec)
-            (hash-table-set! ht (vector-ref vec 2) #t))
-          lst))))
+(define (hash? x)
+  (and (string? x)
+       (= (string-length x) 44)))
 
-(define (note-outputs f ht)
-  (let ((vec (with-input-from-file f read)))
-    (or (eof-object? vec)
-        (hash-table-set!
-          ht
-          (vector-ref vec 1)
-          #t))))
-
-;; walk every known plan and mark its inputs and outputs as live;
-;; if the plan never produced outputs, it is dead (and can be pruned)
 (define live-artifacts
-  (let ((art-dir (artifact-dir)))
+  (let ((art-dir (artifact-dir))
+	(pln-dir (plan-dir)))
     (find-files
-      (plan-dir)
-      limit:  0
-      seed:   (make-hash-table test: string=? hash: string-hash)
-      action: (lambda (dir ht)
-                (let* ((hash   (basename dir))
-		       (ofile  (filepath-join dir "outputs.scm"))
-		       (infile (filepath-join art-dir hash)))
-                  (if (and (file-exists? ofile)
-			   (file-exists? infile))
-		      (begin
-			;; this plan is live
-			(hash-table-set! ht hash #t)
-			(note-outputs ofile ht)
-			(note-inputs infile ht))
-		      (begin
-			(info "removing dead plan" dir)
-			(delete-file* (filepath-join art-dir (basename dir)))
-			(delete-directory dir #t))))
-                ht))))
+     pln-dir
+     seed: (make-hash-table hash: string-hash test: string=?)
+     test: outlink?
+     action: (lambda (link ht)
+	       (let* ((realdir (read-symbolic-link link))
+		      (plnhash (basename realdir))
+		      (outhash (substring (basename link) (string-length "output:"))))
+		 (unless (hash? plnhash)
+		   (error "weird hash" plnhash))
+		 (unless (hash? outhash)
+		   (error "weird artifact hash" outhash))
+		 (hash-table-set! ht outhash #t)
+		 (hash-table-set! ht plnhash #t)
+		 (with-input-from-file
+		     (filepath-join art-dir plnhash)
+		   (lambda ()
+		     (for-each
+		      (lambda (in)
+			(unless (hash? (vector-ref in 2))
+			  (error "weird input hash" (vector-ref in 2)))
+			(hash-table-set! ht (vector-ref in 2) #t))
+		      (read)))))
+	       ht))))
 
-;; walk every artifact and produce a list of those
-;; not referenced by any plan
-(define dead-artifacts
-  (find-files
-    (artifact-dir)
-    limit: 0
-    test:  (lambda (f)
-             (not (hash-table-ref/default live-artifacts (basename f) #f)))))
-
-(for-each
-  (lambda (art)
-    (info "deleting" art)
-    (delete-file art))
-  dead-artifacts)
+(find-files
+ (artifact-dir)
+ test: (lambda (f)
+	 (not (hash-table-ref/default live-artifacts (basename f) #f)))
+ action: (lambda (f lst)
+	   (print "removing " f)
+	   (delete-file* f)))
