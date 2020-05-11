@@ -549,11 +549,18 @@
   (let ((outfile (plan-outputs-file p)))
     (unless outfile
       (error "can't save outputs for plan (unresolved inputs):" (plan-name p)))
-    (let ((old (plan-outputs p)))
+    (let ((old    (plan-outputs p))
+	  (outdir (dirname outfile))
+	  (outlnk (filepath-join (plan-dir) (string-append "output:" (artifact-hash ar)))))
       (cond
         ((not old)
          (begin
-           (create-directory (dirname outfile))
+	   ;; only keep the 'most recent' plan that
+	   ;; produces a particular output
+	   (when (file-exists? outlnk)
+	     (delete-file outlnk))
+	   (create-symbolic-link (plan-hash p) outlnk)
+           (create-directory outdir)
            (with-output-to-file outfile (lambda () (write ar)))
            (plan-saved-output-set! p ar)))
         ((equal? old ar)
