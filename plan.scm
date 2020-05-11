@@ -776,6 +776,9 @@
 	 (plan->proc     (make-hash-table test: eq? hash: eq?-hash))
          (hash->plan     (make-hash-table test: string=? hash: string-hash))
          (err            #f)
+	 (built?         (lambda (plan)
+			   (and-let* ((out (plan-outputs plan)))
+			     (file-exists? (artifact-path out)))))
 	 (done+ok?       (lambda (proc)
 			   (let* ((ret (join/value proc))
 				  (st  (proc-status proc)))
@@ -807,7 +810,7 @@
 	   (not err)
 	   (cond
 	    ;; if we've built this before, we're done
-	    ((plan-built? p) #t)
+	    ((built? p) #t)
 	    ;; if this plan isn't unique, its exit status
 	    ;; should be equivalent to that of its identical twin
 	    ((sibling? p) => done+ok?)
@@ -831,7 +834,7 @@
 	join/value
 	(foldl1
 	 (lambda (in lst)
-	   (if (and (plan? in) (not (plan-built? in)))
+	   (if (and (plan? in) (not (built? in)))
 	       (cons (build-proc in) lst)
 	       lst))
 	 '()
