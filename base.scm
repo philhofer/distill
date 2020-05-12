@@ -247,7 +247,7 @@ EOF
   (let ((hash "YR0DqwQcQvI7RwjCDNtnoiENnK_fIbitz76HKwdZ0Ms="))
     (cc-package
      "exportall" "0.1"
-     (string-append "https://b2cdn.sunfi.sh/pub-cdn/files/" hash)
+     (string-append "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
      hash
      build: (cmd*
 	     `(make DESTDIR=/out (CC= ,$CC) (CFLAGS= ,$CFLAGS) install)
