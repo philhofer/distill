@@ -14,9 +14,10 @@
     make-input
     input-link
     input-basedir
-    input-globs
+    input-wrap
     input?
 
+    fetch-graph!
     build-plan!
     build-graph!
     plan?

@@ -1228,3 +1228,75 @@ EOF
 		     bootstrap: stage0
 		     build: #f)))
       (config* build: #f bootstrap: stage1))))
+
+(define pkgconf
+  (cmmi-package
+   "pkgconf" "1.1.0"
+   "https://distfiles.dereferenced.org/$name/$name-$version.tar.xz"
+   "Gz7Gt_OuMI4GXzuBsAnhjSQCdjZG7gLqY8rxCPze-AI="
+   cleanup: '((if ((ln -sf pkg-config /out/usr/bin/pkgconf))))))
+
+(define dosfstools
+  (cmmi-package
+   "dosfstools" "4.1"
+   "https://github.com/dosfstools/$name/releases/download/v$version/$name-$version.tar.gz"
+   "a1HIBRNaQ-39GorXwCXTMLs-rZjAqaQNf0cbD-iqRr4="
+   libs: (list linux-headers)
+   extra-configure: '(--without-udev --without-iconv)))
+
+(define mtools
+  (cmmi-package
+   "mtools" "4.0.24"
+   "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
+   "TDTnHIdZ2Sr-dDRK4r7Jus0HR0WaSkVypAykJJAsU0o="))
+
+;; NOTE: many of the binaries produced by util-linux
+;; will conflict with a busybox install, so you should
+;; probably use subpackages of util-linux instead
+(define util-linux
+  (cmmi-package
+   "util-linux" "2.35"
+   "https://mirrors.edge.kernel.org/pub/linux/utils/$name/v$version/$name-$version.tar.gz"
+   "J3nPDeHgZQXLown0lpq6WziuI31gu9kY-tDZGQGjvBc="
+   tools: (list pkgconf)
+   libs: (list linux-headers)
+   extra-configure: '(--without-python
+		      --without-udev
+		      --disable-nologin
+		      --disable-sulogin
+		      --disable-makeinstall-chown
+		      --disable-makeinstall-setuid)))
+
+(define diskutils
+  (subpackage "diskutils-" util-linux
+	      "./sbin/blk*" "./sbin/blockdev"
+	      "./sbin/sfdisk"))
+
+;; NOTE: imgtools has a run-time dependency on sfdisk (diskutils)
+(define imgtools
+  (let ((hash "itOQGtTyJ5Qbd33KRxMZIh9N8IBH_1xvI1-OLeOyVMs="))
+    (cc-package
+     "imgtools" "0.2.1"
+     (string-append
+      "https://b2cdn.sunfi.sh/pub-cdn/file/" hash)
+     hash
+     libs: (list linux-headers)
+     build: (cmd*
+	     `(make (CC= ,$CC) (CFLAGS= ,$CFLAGS) (LDFLAGS= ,$LDFLAGS) DESTDIR=/out install)))))
+
+(define nasm
+  (cmmi-package
+   "nasm" "2.14.02"
+   "https://www.nasm.us/pub/nasm/releasebuilds/$version/$name-$version.tar.gz"
+   "TcHpCBPswC-Ee4VmIN26EzJDKsr0znrTJljcDM0TxiM="))
+
+(define mlb2
+  (let ((hash "wSsZRw6a5Kos7O23G0uKV2ULSwmkwUIypL6iT6i660I="))
+    (cc-package
+     "mlb2" "0.1"
+     (string-append
+      "https://b2cdn.sunfi.sh/pub-cdn/file/" hash)
+     hash
+     tools: (list nasm)
+     build: (cmd*
+	     `(make (CC= ,$CC) (LD= ,$LD) (CFLAGS= ,$CFLAGS) (LDFLAGS= ,$LDFLAGS) DESTDIR=/out install)))))

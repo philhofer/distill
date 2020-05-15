@@ -199,9 +199,10 @@
   input?
   (input-basedir basedir: "/" string?)
   (input-link    link:    #f  (disjoin artifact? plan?))
-  (input-globs   globs:   #f  (perhaps (list-of string?))))
+  (input-wrap    wrap:    #f  (perhaps procedure?)))
 
 (define input-set-link! (kvector-setter <input> link:))
+(define input-set-wrap! (kvector-setter <input> wrap:))
 
 (define-kvector-type
   <plan>
@@ -226,11 +227,12 @@
      ((artifact? link)
       link)
      ((plan? link)
-      (let ((art  (plan-outputs link)))
+      (let ((art (plan-outputs link)))
 	(and art
-	     (let* ((g   (input-globs in))
-		    (val (if g (sub-archive art g) art)))
+	     (let* ((wr  (or (input-wrap in) identity))
+		    (val (wr art)))
 	       (input-set-link! in val)
+	       (input-set-wrap! in #f)
 	       val))))
      (else (error "unexpected <input> link value" link)))))
 
@@ -262,6 +264,18 @@
     (if (null? lst)
 	out
 	(loop (proc (car lst) out) (cdr lst)))))
+
+(define (fold-graph proc init headlst)
+  (foldl1
+   (lambda (item val)
+     (proc item (if (plan? item)
+		    (foldl1
+		     (lambda (in val)
+		       (proc (input-link in) val))
+		     val (plan-inputs item))
+		    val)))
+   init
+   headlst))
 
 (: andmap1 (procedure list -> *))
 (define (andmap1 pred? lst)
@@ -763,10 +777,31 @@
           (file->artifact (filepath-join outdir raw) raw)
           (dir->artifact outdir))))))
 
-(: plan-built? (vector -> (or string false)))
-(define (plan-built? p)
-  (and-let* ((art (plan-outputs p)))
-    (file-exists? (artifact-path art))))
+(: fetch-graph! ((list-of vector) -> *))
+(define (fetch-graph! headlst)
+  (let* ((fetch-art! (lambda (art)
+		       (fetch!
+			(match (artifact-extra art)
+			  (`(remote . ,url) url)
+			  (else #f))
+			(artifact-hash art))))
+	 (procs (fold-graph
+		 (lambda (item lst)
+		   (if (and (artifact? item)
+			    (not (file-exists? (artifact-path item))))
+		       (cons (spawn fetch-art! item) lst)
+		       lst))
+		 '()
+		 headlst))
+	 (err  (foldl1
+		(lambda (proc err)
+		  (let ((ret (join/value proc)))
+		    (if (eq? (proc-status ret) 'exn)
+			(or err ret)
+			err)))
+		#f
+		procs)))
+    (or err #t)))
 
 (: build-graph! ((list-of vector) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))

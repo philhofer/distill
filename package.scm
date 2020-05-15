@@ -46,9 +46,11 @@
 		     link: link)))
 	 (->input (let ((sysroot ($sysroot host)))
 		    (lambda (link)
-		      (make-input
-		       basedir: sysroot
-		       link: link)))))
+		      (if (input? link)
+			  link
+			  (make-input
+			   basedir: sysroot
+			   link: link))))))
     (make-plan
      raw-output: raw-output
      name:       label
@@ -84,6 +86,7 @@
 	 ((list? obj) obj)
 	 ((plan? obj) obj)
 	 ((artifact? obj) obj)
+	 ((input? obj) obj)
 	 (else (error "unexpected expansion value" obj)))))))
 
 ;; %current-expander is the current memoization
@@ -119,7 +122,8 @@
 		(make-input
 		 basedir: "/out"
 		 link: child
-		 globs: globs))
+		 wrap: (lambda (art)
+			 (sub-archive art globs))))
        null-build: #t))))
 
 ;; clibs wraps a package and yields

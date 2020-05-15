@@ -76,6 +76,7 @@
     ; linux:
     perl
     libelf
+    util-linux
     linux-headers
     linux/config-static
     uboot/config
@@ -103,6 +104,16 @@
     ; filesystem tools
     e2fsprogs
     squashfs-tools
+    dosfstools
+    mtools
+    diskutils
+    imgtools
 
+    ; bootloader tools
+    mlb2
+    nasm
+
+    ; misc
+    pkgconf
     )
   (include "base.scm"))

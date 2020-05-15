@@ -98,8 +98,15 @@
       s6-rc
       linux-headers
       libelf
+      pkgconf
       exportall
       e2fsprogs
+      dosfstools
+      mtools
+      diskutils
+      imgtools
+      nasm
+      mlb2
       libmnl
       libnftnl
       iptables

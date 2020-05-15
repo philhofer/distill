@@ -6,7 +6,6 @@
   (distill base)
   (distill package)
 
-  (pkg pkgconf)
   (pkg libexpat))
 
 ;; generate a cmake 'toolchain file' from a configuration
