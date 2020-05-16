@@ -601,7 +601,7 @@ EOF
   (busybox/config "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=" '()))
 
 (define *linux-major* 5.4)
-(define *linux-patch* 39)
+(define *linux-patch* 41)
 
 (define *linux-source*
   (list
@@ -610,7 +610,7 @@ EOF
      "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
     (remote-file
      (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" *linux-major* "." *linux-patch* ".xz")
-     "1L9Wy6dDCSnQFwBJcKT4QMJtYq0tYcDS3wSeMDD-07o="
+     "EmcM8pxF_ba-qJL0wa-0ltQdndBDm6ahKzq-OpAKoW8="
      "/src/linux.patch"
      #o644)))
 
