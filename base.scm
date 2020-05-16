@@ -1291,9 +1291,9 @@ EOF
    "TcHpCBPswC-Ee4VmIN26EzJDKsr0znrTJljcDM0TxiM="))
 
 (define mlb2
-  (let ((hash "wSsZRw6a5Kos7O23G0uKV2ULSwmkwUIypL6iT6i660I="))
+  (let ((hash "4v7UmuN_yWWdeYzF8L2G32yjeTIV9rwTFe1nyeNvl6E="))
     (cc-package
-     "mlb2" "0.1"
+     "mlb2" "0.2"
      (string-append
       "https://b2cdn.sunfi.sh/pub-cdn/file/" hash)
      hash
