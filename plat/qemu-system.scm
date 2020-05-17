@@ -76,7 +76,7 @@
 		 `((,(vmlinuz kernel) L)
 		   (,(squashfs rootpkgs) L))
 		 format: 'dos
-		 legacy-boot: "root=/dev/vda2 rootfstype=squashfs console=ttyS0"))
+		 legacy-boot: "root=/dev/vda2 rootfstype=squashfs console=tty0"))
 	   (conf (default-config 'x86_64))
 	   (bld! (config->builder conf))
 	   (img  (car (bld! img))))
