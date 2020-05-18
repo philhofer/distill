@@ -40,7 +40,7 @@
 		     (ip monitor "$1")))
 	(importas |-i| -u mon !)
 	(fdclose 4)
-	(pipeline ((foreground ((ip show "$1")))
+	(pipeline ((foreground ((ip "$1" show)))
 		   (fdmove 0 3)
 		   (cat)))
 	(importas |-i| -u bg !)

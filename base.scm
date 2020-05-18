@@ -1267,6 +1267,9 @@ EOF
 		      --disable-makeinstall-chown
 		      --disable-makeinstall-setuid)))
 
+(define sfdisk
+  (subpackage "sfdisk-" util-linux "./sbin/sfdisk"))
+
 (define diskutils
   (subpackage "diskutils-" util-linux
 	      "./sbin/blk*" "./sbin/blockdev"

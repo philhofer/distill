@@ -82,13 +82,21 @@
 ;; using "var-dev" and then maps the list
 ;; of services "svcs" to a new list of services
 ;; that include loggers for each longrun service
+;;
+;; "var-dev" can be either a string corresponding to
+;; a block device, or a literal service corresponding
+;; to the service responsible for mounting /var
 (define (var-log-services var-dev svcs #!key
                           ;; keep at most 10 old logs
                           ;; and rotate at 1MB, using
                           ;; zstd to compress old logs
                           (log-opts '(t n10 s1000000
                                         "!zstd -c -")))
-  (let ((logdir     (lambda (svc)
+  (let ((var-svc    (cond
+		     ((string? var-dev) (var-mount var-dev))
+		     ((service? var-dev) var-dev)
+		     (else (error "bad var-dev for var-log-services" var-dev))))
+	(logdir     (lambda (svc)
                       (conc
                         "/var/log/services/"
                         (service-name svc))))
@@ -131,7 +139,7 @@
 			     (cons var-mounted-rw oafter))
                   spec:  (kupdate ospec producer-for: lname))
                 lst)))))
-      (list (var-mount var-dev)
+      (list var-svc
             kmsg)
       svcs)))
 

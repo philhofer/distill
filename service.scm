@@ -223,6 +223,9 @@
 	 ;; limit the size of the mount to some fixed % of RAM
 	 ;; TODO: make this configurable?
 	 (mount -t tmpfs -o "noexec,nosuid,nodev,mode=1777,size=10%" tmpfs /tmp))
+      (foreground ((if ((test -x /sbin/preboot)))
+		   (if ((echo "running preboot")))
+		   (/sbin/preboot)))
       (if ((mkdir -p ,*service-dir*)))
       ;; elglob won't match leading '.' characters,
       ;; so we have to use an extra glob to make sure

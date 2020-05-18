@@ -107,6 +107,7 @@
     dosfstools
     mtools
     diskutils
+    sfdisk
     imgtools
 
     ; bootloader tools

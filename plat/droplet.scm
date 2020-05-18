@@ -2,9 +2,11 @@
   scheme
   (chicken module)
   (distill base)
+  (distill execline)
   (distill unix)
   (distill plan)
   (distill memo)
+  (distill fs)
   (distill package)
   (distill service)
   (distill image)
@@ -28,7 +30,8 @@
 ;;  - The 169.254/16 link-local network with the metadata instance
 ;;    is on eth0 (the *public* interface!), not eth1
 
-(export droplet-sshd)
+(export
+ droplet-sshd)
 
 (define d.o.meta-user (adduser 'dometa group: 'dometa))
 (define d.o.meta-group (addgroup 'dometa '(dometa)))
@@ -70,23 +73,33 @@
    after:  (list 'd.o.metadata)
    spec:   (oneshot*
 	    up: '((fdmove -c 2 1)
+		  (/bin/umask "077")
 		  (redirfd -r 0 /run/dometa.json)
 		  (redirfd -w 1 /run/pubkeys)
 		  (jq -r ".public_keys[]")))))
 
-(define jq-ifup-script #<<EOF
+;; a jq(1) script to convert droplet metadata
+;; to an iproute(8) batch mode script
+;;
+;; note: custom images don't support public IPv6 (???)
+;; so we don't bother looking for .interfaces.public[0].ipv6
+(define jq-ifup-script "# convert a netmask string to cidr mask:
+def cidr:
+ {\"255\": 8, \"254\" : 7, \"252\": 6, \"248\": 5, \"240\": 4, \"224\" : 3, \"192\": 2, \"128\": 1, \"0\": 0}
+as $btable | split(\".\") | map($btable[.]) | add;
+
+# convert an object to addr/cidr notation
+def addrmask: \"\\(.ip_address)/\\(.netmask | cidr)\";
+
 .interfaces.private[0] as $private |
 .interfaces.public[0] as $public |
-"addr add \($private.ipv4.ip_address)/16 dev eth1",
-"addr add \($public.ipv4.ip_address)/20 dev eth0",
-"addr add \($public.anchor_ipv4.ip_address)/16 dev eth0",
-"route add default via inet \($public.ipv4.gateway) dev eth0 src \($public.ipv4.ip_address)"
-# FIXME - DO doesn't support public IPv6 for custom images ... (add a comma above!)
-# "-6 addr add \($public.ipv6.ip_address)/\($public.ipv6.cidr) dev eth0",
-# "-6 route add default via inet6 \($public.ipv6.gateway) dev eth0 src \($public.ipv6.ip_address)"
-
-EOF
-)
+$public.ipv4 as $pubv4 |
+$private.ipv4 as $privv4 |
+\"addr add \\($privv4 | addrmask) dev eth1\",
+\"addr add \\($pubv4 | addrmask) dev eth0\",
+\"addr add \\($public.anchor_ipv4 | addrmask) dev eth0\",
+\"route add default via inet \\($pubv4.gateway) dev eth0 src \\($pubv4.ip_address)\"
+")
 
 ;; bring up networking using instance metadata
 (define d.o.networking
@@ -122,6 +135,22 @@ EOF
 		  (importas -u |-i| server server)
 		  (echo nameserver $server)))))
 
+;; the first boot of a droplet should
+;; create the vda3 (/var) partition
+;; and then reboot so that the kernel picks it up
+(define d.o.preboot
+  (interned
+   "/sbin/preboot" #o700
+   (lambda ()
+     (write-exexpr
+      '((if ((test -b /dev/vda2))) ; sanity
+	(if -t -n ((test -b /dev/vda3)))
+	(foreground ((echo "re-partitioning /dev/vda...")))
+	(foreground ((heredoc 0 "- - L -\n")
+		     (sfdisk -f --append /dev/vda)))
+	(foreground ((sync)))
+	(hard reboot))))))
+
 ;; droplet-sshd wraps the sshd service
 ;; in order to modify its dependencies
 ;; so that it always starts after pubkeys
@@ -135,7 +164,7 @@ EOF
 (define (droplet #!key (packages '()) (services '()))
   (build-system
    (qemu-system-x86_64-image linux-virt-x86_64)
-   packages: packages
+   packages: (cons* sfdisk d.o.preboot packages)
    services: (cons*
 	      d.o.metadata
 	      d.o.pubkeys
