@@ -4,6 +4,7 @@
   (only (chicken string) conc)
   (distill kvector)
   (distill filepath)
+  (distill execline)
   (distill base)
   (distill plan)
   (distill service)
@@ -12,7 +13,19 @@
   (distill package)
   (distill system)
   (distill image)
-  (distill fs))
+  (distill fs)
+
+  (pkg jq))
+
+;; root disk info:
+;;  - we're booting from the SD card slot, which is mmcblk1
+;;  - ATF is loaded from mmcblk1 +2M by the boot ROM
+;;  - ATF chainloads u-boot, which we configure to load
+;;    the kernel and fdt from mmcblk1p1 (formatted as ext2)
+;;  - the kernel is booted with root=mmcblk1p2, and it will
+;;    create mmcblk1p3 with remaining space on the SD card
+;;    if it doesn't exist
+
 
 ;; see include/configs/mvebu_armada-8k.h
 ;; in the u-boot source tree; these are
@@ -28,9 +41,9 @@
     kernel_addr_r:  "0x5000000"
     ramdisk_addr_r: "0x8000000"
     fdtfile:        "armada-8040-mcbin.dtb"
-    loadkernel:     "ext2load mmc 1:2 ${kernel_addr_r} boot/vmlinuz"
-    loadfdt:        "ext2load mmc 1:2 ${fdt_addr_r} boot/${fdtfile}"
-    bootargs:       "root=/dev/mmcblk1p3 rootfstype=squashfs"
+    loadkernel:     "ext2load mmc 1:1 ${kernel_addr_r} boot/vmlinuz"
+    loadfdt:        "ext2load mmc 1:1 ${fdt_addr_r} boot/${fdtfile}"
+    bootargs:       "root=/dev/mmcblk1p2 rootfstype=squashfs"
     bootcmd:        "run loadkernel loadfdt; booti ${kernel_addr_r} - ${fdt_addr_r}"))
 
 (define uboot-mcbin
@@ -39,6 +52,25 @@
     "7OANoghNx5M20pf41I4ByZ7rYc_umDft5VJkcYjyUk0="
     uboot-env
     "run bootcmd"))
+
+(define mcbin-preboot
+  (interned
+   "/sbin/preboot" #o744
+   (lambda ()
+     (write-exexpr
+      '((if ((test -b /dev/mmcblk1p2)))
+	(if -t -n ((test -b /dev/mmcblk1p3)))
+	(foreground ((echo "re-partitioning /dev/mmcblk1...")))
+	;; sad story here: sfdisk --append doesn't automatically
+	;; use the end of the disk, so we have to do some gross hackery
+	;; in order to actually determine where mmcblk1p3 should live
+	(backtick -n sector ((pipeline ((sfdisk -J /dev/mmcblk1)))
+			     (jq -r ".partitiontable.partitions | .[length-1] | .start+.size")))
+	(importas -u |-i| sector sector)
+	(if ((heredoc 0 "${sector} - L -\n")
+	     (sfdisk -f --no-reread --no-tell-kernel --append /dev/mmcblk1)))
+	(if ((sync)))
+	(hard reboot))))))
 
 ;; TODO: reverse-engineer this.
 ;; FreeRTOS is somewhere in here.
@@ -165,36 +197,45 @@ EOF
 		     `(make ,@mflags "SCP_BL2=/src/mrvl_scp_bl2.img" all fip)
 		     '(install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin))))))
 
-(define (mcbin-sdimage-platform conf kernel)
-  (lambda (rootpkgs)
-    (uniq-setparts-script
-     "mcbin-sdimage-"
-     ((config->builder conf)
-      atf-mcbin               ;; mmcblk1p1
-      (ext2fs "mcbin/boot"
-	      "14bcce9f-5096-4fa8-bdb6-51b0b12823f1"
-	      "1G"
-	      kernel)         ;; mmcblk1p2
-      (squashfs rootpkgs))))) ;; mmcblk1p3
-
-;; mcbin-sdimage is a platform for the Solid Run MacchiatoBin
-;; that produces a script for creating a bootable SD card image
-;;
-;; the SD card must have (at least) 3 partitions; the first two partitions
-;; must be 32MB and 1GB, respectively
 (define mcbin-sdimage
-  (mcbin-sdimage-platform
-   (gcc+musl-static-config 'aarch64
-			   optflag: '-O2
-			   sspflag: '-fstack-protector-strong
-			   ;; compiling with -mcpu=... helps us get some
-			   ;; additional coverage on our GCC recipe with
-			   ;; cross-compilation, because this is an illegal
-			   ;; flag for any compiler/architecture except aarch64,
-			   ;; so builds will fail if this flag leaks into the
-			   ;; wrong CFLAGS arguments
-			   extra-cflags: '(-mcpu=cortex-a72)
-			   build: (force default-build-config))
-    (linux/config-static "mcbin" "7T9BGGKMOBpAtgHatOv8gRA2Nf92jDWptxrJLV9T3ms="
-                         dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
-
+  (let ((kernel (linux/config-static "mcbin" "7T9BGGKMOBpAtgHatOv8gRA2Nf92jDWptxrJLV9T3ms="
+				     dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
+    (make-platform
+     config:   (gcc+musl-static-config
+		'aarch64
+		optflag: '-O2
+		sspflag: '-fstack-protector-strong
+		;; compiling with -mcpu=... helps us get some
+		;; additional coverage on our GCC recipe with
+		;; cross-compilation, because this is an illegal
+		;; flag for any compiler/architecture except aarch64,
+		;; so builds will fail if this flag leaks into the
+		;; wrong CFLAGS arguments
+		extra-cflags: '(-mcpu=cortex-a72)
+		build: (force default-build-config))
+     kernel:   kernel
+     cmdline:  '("root=/dev/mmcblk1p2 rootfstype=squashfs") ; see uboot cmdline
+     packages: (list mcbin-preboot sfdisk jq)
+     services: (list (var-mount "/dev/mmcblk1p3"))
+     mkimage:  (lambda (plat rootpkgs)
+		 (let* ((kern (platform-kernel plat))
+			(root (squashfs rootpkgs))
+			(boot (ext2fs "mbcin/boot" "14bcce9f-5096-4fa8-bdb6-51b0b12823f1" kern)))
+		   (lambda (conf)
+		     (let ((fw (filepath-join ($sysroot conf) "/boot/flash-image.bin"))
+			   (p1 (filepath-join ($sysroot conf) "/fs.img"))
+			   (p2 (filepath-join ($sysroot conf) "/rootfs.img")))
+		       (expand-package
+			conf
+			label: "mcbin-sdimage"
+			raw-output: "/img"
+			tools:  (list sfdisk imgtools execline-tools busybox-core)
+			inputs: (list boot atf-mcbin root)
+			build:  `((backtick -n fwsize ((alignsize -a20 -e2097152 ,fw)))
+				  (importas -u |-i| fwsize fwsize)
+				  ;; mmcblk1p1 is the boot partition;
+				  ;; mmcblk1p2 is the root partition;
+				  ;; the firmware lives at mmcblk1 +2M
+				  (gptimage -d -b $fwsize /out/img ((,p1 L) (,p2 L)))
+				  ;; REMOVE ME:
+				  (dd ,(string-append "if=" fw) of=/out/img bs=1M seek=2 conv=notrunc))))))))))

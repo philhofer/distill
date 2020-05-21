@@ -1,39 +1,39 @@
-;; write-setparts-script writes an execlineb script
-;; that takes the destination device as the first argument
-;; and dd's each given artifact to the device's partitions
-;; in sequence
-;; (#f indicates the partition should be skipped)
-(define (write-setparts-script lst)
-  (let ((exprs (let loop ((n 1)
-			  (in lst))
-		 (cond
-		  ((null? in) '())
-		  ((not (car in)) (loop (+ n 1) (cdr in)))
-		  (else
-		   (cons
-		    (list (string-append "${1}p" (number->string n 10))
-			  (abspath (artifact-path (car in))))
-		    (loop (+ n 1) (cdr in))))))))
-    (write-exexpr
-     `((setparts (,@exprs))
-       ("$@"))
-     shebang: "#!/bin/execlineb -s1")))
+;; <platform> contains all of the hardware-specific bits
+;; necessary to produce a functional disk image
+(define-kvector-type
+  <platform>
+  make-platform
+  platform?
+  ;; config is a <config> that is used
+  ;; to expand packages for this platform
+  (platform-config    config:   #f  config?)
+  ;; kernel is the kernel used for this platform,
+  ;; or #f if this platform doesn't use one (containers, likely)
+  (platform-kernel    kernel:   #f  (perhaps procedure?))
+  ;; cmdline is the list of arguments passed to the kernel on boot
+  (platform-cmdline   cmdline:  '() (list-of (disjoin symbol? string?)))
+  ;; packages is a list of packages that are
+  ;; mandatory for this platform
+  (platform-packages packages: '() (list-of (disjoin procedure? artifact?)))
+  ;; services is a list of services that are
+  ;; mandatory for this platform;
+  ;; services *must* provide at least:
+  ;;  - read-write /var mount, ideally on persistent media
+  ;;  - login or debug services, if relevant/needed (for example, serial console login)
+  (platform-services services: '() (list-of service?))
+  ;; mkimage is a function that takes a <platform>
+  ;; and produces an image package-lambda, or #f if no such concept
+  ;; is relevant to the platform (XXX when is that ever the case?)
+  (platform-mkimage  mkimage:   #f (perhaps procedure?)))
 
 (define-kvector-type
   <system>
-  %make-system
+  make-system
   system?
   (system-services services: '() (list-of service?))
   (system-packages packages: '() list?))
 
-;; build-system takes a platform and a set of keyword+value arguments
-;; and runs the platform's build function
-;;
-;; recognized keywords are:
-;;   services: a list of system services (required)
-;;   packages: an additional list of packages to be installed (optional)
-;;
-(define build-system
+(define (platform+system->plan plat sys)
   (letrec ((union/eq?  (lambda (a b)
 			 (cond
 			  ((null? a) b)
@@ -43,33 +43,10 @@
 			     (union/eq?
 			      (if (memq fb a) a (cons fb a))
 			      (cdr b))))))))
-    (lambda (plat . args)
-      (let ((sys  (apply %make-system args)))
-	;; TODO: this is only doing basic deduplication
-	;; of packages; we should probably figure out
-	;; how to generate friendlier errors when
-	;; packages conflict (overlap)
-	(plat (union/eq? (services->packages (system-services sys))
-			 (system-packages sys)))))))
-
-;; uniq-setparts-script produces a uniquely-named setparts script
-(define (uniq-setparts-script prefix parts)
-  ;; artifacts that become raw disk partitions
-  ;; should be raw files, not archives, symlinks, etc.
-  (for-each
-    (lambda (art)
-      (unless (eq? (artifact-kind art) 'file)
-        (info "warning: artifact" (short-hash (artifact-hash art)) "is of kind" (artifact-kind art))))
-    parts)
-  (let* ((h (with-output-to-hash
-	     (lambda ()
-	       (for-each
-		(lambda (part)
-		  (display (artifact-hash part)))
-		parts))))
-         (f (string-append prefix (substring h 0 10))))
-    (info "writing final privileged script to" f)
-    (with-output-to-file
-      f
-      (lambda () (write-setparts-script parts)))
-    (set-file-permissions! f #o755)))
+    (let ((pkgs (union/eq? (platform-packages plat)
+			   (system-packages sys)))
+	  (svcs (union/eq? (platform-services plat)
+			   (system-services sys)))
+	  (newimg (platform-mkimage plat))
+	  (expand (expander (platform-config plat))))
+      (expand (newimg plat (union/eq? (services->packages svcs) pkgs))))))

@@ -63,7 +63,7 @@
 ;; ext2fs creates a package-lambda that
 ;; takes everything in 'inputs' and produces
 ;; an ext2 filesystem image (as a sparse file)
-(define (ext2fs name uuid size . inputs)
+(define (ext2fs name uuid . inputs)
   (lambda (conf)
     (let* ((outfile '/fs.img)
            (dst     (filepath-join '/out outfile)))
@@ -74,7 +74,15 @@
        label:  name
        tools:  (list busybox-core execline-tools e2fsprogs)
        inputs: inputs
-       build:  `((if ((truncate -s ,size ,dst)))
+       build:  `((backtick -n fssize ((pipeline ((du -sm ,($sysroot conf))))
+				      (awk "{print $1}")))
+		 (multisubstitute ((importas -u |-i| fssize fssize)
+				   (define extra "1")))
+		 (backtick -n size ((heredoc 0 "${fssize} + ${extra}")
+				    (bc)))
+		 (importas -u |-i| size size)
+		 (if ((echo "guessing filesystem size is ${size}M")))
+		 (if ((truncate -s "${size}M" ,dst)))
 		 ;; can't set this to zero, because mke2fs
 		 ;; uses expressions like
 		 ;;   x = fs->now ? fs->now : time(NULL);
@@ -136,64 +144,41 @@
 		 pkg)
        wrap: move-art))))
 
-;; diskparts takes a list of partition specifications
-;; and assembles them into a single disk image
-(define (diskparts parts #!key
-		   (format 'gpt)
-		   (uuid #f)
-		   (size #f)
-		   (legacy-boot #f))
-  (let* ((partfile  (lambda (n)
-		      (string-append "/images/part" (number->string n))))
-	 ;; walk through the part spec and
-	 ;; collect everything that is a package or artifact
-	 (partfiles (let loop ((i 1)
-			       (parts parts)
-			       (out '()))
-		      (if (null? parts)
-			  out
-			  (let* ((spec (car parts))
-				 (rest (cdr parts))
-				 (head (car spec)))
-			    (if (or (procedure? head) (artifact? head))
-				(loop
-				 (+ i 1)
-				 rest
-				 (cons (image-rename head (partfile i) #o444) out))
-				(loop (+ i 1) rest out))))))
-	 ;; replace every package or plan in the spec
-	 ;; with the name of the assigned image file
-	 (partspec (let loop ((i   1)
-			      (lst parts))
-		     (if (null? lst)
-			 '()
-			 (let* ((spec (car lst))
-				(rest (cdr lst))
-				(head (car spec)))
-			   (cons
-			    (if (or (artifact? head) (procedure? head))
-				(cons (partfile i) (cdr spec))
-				spec)
-			    (loop (+ i 1) rest)))))))
+;; mbr-image produces a (legacy-)bootable image
+(define (mbr-image name)
+  (lambda (plat rootpkgs)
     (lambda (conf)
-      (expand-package
-       conf
-       label: "disk-image"
-       raw-output: "/img"
-       src:   '()
-       env:   '()
-       dir:   "/"
-       tools: (let ((lst (list imgtools diskutils execline-tools busybox-core)))
-		(if legacy-boot (cons mlb2 lst) lst))
-       inputs: partfiles
-       build:  `((gptimage
-		  ,@(case format
-		      ((dos) '(-d))
-		      ((gpt) '())
-		      (else (error "diskparts: invalid format" format)))
-		  ,@(if uuid `(-u ,uuid) '())
-		  ,@(if size `(-s ,size) '())
-		  /out/img ,partspec)
-		 ,@(if legacy-boot
-		       `((mlb2install /out/img 2048 ,legacy-boot))
-		       '((true))))))))
+      (let ((kern  (platform-kernel plat))
+	    (cmdl  (join-with " " (platform-cmdline plat)))
+	    (root  (squashfs rootpkgs))
+	    (kfile (filepath-join ($sysroot conf) "/boot/vmlinuz"))
+	    (rfile (filepath-join ($sysroot conf) "rootfs.img")))
+	(expand-package
+	 conf
+	 label: (string-append name "-mbr-image")
+	 raw-output: "/img"
+	 tools:  (list mlb2 sfdisk imgtools execline-tools busybox-core)
+	 inputs: (list kern root)
+	 build:  `((gptimage -d /out/img ((,kfile L)
+					  (,rfile L)))
+		   (mlb2install /out/img 2048 ,cmdl)))))))
+
+;; esp-image produces an EFI-bootable image
+(define (efi-image name #!key (uuid #f))
+  (lambda (plat rootpkgs)
+    (lambda (conf)
+      (let ((esp   (linux-esp (platform-kernel plat) (platform-cmdline plat)))
+	    (root  (squashfs rootpkgs))
+	    (efile (filepath-join ($sysroot conf) "esp.img"))
+	    (rfile (filepath-join ($sysroot conf) "rootfs.img")))
+	(expand-package
+	 conf
+	 label:  (string-append name "-efi-image")
+	 raw-output: "/img"
+	 tools:  (list sfdisk imgtools execline-tools busybox-core)
+	 inputs: (list esp root)
+	 build:  `((gptimage -d
+			     ,@(if uuid '((-u ,uuid)) '())
+			     /out/img ((,efile U)
+				       (,rfile L)))
+		   (true)))))))

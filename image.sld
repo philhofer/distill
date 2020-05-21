@@ -4,7 +4,8 @@
     initramfs
     ext2fs
     linux-esp
-    diskparts)
+    mbr-image
+    efi-image)
   (import
     scheme
     (distill kvector)
@@ -14,6 +15,7 @@
     (distill text)
     (distill package)
     (distill filepath)
+    (distill system)
     (distill base))
   (cond-expand
     (chicken (import

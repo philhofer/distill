@@ -17,7 +17,7 @@
   (pkg curl)
   (pkg jq)
   (svc sshd)
-  (plat qemu-system))
+  (plat qemu-system-x86_64))
 
 ;; notes on the digital ocean qemu configuration:
 ;;
@@ -29,9 +29,6 @@
 ;;  - The "recovery ISO" appears to live on /dev/vdb
 ;;  - The 169.254/16 link-local network with the metadata instance
 ;;    is on eth0 (the *public* interface!), not eth1
-
-(export
- droplet-sshd)
 
 (define d.o.meta-user (adduser 'dometa group: 'dometa))
 (define d.o.meta-group (addgroup 'dometa '(dometa)))
@@ -135,39 +132,8 @@ $private.ipv4 as $privv4 |
 		  (importas -u |-i| server server)
 		  (echo nameserver $server)))))
 
-;; the first boot of a droplet should
-;; create the vda3 (/var) partition
-;; and then reboot so that the kernel picks it up
-(define d.o.preboot
-  (interned
-   "/sbin/preboot" #o700
-   (lambda ()
-     (write-exexpr
-      '((if ((test -b /dev/vda2))) ; sanity
-	(if -t -n ((test -b /dev/vda3)))
-	(foreground ((echo "re-partitioning /dev/vda...")))
-	(foreground ((heredoc 0 "- - L -\n")
-		     (sfdisk -f --append /dev/vda)))
-	(foreground ((sync)))
-	(hard reboot))))))
-
-;; droplet-sshd wraps the sshd service
-;; in order to modify its dependencies
-;; so that it always starts after pubkeys
-;; have been pulled from the metadata
-(define (droplet-sshd lines)
-  (let ((svc (sshd lines)))
-    (kupdate
-     svc
-     after: (cons 'd.o.pubkeys (service-after svc)))))
-
-(define (droplet #!key (packages '()) (services '()))
-  (build-system
-   (qemu-system-x86_64-image linux-virt-x86_64)
-   packages: (cons* sfdisk d.o.preboot packages)
-   services: (cons*
-	      d.o.metadata
-	      d.o.pubkeys
-	      d.o.resolv.conf
-	      d.o.networking
-	      services)))
+(define droplet
+  (kwith
+   qemu-system-x86_64
+   services: (+= (list d.o.metadata d.o.pubkeys
+		       d.o.resolv.conf d.o.networking))))

@@ -34,6 +34,7 @@
     $strip-cmd
     config->builder
     make-config
+    config?
     vargs
     csubst
     cmd*

@@ -511,18 +511,23 @@
                       (lambda ()
                         ;; any exceptions in here should immediately exit
                         (current-exception-handler (lambda (exn)
-                                                     (fatal "(forked):" exn)))
-                        (setfd! 5 (car js))
+						     (print-error-message exn)
+                                                     (fatal "(execing bwrap):" exn)))
                         (setfd! 6 (cadr js))
+                        (setfd! 5 (car js))
                         (setfd! fileno/stdin (file-open "/dev/null" open/rdonly))
                         ;; can't use fdpipe here because we need a *blocking* pipe;
                         (let-values (((rd wr) (create-pipe)))
                           (process-fork
-                            (lambda ()
-                              (for-each file-close js)
-                              (file-close wr)
-                              (setfd! fileno/stdin rd)
-                              (process-execute "zstd" (list "-q" "-" "-o" logfile))))
+			   (lambda ()
+			     (current-exception-handler
+			      (lambda (exn)
+				(print-error-message exn)
+				(fatal "(execing zstd):" exn)))
+			     (for-each file-close '(5 6))
+			     (file-close wr)
+			     (setfd! fileno/stdin rd)
+			     (process-execute "zstd" (list "-q" "-" "-o" logfile))))
                           (file-close rd)
                           (setfd! fileno/stdout wr))
                         (duplicate-fileno fileno/stdout fileno/stderr)
@@ -616,7 +621,9 @@
           (#f
            (fetch! #f hash))
           (else
-            (error "unrecognized file content spec:" content))))
+	   (error "unrecognized file content spec:" content))))
+      (when (file-exists? dstfile)
+	(error "cannot unpack file (it already exists)" dstfile))
       (create-directory (dirname dstfile) #t)
       (copy-file (filepath-join (artifact-dir) hash) dstfile #f)
       (set-file-permissions! dstfile mode)))

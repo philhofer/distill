@@ -1277,9 +1277,9 @@ EOF
 
 ;; NOTE: imgtools has a run-time dependency on sfdisk (diskutils)
 (define imgtools
-  (let ((hash "itOQGtTyJ5Qbd33KRxMZIh9N8IBH_1xvI1-OLeOyVMs="))
+  (let ((hash "HBnIB58NuJZQKckJ6AgFDfz0LckcD3dJIm-TCzdc62s="))
     (cc-package
-     "imgtools" "0.2.1"
+     "imgtools" "0.2.2"
      (string-append
       "https://b2cdn.sunfi.sh/pub-cdn/file/" hash)
      hash

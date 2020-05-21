@@ -48,7 +48,7 @@ tools:
 
 TESTS:=$(wildcard *-test.scm)
 test: distill $(TESTS)
-	@for x in $(TESTS); do echo $$x; ./distill $$x || exit 1; done
+	@for x in $(TESTS); do echo $$x; ./distill run $$x || exit 1; done
 
 clean:
 	$(RM) distill Makefile.dep *.types *.import.scm *.mod.scm *.so *.o *.link

@@ -4,20 +4,26 @@
   (chicken process-context)
   (chicken repl)
   (chicken file)
+  (only (chicken string) string-split)
   (srfi 69)
   (only (chicken read-syntax)
 	set-parameterized-read-syntax!)
-  (only (chicken base) vector-resize))
+  (only (chicken base) vector-resize)
+  (distill filepath)
+  (distill eprint))
 
 (import-for-syntax
   (only (chicken string) conc))
 
-(import
-  (distill filepath)
-  (distill eprint))
-
+;; by default, search dirs are
+;; the current directory, followed by
+;; the installed prefix + /lib/distill/
 (define search-dirs
-  (make-parameter (list ".")))
+  (make-parameter
+   (list
+    (filepath-join
+     ;; something like /usr/lib/distill/...
+     (executable-pathname) "../lib/distill/"))))
 
 (define (form? head expr)
   (and (pair? expr) (eq? (car expr) head)))
@@ -36,7 +42,7 @@
       (or (hash-table-ref/default loaded sym #f)
           (begin
             (hash-table-set! loaded sym #t)
-            (let ((file (let loop ((dirs (search-dirs)))
+            (let ((file (let loop ((dirs (cons "." (search-dirs))))
                           (if (null? dirs)
                             (error "can't find" kind sym)
                             (let ((f (filepath-join (car dirs) kind (string-append (symbol->string sym) ".scm"))))
@@ -85,39 +91,100 @@
   (when (form? 'import form) (scan-imports (cdr form)))
   (apply real-eval form rest))
 
-(let ((args (command-line-arguments)))
-  (if (null? args)
-    (let* ((nv    0)
-	   (sav   (vector #f #f #f #f))
-	   (push! (lambda (v)
-		    (when (not (eq? v (void)))
-		      (when (>= nv (vector-length sav))
-			(let ((newn (* nv 2)))
-			  (set! sav (vector-resize sav newn #f))))
-		      (vector-set! sav nv v)
-		      (set! nv (+ nv 1)))))
-	   (ref   (lambda (n)
-		    (if (< n nv)
-		      (vector-ref sav n)
-		      (void))))
-	   (%eval (lambda (expr)
-                    (when (form? 'import expr) (scan-imports (cdr expr)))
-		    (let ((res (eval expr)))
-		      (push! res)
-		      res))))
-      (set-parameterized-read-syntax!
-	#\!
-	(lambda (port number)
-	  (list ref number)))
-      (repl-prompt
-	(lambda ()
-	  (string-append "#" (number->string nv) "! = ")))
-      (repl %eval))
+(define (sum-cmd args)
+  (import
+    (distill hash))
+  (for-each
+   (lambda (arg)
+     (let ((h (hash-file arg)))
+       (if h
+	   (begin (display h) (newline))
+	   (fatal "file doesn't exist:" arg))))
+   (if (null? args)
+       (list "/proc/self/fd/0")
+       args)))
 
-    ;; when invoked as 'distill <foo.scm> args ...'
-    ;; load the first argument with the remaining args
-    ;; as the command-line-arguments
-    (parameterize ((program-name           (car args))
-                   (command-line-arguments (cdr args))
-                   (eval-handler           child-eval))
-      (for-each %load args))))
+(define (args->plan args)
+  (import
+    (distill system))
+  (let* ((platname (string->symbol (car args)))
+	 (sysfile  (if (null? (cdr args)) "system.scm" (cadr args)))
+	 (_        (load-builtin 'plat platname))
+	 (plat     (eval `(begin
+			    (import (plat ,platname))
+			    ,platname)))
+	 (_        (%load sysfile))
+	 (sys      (eval 'system)))
+    (platform+system->plan plat sys)))
+
+(define (build-cmd args)
+  (import
+    (distill plan))
+  (when (null? args)
+    (fatal "usage: distill build <platform> [<system> | system.scm]"))
+  (let* ((plan     (args->plan args))
+	 (art      (begin
+		     (build-graph! (list plan))
+		     (plan-outputs plan))))
+    (info "output is" (artifact-hash art))))
+
+;; list-cmd dumps the dependency graph
+;; of the build implied by 'args'
+(define (list-cmd args)
+  (fatal "list not implemented yet"))
+
+(define (run-cmd args)
+  (if (null? args)
+      (let* ((nv    0)
+	     (sav   (vector #f #f #f #f))
+	     (push! (lambda (v)
+		      (when (not (eq? v (void)))
+			(when (>= nv (vector-length sav))
+			  (let ((newn (* nv 2)))
+			    (set! sav (vector-resize sav newn #f))))
+			(vector-set! sav nv v)
+			(set! nv (+ nv 1)))))
+	     (ref   (lambda (n)
+		      (if (< n nv)
+			  (vector-ref sav n)
+			  (void))))
+	     (%eval (lambda (expr)
+		      (when (form? 'import expr) (scan-imports (cdr expr)))
+		      (let ((res (eval expr)))
+			(push! res)
+			res))))
+	(set-parameterized-read-syntax!
+	 #\!
+	 (lambda (port number)
+	   (list ref number)))
+	(repl-prompt
+	 (lambda ()
+	   (string-append "#" (number->string nv) "! = ")))
+	(repl %eval))
+      ;; when invoked as 'distill run <foo.scm> args ...'
+      ;; load the first argument with the remaining args
+      ;; as the command-line-arguments
+      (parameterize ((program-name           (car args))
+		     (command-line-arguments (cdr args))
+		     (eval-handler           child-eval))
+	(for-each %load args))))
+
+(let ((home (get-environment-variable "HOME"))
+      (dirs (get-environment-variable "DISTILL_PATH"))
+      (args (command-line-arguments))
+      (cmds `((sum   . ,sum-cmd)
+	      (build . ,build-cmd)
+	      (list  . ,list-cmd)
+	      (run   . ,run-cmd))))
+  (when dirs
+    (search-dirs
+     (append (string-split dirs ":") (search-dirs))))
+  (if (null? args)
+      (begin
+	(info "usage: distill <subcommand>")
+	(fatal "  subcommands:" (map car cmds)))
+      (let* ((sym  (string->symbol (car args)))
+	     (cell (assq sym cmds)))
+	(if cell
+	    ((cdr cell) (cdr args))
+	    (fatal "no such command" sym)))))
