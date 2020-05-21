@@ -61,9 +61,7 @@
       '((if ((test -b /dev/mmcblk1p2)))
 	(if -t -n ((test -b /dev/mmcblk1p3)))
 	(foreground ((echo "re-partitioning /dev/mmcblk1...")))
-	;; sad story here: sfdisk --append doesn't automatically
-	;; use the end of the disk, so we have to do some gross hackery
-	;; in order to actually determine where mmcblk1p3 should live
+	;; see: https://github.com/karelzak/util-linux/issues/1044
 	(backtick -n sector ((pipeline ((sfdisk -J /dev/mmcblk1)))
 			     (jq -r ".partitiontable.partitions | .[length-1] | .start+.size")))
 	(importas -u |-i| sector sector)
@@ -97,36 +95,6 @@
       "const char *mv_ddr_build_message = \"(distill - reproducible)\";\n"
       "const char *mv_ddr_version_string = \"mv_ddr-devel-18.08.0-distill\";\n")))
 
-;; fix an uninitialized data warning in mv_ddr4_training_leveling.c
-;; and do NOT generate mv_ddr_build_message.c (it embeds a timestamp)
-(define mv-ddr-fixup #<<EOF
---- a/drivers/marvell/mv_ddr/Makefile
-+++ b/drivers/marvell/mv_ddr/Makefile
-@@ -105,9 +105,6 @@ endif
- # set mv_ddr build message and version string source file
- MV_DDR_VER_CSRC = mv_ddr_build_message.c
-
--# create mv_ddr build message and version string source file
--$(shell $(MV_DDR_ROOT)/scripts/localversion.sh $(MV_DDR_ROOT) $(MV_DDR_VER_CSRC) 2> /dev/null)
--
- # ******************
- # U-BOOT SPL SUPPORT
- # ******************
---- a/drivers/marvell/mv_ddr/mv_ddr4_training_leveling.c
-+++ b/drivers/marvell/mv_ddr/mv_ddr4_training_leveling.c
-@@ -368,7 +368,7 @@ static int mv_ddr4_dynamic_pb_wl_supp(u32 dev_num, enum mv_wl_supp_mode ecc_mode
- 	u32 subphy_num = ddr3_tip_dev_attr_get(dev_num, MV_ATTR_OCTET_PER_INTERFACE);
- 	u8 compare_result = 0;
- 	u32 orig_phase;
--	u32 rd_data, wr_data;
-+	u32 rd_data, wr_data = 0;
- 	u32 flag, step;
- 	struct mv_ddr_topology_map *tm = mv_ddr_topology_map_get();
- 	u32 ecc_phy_access_id;
-
-EOF
-)
-
 (define atf-mcbin
   ;; it took some serious yak-shaving to get this to build
   ;; correctly and reproducibly... here's what's going on:
@@ -151,7 +119,6 @@ EOF
                        ;; but marvell has all but abandoned this code...
                        (conc "https://github.com/MarvellEmbeddedProcessors/mv-ddr-marvell/archive/" mv-ddr-ver ".tar.gz")
                        "nV3OhnbmGNAy4JQz60aYjucT1SrMuoVHppiYbyd40zI="))
-         (patches    (patch* mv-ddr-fixup))
 	 (dir        (string-append "/" name "-" ver))
 	 ;; symlink the mv_ddr source into the atf source tree:
 	 (mv-ddr-lnk (interned-symlink
@@ -163,7 +130,6 @@ EOF
      "Pxwp8bIs5lmYYmedB8SjKH-3bLNV5_1b0TKdAZCGWm4="
      raw-output: "/boot/flash-image.bin"
      use-native-cc: #t
-     patches: patches
      extra-src: (list mv-ddr-src
 		      mv-ddr-lnk
 		      mv-ddr-localversion
@@ -171,7 +137,7 @@ EOF
      env:       '((MAKEFLAGS . "")) ;; do not inherit jobserver; parallel build is broken
      tools:     (list libressl)
      libs:      (list uboot-mcbin)
-     no-libc:   #t ; freestanding target
+     no-libc:   #t
      build:   (let ((mflags `(V=1 (CROSS_COMPILE= ,$cross-compile)
 				  SCP_BL2=/src/mrvl_scp_bl2.img
 				  PLAT=a80x0_mcbin
@@ -187,6 +153,10 @@ EOF
 		     '(sed "-i" -e "s/mrvl_clean//g" plat/marvell/marvell.mk)
 		     ;; busybox truncate(1) doesn't support '%size' format
 		     '(sed "-i" -e "s/ %128K / 128K /" plat/marvell/a8k/common/a8k_common.mk)
+		     ;; quiet unused variable warning from gcc
+		     '(sed "-i" -e "s/u32 rd_data, wr_data;/u32 rd_data, wr_data=0;/g" drivers/marvell/mv_ddr/mv_ddr4_training_leveling.c)
+		     ;; remove rule for mv_ddr_build_message.c; we create our own
+		     '(sed "-i" -e "/^# create mv_ddr build/,+1d" drivers/marvell/mv_ddr/Makefile)
 		     ;; the top-level makefile doesn't invoke these sub-makes
 		     ;; correctly, so invoke them ahead of time with
 		     ;; the right overrides...
