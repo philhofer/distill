@@ -19,9 +19,8 @@
       '((if ((test -b /dev/vda2))) ; sanity
 	(if -t -n ((test -b /dev/vda3)))
 	(foreground ((echo "re-partitioning /dev/vda...")))
-	(foreground ((heredoc 0 "- - L -\n")
-		     (sfdisk -f --append /dev/vda)))
-	(foreground ((sync)))
+	(if ((dosextend -n3 /dev/vda)))
+	(if ((sync)))
 	(hard reboot))))))
 
 ;; qemu-system-x86_64 is a platform for KVM-accelerated
@@ -37,5 +36,5 @@
    kernel:   linux-virt-x86_64
    cmdline:  '("root=/dev/vda2" "rootfstype=squashfs" "console=tty0")
    services: (list (var-mount "/dev/vda3"))
-   packages: (list qemu-preboot sfdisk) ; for qemu-preboot
+   packages: (list qemu-preboot imgtools)
    mkimage:  (mbr-image "qemu-x86_64")))
