@@ -61,12 +61,7 @@
       '((if ((test -b /dev/mmcblk1p2)))
 	(if -t -n ((test -b /dev/mmcblk1p3)))
 	(foreground ((echo "re-partitioning /dev/mmcblk1...")))
-	;; see: https://github.com/karelzak/util-linux/issues/1044
-	(backtick -n sector ((pipeline ((sfdisk -J /dev/mmcblk1)))
-			     (jq -r ".partitiontable.partitions | .[length-1] | .start+.size")))
-	(importas -u |-i| sector sector)
-	(if ((heredoc 0 "${sector} - L -\n")
-	     (sfdisk -f --no-reread --no-tell-kernel --append /dev/mmcblk1)))
+	(if ((dosextend -n3 /dev/mmcblk1)))
 	(if ((sync)))
 	(hard reboot))))))
 
@@ -185,7 +180,7 @@
 		build: (force default-build-config))
      kernel:   kernel
      cmdline:  '("root=/dev/mmcblk1p2 rootfstype=squashfs") ; see uboot cmdline
-     packages: (list mcbin-preboot sfdisk jq)
+     packages: (list mcbin-preboot imgtools)
      services: (list (var-mount "/dev/mmcblk1p3"))
      mkimage:  (lambda (plat rootpkgs)
 		 (let* ((kern (platform-kernel plat))
