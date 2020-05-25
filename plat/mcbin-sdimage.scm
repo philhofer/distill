@@ -61,9 +61,8 @@
       '((if ((test -b /dev/mmcblk1p2)))
 	(if -t -n ((test -b /dev/mmcblk1p3)))
 	(foreground ((echo "re-partitioning /dev/mmcblk1...")))
-	(if ((dosextend -n3 /dev/mmcblk1)))
-	(if ((sync)))
-	(hard reboot))))))
+	(if ((dosextend -n3 -k /dev/mmcblk1)))
+	(test -b /dev/mmcblk1p3))))))
 
 ;; TODO: reverse-engineer this.
 ;; FreeRTOS is somewhere in here.

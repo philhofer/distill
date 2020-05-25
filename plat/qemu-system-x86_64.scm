@@ -19,9 +19,8 @@
       '((if ((test -b /dev/vda2))) ; sanity
 	(if -t -n ((test -b /dev/vda3)))
 	(foreground ((echo "re-partitioning /dev/vda...")))
-	(if ((dosextend -n3 /dev/vda)))
-	(if ((sync)))
-	(hard reboot))))))
+	(if ((dosextend -n3 -k /dev/vda)))
+	(test -b /dev/vda3))))))
 
 ;; qemu-system-x86_64 is a platform for KVM-accelerated
 ;; linux guests; the presumption here is that we're booting
