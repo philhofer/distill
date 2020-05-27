@@ -8,9 +8,9 @@
 
 (define openssh
   (cmmi-package
-   "openssh" "8.2p1"
+   "openssh" "8.3p1"
    "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/$name-$version.tar.gz"
-   "Q1b0Y6r5EMr46lYDaN-BW_WFyVptktRHSdnW9o05z5o="
+   "6V6bSpzwnMOaF-0R6fQRFmnKXlKFdjjancT_phfoq7M="
    patches: (list (remote-file
 		   "https://git.alpinelinux.org/aports/plain/main/openssh/fix-verify-dns-segfault.patch"
 		   "Q4tNRrMwqrWYUf4WdcNkZPOmxGBnwQfd2da-34HX9wQ="

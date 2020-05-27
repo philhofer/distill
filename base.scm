@@ -601,7 +601,7 @@ EOF
   (busybox/config "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=" '()))
 
 (define *linux-major* 5.4)
-(define *linux-patch* 41)
+(define *linux-patch* 43)
 
 (define *linux-source*
   (list
@@ -610,7 +610,7 @@ EOF
      "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
     (remote-file
      (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" *linux-major* "." *linux-patch* ".xz")
-     "EmcM8pxF_ba-qJL0wa-0ltQdndBDm6ahKzq-OpAKoW8="
+     "bE4X9alKMXiNylHXwX-yZmR8Cep8CrqO4py4-RMtcCQ="
      "/src/linux.patch"
      #o644)))
 
@@ -1062,16 +1062,16 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.1.0"
+   "libressl" "3.1.2"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "cHEFVDGIUxRBRs64A9_ap1jzVOkWv3VF-cyNGYpJvMM="
+   "CrJh-gVOWblwcSz4uUJQos7ggFzSXEhg7-18yvI6v64="
    cleanup: '((if ((ln -s openssl /out/usr/bin/libressl))))))
 
 (define libarchive+tools
   (cmmi-package
-   "libarchive" "3.4.2"
+   "libarchive" "3.4.3"
    "https://github.com/libarchive/$name/releases/download/v$version/$name-$version.tar.gz"
-   "t3aJd9_ChlLWsDKodSqu7kjPB_4UaCrSb29EqmGq0T8="
+   "g5Ye1us8NuxJl7fMXxjVGmySIr97QigjcLTjHe9tn7A="
    libs: (list libbz2 zlib liblzma liblz4 libressl libzstd)
    extra-configure: '(--without-xml2 --without-acl --without-attr --without-expat)))
 
