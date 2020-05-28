@@ -6,6 +6,7 @@
     hash-of
     hash-file
 
+    copy-port+hash
     with-output-to-hash
     hasher->output-port)
   (import
@@ -17,7 +18,7 @@
     (chicken
       (import
         (only (chicken fixnum) fx=)
-        (only (chicken io) read-string!)
+        (only (chicken io) read-string! write-string)
         (only (chicken port) make-output-port)
         (only (chicken base) include error)
 	(only (chicken blob) blob->string string->blob)

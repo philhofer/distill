@@ -31,7 +31,13 @@
       (for-each
         (lambda (slow)
           (test string=? (hash-of str) (slow str)))
-        slow))
+        slow)
+      (test string=? str (with-output-to-string
+			   (lambda ()
+			     (test string=? (hash-of str)
+				   (copy-port+hash
+				    (open-input-string str)
+				    (current-output-port)))))))
     strs))
 
 (test-same-file-hashes "hash.scm")

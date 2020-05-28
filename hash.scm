@@ -40,18 +40,32 @@
   (or (fx= (u8vector-length h) (foreign-value "sizeof(blake2b_state)" unsigned-int))
       (error "bad hash state object" h)))
 
-(: hash-write! (u8vector (or string u8vector input-port) -> *))
-(define (hash-write! h obj)
+;; copy-port+hash copies port 'from' to port 'to'
+;; and yields the hash of the copied data
+(: copy-port+hash (input-port output-port -> string))
+(define (copy-port+hash from to)
+  (let ((h (new-hasher)))
+    (hash-write! h from to)
+    (hash-finalize h)))
+
+(: hash-write! (u8vector (or string u8vector input-port) #!optional (or false output-port) -> *))
+(define (hash-write! h obj #!optional oport)
   (check-state h)
   (let ((cwrite (foreign-lambda* int ((u8vector self) (scheme-pointer mem) (size_t len))
                   "C_return(blake2b_update((blake2b_state *)self, mem, len));")))
     (cond
       ((string? obj)
-       (or (fx= (cwrite h obj (string-length obj)) 0)
-           (error "error in blake2b_update()")))
+       (begin
+	 (or (fx= (cwrite h obj (string-length obj)) 0)
+	     (error "error in blake2b_update()"))
+	 (and oport (write-string obj #f oport))))
       ((u8vector? obj)
-       (or (fx= (cwrite h (u8vector->blob/shared obj) (u8vector-length obj)) 0)
-           (error "error in blake2b_update()")))
+       (begin
+	 (or (fx= (cwrite h (u8vector->blob/shared obj) (u8vector-length obj)) 0)
+	     (error "error in blake2b_update()"))
+	 (and oport (write-string
+		     (blob->string
+		      (u8vector->blob/shared obj)) #f oport))))
       ((input-port? obj)
        (let* ((mem (make-string 1024))
               (rd! (lambda ()
@@ -62,6 +76,7 @@
                (begin
                  (or (cwrite h mem n)
                      (error "error in blake2b_update()"))
+		 (and oport (write-string mem n oport))
                  (loop (rd!)))))))
       (else
         (error "hash-write! can't hash object" obj)))))

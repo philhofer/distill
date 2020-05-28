@@ -466,9 +466,6 @@
     (lambda () (jobserver+ 1))
     proc))
 
-;; compressor-fd forks a zstd compressor writing to 'outfile'
-;; and returns its stdin file descriptor
-(: compressor-fd (string -> integer))
 ;; perform an elaborate chroot into 'root'
 ;; and then run '/build' inside that new
 ;; root, with stdout and stderr redirected
@@ -784,31 +781,23 @@
           (file->artifact (filepath-join outdir raw) raw)
           (dir->artifact outdir))))))
 
-(: fetch-graph! ((list-of vector) -> *))
-(define (fetch-graph! headlst)
-  (let* ((fetch-art! (lambda (art)
-		       (fetch!
-			(match (artifact-extra art)
-			  (`(remote . ,url) url)
-			  (else #f))
-			(artifact-hash art))))
-	 (procs (fold-graph
-		 (lambda (item lst)
-		   (if (and (artifact? item)
-			    (not (file-exists? (artifact-path item))))
-		       (cons (spawn fetch-art! item) lst)
-		       lst))
-		 '()
-		 headlst))
-	 (err  (foldl1
-		(lambda (proc err)
-		  (let ((ret (join/value proc)))
-		    (if (eq? (proc-status ret) 'exn)
-			(or err ret)
-			err)))
-		#f
-		procs)))
-    (or err #t)))
+;; for-each-anchor traverses a list of plans and artifacts
+;; and recursively applies (proc artifact) to each artifact
+;; that is a leaf node of the DAG
+(define (for-each-anchor proc plst)
+  (define ht (make-hash-table hash: string-hash test: string=?))
+  (define pl (make-hash-table hash: eq?-hash test: eq?))
+  (letrec ((walk (lambda (item)
+		   (if (artifact? item)
+		       (or (hash-table-ref/default ht (artifact-hash item) #f)
+			   (begin
+			     (hash-table-set! ht (artifact-hash item) #t)
+			     (proc item)))
+		       (or (hash-table-ref/default pl item #f)
+			   (begin
+			     (hash-table-set! pl item #t)
+			     (for-each (o walk input-link) (plan-inputs item))))))))
+    (for-each walk plst)))
 
 (: build-graph! ((list-of vector) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
