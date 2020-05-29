@@ -135,5 +135,8 @@ $private.ipv4 as $privv4 |
 (define droplet
   (kwith
    qemu-system-x86_64
+   ;; we need tty0 instead of ttyS0 because the DO recovery console
+   ;; is attached as if it were a VGA screen
+   cmdline: (:= '("root=/dev/vda2" "rootfstype=squashfs" "console=tty0"))
    services: (+= (list d.o.metadata d.o.pubkeys
 		       d.o.resolv.conf d.o.networking))))

@@ -227,12 +227,7 @@
 		   (if ((echo "running preboot")))
 		   (/sbin/preboot)))
       (if ((mkdir -p ,*service-dir*)))
-      ;; elglob won't match leading '.' characters,
-      ;; so we have to use an extra glob to make sure
-      ;; we pick up stuff in .s6-svscan
-      (if ((elglob -m svcs "/etc/early-services/*")
-           (elglob -m dots "/etc/early-services/.[!.]*")
-           (cp -r $dots $svcs ,*service-dir*)))
+      (if ((cp -a "/etc/early-services/." ,*service-dir*)))
       (foreground ((mkfifo -m "0600" ,*catchall-fifo*)))
       (if ((mkdir -p ,*uncaught-logs*)))
       (foreground ((chown catchlog:catchlog ,*uncaught-logs*)))
@@ -248,6 +243,8 @@
                    (if ((s6-rc-init -c /etc/s6-rc/compiled
                                     -l /run/s6-rc
                                     ,*service-dir*)))
+		   (redirfd -w 1 ,*catchall-fifo*)
+		   (fdmove -c 2 1)
                    (s6-rc -v2 -u change default)))
       (fdclose 3)
       (foreground ((echo "beginning s6-svscan")))
