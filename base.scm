@@ -386,14 +386,6 @@ EOF
    "bFSNjbp4fE4N5xcaqSGTnNfLPVv7QhnEb2IByFGBZUY="
    libs: (list libgmp)))
 
-;; include a file as literal text at compile time
-(define-syntax include-file-text
-  (er-macro-transformer
-    (lambda (expr rename cmp)
-      (let ((arg (cadr expr)))
-        (unless (string? arg)
-          (syntax-error "include-file-text expects a literal string; got" expr))
-        (with-input-from-file arg read-string)))))
 
 (define make
   (cmmi-package
@@ -487,7 +479,7 @@ EOF
 	"gcc" "9.3.0"
 	"https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
 	"Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="
-	patches: (patch* (include-file-text "patches/gcc/pie-gcc.patch"))
+	patches: (patchfiles* "patches/gcc/pie-gcc.patch")
 	;; we depend on cc-for-build automatically,
 	;; so we only need additional target tools
 	;; if target!=build
@@ -566,13 +558,13 @@ EOF
 		   '((if ((elglob dir "/out/usr/share/gcc-*/python")
 			  (rm -rf $dir))))))))))
 
-(define (busybox/config config-hash extra-inputs)
+(define (busybox/config config-path extra-inputs)
   (cc-package
    "busybox" "1.31.1"
    "https://busybox.net/downloads/$name-$version.tar.bz2"
    "JqkfZAknGWBuXj1sPLwftVaH05I5Hb2WusYrYuO-sJk="
-   patches:   (patch* (include-file-text "patches/busybox/busybox-bc.patch"))
-   extra-src: (list (remote-file #f config-hash "/src/config.head" #o644))
+   patches:   (patchfiles* "patches/busybox/busybox-bc.patch")
+   extra-src: (list (bind config-path "/src/config.head"))
    libs:      extra-inputs
    tools:     (list bzip2)
    use-native-cc: #t
@@ -598,7 +590,9 @@ EOF
 ;; it doesn't include system utilities that would require
 ;; linux headers
 (define busybox-core
-  (busybox/config "OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=" '()))
+  (busybox/config
+   "patches/busybox/config-core" ; OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=
+   '()))
 
 (define *linux-major* 5.4)
 (define *linux-patch* 43)
@@ -681,45 +675,7 @@ EOF
 
 ;; yypush_buffer_state() and yypop_buffer_state()
 ;; are GNU extensions
-(define portable-lexer-patch #<<EOF
---- a/scripts/dtc/dtc-lexer.l
-+++ b/scripts/dtc/dtc-lexer.l
-@@ -277,15 +277,21 @@
 
- %%
-
-+#define __MAX_INCLUDES 32
-+static int __n_includes = 0;
-+static void *__fstack[__MAX_INCLUDES];
-+
- static void push_input_file(const char *filename)
- {
- 	assert(filename);
-+        assert(__n_includes < __MAX_INCLUDES);
-
- 	srcfile_push(filename);
-+        __fstack[__n_includes++] = YY_CURRENT_BUFFER;
-
- 	yyin = current_srcfile->f;
-
--	yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
-+	yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
- }
-
-
-@@ -293,8 +299,8 @@
- {
- 	if (srcfile_pop() == 0)
- 		return false;
--
--	yypop_buffer_state();
-+        yy_delete_buffer(YY_CURRENT_BUFFER);
-+        yy_switch_to_buffer(__fstack[--__n_includes]);
- 	yyin = current_srcfile->f;
-
- 	return true;
-EOF
-)
 
 ;; common fixes to scripts/dtc between linux and uboot;
 ;; the dtc yacc+lex files do not play nicely with BSD yacc+lex
@@ -748,13 +704,13 @@ EOF
 ;;
 ;; this build option only supports configs with CONFIG_MODULES=n
 ;; (i.e. self-contained kernels without loadable modules)
-(define (linux/config-static name config-hash #!key
+(define (linux/config-static name config-path #!key
                              (install *default-installkernel*)
                              (dtb     #f))
-  (let ((config  (remote-file #f config-hash "/src/config" #o644))
-        (install (installkernel* install))
-        (patches (patch* portable-lexer-patch)))
-    (lambda (conf)
+  (lambda (conf)
+    (let ((config  (bind config-path "/src/config"))
+	  (install (installkernel* install))
+	  (patches (patchfiles* "patches/dtc/lexer.patch")))
       (expand-package
        conf
        src:   (append (list install config) *linux-source* patches)
@@ -837,41 +793,6 @@ EOF
 	     '(cp libelf/libelf.h /out/usr/include/libelf.h)
 	     '(cp libelf/libelf.a /out/usr/lib/libelf.a)))))
 
-;; mke2fs -d <dir> does not have a way
-;; to bypass timestamps and override uid/gid,
-;; so this hacks in a way to at least ensure
-;; that those fields get zeroed...
-(define mke2fs-repro-patch #<<EOF
---- a/misc/create_inode.c
-+++ b/misc/create_inode.c
-@@ -17,6 +17,7 @@
- #include <time.h>
- #include <sys/stat.h>
- #include <sys/types.h>
-+#include <stdlib.h>
- #include <unistd.h>
- #include <limits.h> /* for PATH_MAX */
- #include <dirent.h> /* for scandir() and alphasort() */
-@@ -128,6 +129,16 @@
- 	inode.i_atime = st->st_atime;
- 	inode.i_mtime = st->st_mtime;
- 	inode.i_ctime = st->st_ctime;
-+
-+        if (getenv("MKE2FS_DETERMINISTIC")) {
-+                inode.i_uid = 0;
-+                ext2fs_set_i_uid_high(inode, 0);
-+                inode.i_gid = 0;
-+                ext2fs_set_i_gid_high(inode, 0);
-+                inode.i_atime = 0;
-+                inode.i_mtime = 0;
-+                inode.i_ctime = 0;
-+        }
-
- 	retval = ext2fs_write_inode(fs, ino, &inode);
- 	if (retval)
-EOF
-)
-
 (define %e2fsprogs
   ;; e2fsprogs is unusual and uses BUILD_CC, BUILD_CFLAGS, etc.
   ;; in order to indicate which CC to use for building tools
@@ -887,7 +808,7 @@ EOF
      "e2fsprogs" "1.45.5"
      "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
      "w7R6x_QX6QpTEtnNihjwlHLBBtfo-r9RrWVjt9Nc818="
-     patches: (patch* mke2fs-repro-patch)
+     patches: (patchfiles* "patches/e2fsprogs/repro.patch")
      native-cc: $buildcc-env
      libs: (list linux-headers)
      ;; atypical:
@@ -975,7 +896,7 @@ EOF
      "lDUHMuGJodiUbDG80Pq2uKUbMclFpohyWPjIwSKddtE="
      no-libc:   #t
      use-native-cc: #t
-     patches:   (patch* portable-lexer-patch)
+     patches:   (patchfiles* "patches/dtc/lexer.patch")
      extra-src: (list envfile dotconf)
      tools:     (list byacc reflex)
      build: (lambda (conf)
@@ -1131,17 +1052,9 @@ EOF
 	 "iproute2" "5.6.0"
 	 "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
 	 "bziQSr_HXdEGLJPNH0jdUOKiuehV0HY1KI95UkV4cC0="
-	 patches: (list
-		   (remote-file
-		    "https://git.alpinelinux.org/aports/plain/main/iproute2/musl-fixes.patch"
-		    "K4srcIY08guTgXv7DeGR6InxsXUKFV76vmeLao7Y0Cw="
-		    "/src/musl-fixes.patch"
-		    #o644)
-		   (remote-file
-		    "https://git.alpinelinux.org/aports/plain/main/iproute2/fix-install-errors.patch"
-		    "jUzhNv5c3_lyQZ6omNKQaBvZNbpHZVkyeMuG15uq1sA="
-		    "/src/fix-install-errors.patch"
-		    #o644))
+	 patches: (patchfiles*
+		   "patches/iproute2/musl-fixes.patch"
+		   "patches/iproute2/fix-install-errors.patch")
 	 tools: tools
 	 libs:  (list linux-headers iptables libmnl libelf zlib)
 	 build: (cmd*
@@ -1189,8 +1102,8 @@ EOF
 
 (define busybox-full
   (busybox/config
-    "kHCLlhEuZrIcR3vjYENuNyI1a0eGB1B6APiyWjvkvok="
-    (list linux-headers)))
+   "patches/busybox/config-full" ; kHCLlhEuZrIcR3vjYENuNyI1a0eGB1B6APiyWjvkvok=
+   (list linux-headers)))
 
 ;; keep everything down here at the bottom of the file;
 ;; we need all the base packages to be declared in order

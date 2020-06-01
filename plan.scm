@@ -10,9 +10,9 @@
                nonnull-c-string nonnull-c-string bool))
          (e   (raw src dst rename?)))
     (or (= e 0)
-        (error "copy_file_sparse: errno" e))))
+        (error "copy_file_sparse: errno" src dst rename? e))))
 
-;; artifacts are just vectors
+;; Artifacts are just vectors
 ;;
 ;; note that artifact-extra must not contain
 ;; data that changes the filesystem representation
@@ -168,24 +168,24 @@
     (hash-of abspath)
     #f))
 
-(: overlay (string -> vector))
-(define (overlay abspath)
-  (let* ((p (filepath-join (current-directory) abspath))
-         (h (hash-file p)))
+(: overlay (string string -> vector))
+(define (overlay herepath therepath)
+  (let* ((h (hash-file herepath)))
     (unless h
-      (error "overlay file doesn't exist:" p))
+      (error "overlay file doesn't exist" herepath))
     (let ((dst (filepath-join (artifact-dir) h)))
       (unless (file-exists? dst)
-        (copy-file p dst #f)))
+        (copy-file herepath dst #f)))
     (%artifact
-      `#(file ,abspath ,(file-permissions p))
+      `#(file ,therepath ,(file-permissions herepath))
       h
-      #f)))
+      (cons 'local herepath))))
 
 ;; by default, dump stuff into these directories
-;; TODO: inherit these from the environment
-(define plan-dir (make-parameter "./plans"))
-(define artifact-dir (make-parameter "./artifacts"))
+(define plan-dir
+  (make-parameter (or (get-environment-variable "DISTILL_PLAN_DIR") "./plans")))
+(define artifact-dir
+  (make-parameter (or (get-environment-variable "DISTILL_ARTIFACT_DIR") "./artifacts")))
 
 (: artifact-path (vector -> string))
 (define (artifact-path art)

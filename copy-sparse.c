@@ -40,7 +40,7 @@ copy_file_sparse(const char *from, const char *to, bool canrename)
     if (fdfrom == -1)
 	return -errno;
 
-    really(fdto = open(to, O_CREAT|O_CLOEXEC|O_WRONLY|O_EXCL));
+    really(fdto = open(to, O_CREAT|O_CLOEXEC|O_WRONLY|O_EXCL, 0644));
     if (fdto == -1) {
 	err = errno;
 	close(fdfrom);

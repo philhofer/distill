@@ -648,16 +648,33 @@
 
 (define ($strip-cmd conf) (strip-binaries-script ($triple conf)))
 
-;; patch* creates a series of patch artifacts
-;; from a collection of verbatim strings
-(define (patch* . patches)
-  (if (null? patches)
+;; bind locates a file relative to the current working directory,
+;; the current install directory, or the current install's lib directory,
+;; and produces an artifact that appears at 'therepath' with the same
+;; permissions as the file has locally
+;;
+;; TODO: handle directories
+(define (bind herepath therepath)
+  (let ((f (or
+	    (file-exists? herepath)
+	    (let ((ep (executable-pathname)))
+	      (or (file-exists? (filepath-join ep herepath))
+		  (file-exists? (filepath-join ep "../lib/distill/" herepath))
+		  (error "couldn't find file" herepath))))))
+    (overlay f therepath)))
+
+;; patchfiles* looks relative to the current directory,
+;; the current executable's directory, and finally
+;; the installed lib directory for files with the given
+;; names to be used as patches
+(define (patchfiles* . names)
+  (if (null? names)
       '()
       (let loop ((n 0)
-		 (head (car patches))
-		 (rest (cdr patches)))
+		 (head (car names))
+		 (rest (cdr names)))
 	(cons
-	 (interned (conc "/src/patch-" n ".patch") #o644 head)
+	 (bind head (conc "/src/patch-" n ".patch"))
 	 (if (null? rest) '() (loop (+ n 1) (car rest) (cdr rest)))))))
 
 ;; script-apply-patches produces the execline expressions

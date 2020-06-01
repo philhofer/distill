@@ -54,7 +54,7 @@
         (only (chicken base) include error unless when flatten void current-error-port exit identity disjoin o)
 	(only (chicken io) read-string write-string read-line)
         (only (chicken port) make-broadcast-port)
-        (only (chicken process-context) current-directory)
+        (only (chicken process-context) current-directory get-environment-variable)
         (only (chicken condition) print-error-message)
 	(only (chicken time) current-milliseconds)
 	(chicken process)

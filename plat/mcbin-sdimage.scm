@@ -13,9 +13,7 @@
   (distill package)
   (distill system)
   (distill image)
-  (distill fs)
-
-  (pkg jq))
+  (distill fs))
 
 ;; root disk info:
 ;;  - we're booting from the SD card slot, which is mmcblk1
@@ -162,7 +160,7 @@
 		     '(install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin))))))
 
 (define mcbin-sdimage
-  (let ((kernel (linux/config-static "mcbin" "7T9BGGKMOBpAtgHatOv8gRA2Nf92jDWptxrJLV9T3ms="
+  (let ((kernel (linux/config-static "mcbin" "patches/linux/config.mcbin.aarch64"
 				     dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
     (make-platform
      config:   (gcc+musl-static-config

@@ -1,0 +1,27 @@
+--- a/misc/create_inode.c
++++ b/misc/create_inode.c
+@@ -17,6 +17,7 @@
+ #include <time.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
++#include <stdlib.h>
+ #include <unistd.h>
+ #include <limits.h> /* for PATH_MAX */
+ #include <dirent.h> /* for scandir() and alphasort() */
+@@ -128,6 +129,16 @@
+ 	inode.i_atime = st->st_atime;
+ 	inode.i_mtime = st->st_mtime;
+ 	inode.i_ctime = st->st_ctime;
++
++        if (getenv("MKE2FS_DETERMINISTIC")) {
++                inode.i_uid = 0;
++                ext2fs_set_i_uid_high(inode, 0);
++                inode.i_gid = 0;
++                ext2fs_set_i_gid_high(inode, 0);
++                inode.i_atime = 0;
++                inode.i_mtime = 0;
++                inode.i_ctime = 0;
++        }
+
+ 	retval = ext2fs_write_inode(fs, ino, &inode);
+ 	if (retval)

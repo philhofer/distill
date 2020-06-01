@@ -57,4 +57,4 @@ clean:
 install: all
 	install -D -m 0775 -t $(DESTDIR)$(PREFIX)/bin distill
 	install -d -m 0775 $(DESTDIR)$(PREFIX)/lib/distill
-	cp -a pkg plat svc $(DESTDIR)$(PREFIX)/lib/distill
+	cp -a pkg plat svc patches $(DESTDIR)$(PREFIX)/lib/distill

@@ -17,8 +17,11 @@
                (chicken type)
                (chicken keyword)
                (chicken module)
+	       (only (chicken process-context)
+		     executable-pathname)
                (only (chicken syntax) define-for-syntax)
                (only (chicken string) conc string-translate* string-split)
+	       (only (chicken file) file-exists?)
                (only (chicken port)
                      with-output-to-string
                      call-with-output-string)
@@ -28,7 +31,8 @@
                (chicken keyword))))
   (export
     *this-machine*
-    patch*
+    bind
+    patchfiles*
     script-apply-patches
     strip-binaries-script
     $strip-cmd

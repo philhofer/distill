@@ -1,0 +1,36 @@
+--- a/scripts/dtc/dtc-lexer.l
++++ b/scripts/dtc/dtc-lexer.l
+@@ -277,15 +277,21 @@
+
+ %%
+
++#define __MAX_INCLUDES 32
++static int __n_includes = 0;
++static void *__fstack[__MAX_INCLUDES];
++
+ static void push_input_file(const char *filename)
+ {
+ 	assert(filename);
++        assert(__n_includes < __MAX_INCLUDES);
+
+ 	srcfile_push(filename);
++        __fstack[__n_includes++] = YY_CURRENT_BUFFER;
+
+ 	yyin = current_srcfile->f;
+
+-	yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
++	yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
+ }
+
+
+@@ -293,8 +299,8 @@
+ {
+ 	if (srcfile_pop() == 0)
+ 		return false;
+-
+-	yypop_buffer_state();
++        yy_delete_buffer(YY_CURRENT_BUFFER);
++        yy_switch_to_buffer(__fstack[--__n_includes]);
+ 	yyin = current_srcfile->f;
+
+ 	return true;
