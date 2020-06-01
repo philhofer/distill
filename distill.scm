@@ -25,6 +25,13 @@
      ;; something like /usr/lib/distill/...
      (executable-pathname) "../lib/distill/"))))
 
+(let ((maybe-set/env (lambda (p e)
+		       (and-let* ((v (get-environment-variable e)))
+			 (p v)))))
+  (import (distill plan))
+  (maybe-set/env artifact-dir "DISTILL_ARTIFACT_DIR")
+  (maybe-set/env plan-dir "DISTILL_PLAN_DIR"))
+
 (define (form? head expr)
   (and (pair? expr) (eq? (car expr) head)))
 
@@ -206,7 +213,7 @@
       (list (args->plan rest))))
     (else
      (begin
-       (info "try 'list anchors <plat> <system>'")
+       (info "list [ anchors | sources ] <plat> <system>")
        (fatal "unrecognized (show ...) form")))))
 
 (define (run-cmd args)
@@ -245,8 +252,7 @@
 		     (eval-handler           child-eval))
 	(for-each %load args))))
 
-(let ((home (get-environment-variable "HOME"))
-      (dirs (get-environment-variable "DISTILL_PATH"))
+(let ((dirs (get-environment-variable "DISTILL_PATH"))
       (args (command-line-arguments))
       (cmds `((sum   . ,sum-cmd)
 	      (build . ,build-cmd)

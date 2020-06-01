@@ -1,6 +1,7 @@
 
 # NOTE: you need at least chicken-5.2 to build this code;
 # earlier chickens do not know about the -M flag
+PREFIX ?= /usr
 
 CSI:=csi-5.2
 CSC_FLAGS:=-C -D_GNU_SOURCE -O3 -disable-interrupts -clustering
@@ -19,7 +20,7 @@ UNITS:=distill.hash distill.nproc \
 	distill.net distill.kvector distill.contract
 
 
-.PHONY: test all tools
+.PHONY: test all tools install
 all: tools distill ${UNITS:%=%.o}
 
 Makefile.dep: $(wildcard *.sld) autodep.scm
@@ -52,3 +53,8 @@ test: distill $(TESTS)
 
 clean:
 	$(RM) distill Makefile.dep *.types *.import.scm *.mod.scm *.so *.o *.link
+
+install: all
+	install -D -m 0775 -t $(DESTDIR)$(PREFIX)/bin distill
+	install -d -m 0775 $(DESTDIR)$(PREFIX)/lib/distill
+	cp -a pkg plat svc $(DESTDIR)$(PREFIX)/lib/distill
