@@ -11,11 +11,7 @@
    "openssh" "8.3p1"
    "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/$name-$version.tar.gz"
    "6V6bSpzwnMOaF-0R6fQRFmnKXlKFdjjancT_phfoq7M="
-   patches: (list (remote-file
-		   "https://git.alpinelinux.org/aports/plain/main/openssh/fix-verify-dns-segfault.patch"
-		   "Q4tNRrMwqrWYUf4WdcNkZPOmxGBnwQfd2da-34HX9wQ="
-		   "/src/patch0.patch"
-		   #o644))
+   patches: (patchfiles* "patches/openssh/fix-dns.patch")
    libs: (list linux-headers libedit ncurses zlib libressl)
    extra-configure: '(--with-pid-dir=/run
 		      --disable-lastlog
