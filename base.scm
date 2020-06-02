@@ -1134,7 +1134,7 @@ EOF
 			     sspflag: sspflag
 			     args)))
 	   (stage0  (config*
-		     prebuilt: (map cdr (cdr (assq *this-machine* *prebuilts*)))
+		     prebuilt: (cdr (assq *this-machine* *prebuilts*))
 		     bootstrap: #f
 		     build: #f))
 	   (stage1  (config*

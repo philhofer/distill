@@ -17,13 +17,10 @@
 (define conf (default-config arch))
 (define build! (config->builder conf))
 
-(let ((alist (map cons
-                  '(make exportall execline busybox binutils gcc)
-                  (build! make exportall execline-tools busybox-core
-			  (binutils-for-triple ($triple conf))
-			  (gcc-for-triple ($triple conf))))))
-  (with-output-to-file
-    (conc "prebuilt-"  arch ".scm")
+(let ((alist (build! make exportall execline-tools busybox-core
+		     (binutils-for-triple ($triple conf))
+		     (gcc-for-triple ($triple conf)))))
+  (with-output-to-file (conc "prebuilt-"  arch ".scm")
     (lambda ()
       (write (list 'quote alist)))))
 (exit 0)

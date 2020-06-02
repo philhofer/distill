@@ -25,4 +25,4 @@
 	(info "prebuilts already equivalent"))
       (begin
 	(info "outputting new prebuilts")
-	(write arts))))
+	(write (list 'quote arts)))))
