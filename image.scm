@@ -26,10 +26,8 @@
        dir:   "/"
        tools: (list execline-tools squashfs-tools)
        inputs: inputs
-       build: (let ((opts `(-all-root
-			    -pf "/src/pseudo"
-			    -comp ,compress)))
-		`((mksquashfs ,($sysroot conf) ,(conc "/out/" out-img) ,@opts)))))))
+       build: `(mksquashfs ,$sysroot ,(conc "/out/" out-img)
+			   -all-root -pf "/src/pseudo" -comp ,compress)))))
 
 (define (initramfs inputs #!key (chown '()) (compress 'zstd))
   (unless (null? chown)
@@ -44,21 +42,21 @@
      tools:  (list execline-tools busybox-core zstd bsdtar)
      inputs: inputs
      build:  (let ((compressor (case compress
-				 ((zstd) '((zstd - -o /out/initramfs.zst)))
+				 ((zstd) '(zstd - -o /out/initramfs.zst))
 				 (else (error "unrecognized compressor" compress)))))
 	       `(;; set mtime to 0, since bsdtar(1)
 		 ;; does not have an option to override it
-		 (if ((find "." -mindepth 1
-			    -exec touch -hcd "@0" "{}" ";")))
-		 ;; terribly gross hack courtesy of Arch:
-		 ;; in order to ensure that the cpio image doesn't
-		 ;; include inode numbers, we feed a tar archive
-		 ;; back into bsdtar to create a cpio archive
-		 (pipeline ((find "." -mindepth 1 -print0)))
-		 (pipeline ((sort -z)))
-		 (pipeline ((bsdtar --null -vcnf - -T -)))
-		 (pipeline ((bsdtar --uid 0 --gid 0 --null -cf - --format=newc "@-")))
-		 ,@compressor)))))
+		 if (find "." -mindepth 1
+			  -exec touch -hcd "@0" "{}" ";")
+		    ;; terribly gross hack courtesy of Arch:
+		    ;; in order to ensure that the cpio image doesn't
+		    ;; include inode numbers, we feed a tar archive
+		    ;; back into bsdtar to create a cpio archive
+		    pipeline (find "." -mindepth 1 -print0)
+		    pipeline (sort -z)
+		    pipeline (bsdtar --null -vcnf - -T -)
+		    pipeline (bsdtar --uid 0 --gid 0 --null -cf - --format=newc "@-")
+		    ,@compressor)))))
 
 ;; ext2fs creates a package-lambda that
 ;; takes everything in 'inputs' and produces
@@ -74,28 +72,29 @@
        label:  name
        tools:  (list busybox-core execline-tools e2fsprogs)
        inputs: inputs
-       build:  `((backtick -n fssize ((pipeline ((du -sm ,($sysroot conf))))
-				      (awk "{print $1}")))
-		 (multisubstitute ((importas -u |-i| fssize fssize)
-				   (define extra "1")))
-		 (backtick -n size ((heredoc 0 "${fssize} + ${extra}")
-				    (bc)))
-		 (importas -u |-i| size size)
-		 (if ((echo "guessing filesystem size is ${size}M")))
-		 (if ((truncate -s "${size}M" ,dst)))
+       build:  `(backtick
+		 -n fssize (pipeline (du -sm ,$sysroot)
+				     awk "{print $1}")
+		 multisubstitute (importas -u |-i| fssize fssize
+					   define extra "1")
+		 backtick -n size (heredoc 0 "${fssize} + ${extra}"
+					   bc)
+		 importas -u |-i| size size
+		 if (echo "guessing filesystem size is ${size}M")
+		 if (truncate -s "${size}M" ,dst)
 		 ;; can't set this to zero, because mke2fs
 		 ;; uses expressions like
 		 ;;   x = fs->now ? fs->now : time(NULL);
-		 (export E2FSPROGS_FAKE_TIME 1585499935)
-		 (export MKE2FS_DETERMINISTIC 1)
-		 (mkfs.ext2 -d ,($sysroot conf)
-			    -U ,uuid
-			    ;; for determinism, use the
-			    ;; uuid as the hash seed as well
-			    -E ,(string-append
-				 "hash_seed=" uuid)
-			    -F -b 4096
-			    ,dst))))))
+		 export E2FSPROGS_FAKE_TIME 1585499935
+		 export MKE2FS_DETERMINISTIC 1
+		 mkfs.ext2 -d ,$sysroot
+		 -U ,uuid
+		 ;; for determinism, use the
+		 ;; uuid as the hash seed as well
+		 -E ,(string-append
+		      "hash_seed=" uuid)
+		 -F -b 4096
+		 ,dst)))))
 
 ;; linux-esp creates an ESP ("EFI system partition")
 ;; that should boot into the given kernel (package) with
@@ -120,12 +119,13 @@
        raw-output: "/esp.img"
        tools:  (list imgtools mtools dosfstools busybox-core execline-tools)
        inputs: (list kernel)
-       build:  `((backtick -n size ((alignsize -a20 -e1000000 ,kfile /src/startup.nsh)))
-		 (importas -u |-i| size size)
-		 (if ((truncate -s $size /out/esp.img)))
-		 (if ((mkfs.fat |-i| "77777777" -n "ESP" -F 32 /out/esp.img)))
-		 (if ((mcopy -b |-i| /out/esp.img ,kfile ,(string-append "::" kname ".efi"))))
-		 (mcopy -b |-i| /out/esp.img /src/startup.nsh "::startup.nsh"))))))
+       build:  `(backtick
+		 -n size (alignsize -a20 -e1000000 ,kfile /src/startup.nsh)
+		 importas -u |-i| size size
+		 if (truncate -s $size /out/esp.img)
+		 if (mkfs.fat |-i| 77777777 -n "ESP" -F 32 /out/esp.img)
+		 if (mcopy -b |-i| /out/esp.img ,kfile ,(string-append "::" kname ".efi"))
+		 mcopy -b |-i| /out/esp.img /src/startup.nsh "::startup.nsh")))))
 
 (define (image-rename pkg out perm)
   (let* ((vector-copy (lambda (vec)
@@ -159,9 +159,9 @@
 	 raw-output: "/img"
 	 tools:  (list mlb2 sfdisk imgtools execline-tools busybox-core)
 	 inputs: (list kern root)
-	 build:  `((gptimage -d /out/img ((,kfile L)
-					  (,rfile L)))
-		   (mlb2install /out/img 2048 ,cmdl)))))))
+	 build:  `(gptimage
+		   -d /out/img (,kfile L ,rfile L)
+		   mlb2install /out/img 2048 ,cmdl))))))
 
 ;; esp-image produces an EFI-bootable image
 (define (efi-image name #!key (uuid #f))
@@ -177,8 +177,7 @@
 	 raw-output: "/img"
 	 tools:  (list sfdisk imgtools execline-tools busybox-core)
 	 inputs: (list esp root)
-	 build:  `((gptimage -d
-			     ,@(if uuid '((-u ,uuid)) '())
-			     /out/img ((,efile U)
-				       (,rfile L)))
-		   (true)))))))
+	 build:  `(gptimage
+		   -d ,@(if uuid '(-u ,uuid) '())
+		   /out/img (,efile U ,rfile L)
+		   true))))))

@@ -1,7 +1,8 @@
 (import
- scheme
- (distill package)
- (distill base))
+  scheme
+  (distill execline)
+  (distill package)
+  (distill base))
 
 (define libcap
   (let* ((config+=    (lambda (getter extra)
@@ -16,10 +17,10 @@
     use-native-cc: #t
     tools: (list perl linux-headers)
     libs:  (list linux-headers)
-    build: (cmd*
-	    `(make -C libcap (CC= ,$CC) (CFLAGS= ,$my-cflags)
-		   (BUILD_CC= ,$build-CC) (BUILD_CFLAGS= ,$cflags-for-build)
-		   (AR= ,$AR) (RANLIB= ,$RANLIB)
+    build: (elif*
+	    `(make -C libcap ,(el= 'CC= $CC) ,(el= 'CFLAGS= $my-cflags)
+		   ,(el= 'BUILD_CC= $build-CC) ,(el= 'BUILD_CFLAGS= $cflags-for-build)
+		   ,(el= 'AR= $AR) ,(el= 'RANLIB= $RANLIB)
 		   libcap.a)
 	    '(install -D -m "0644" libcap/include/sys/capability.h /out/usr/include/sys/capability.h)
 	    '(install -D -m "0644" libcap/libcap.a /out/usr/lib/libcap.a)))))

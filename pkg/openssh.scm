@@ -26,7 +26,7 @@
 		      --with-privsep-user=sshd
 		      --with-md5-passwords
 		      --with-libedit)
-   cleanup: '(;; do NOT keep config files;
+   cleanup: '( ;; do NOT keep config files;
 	      ;; those are inserted via overlay
-	      (if ((rm -rf /out/var)))
-	      (if ((rm -rf /out/etc))))))
+	      if (rm -rf /out/var)
+	      rm -rf /out/etc)))

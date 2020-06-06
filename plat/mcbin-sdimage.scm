@@ -56,11 +56,11 @@
    "/sbin/preboot" #o744
    (lambda ()
      (write-exexpr
-      '((if ((test -b /dev/mmcblk1p2)))
-	(if -t -n ((test -b /dev/mmcblk1p3)))
-	(foreground ((echo "re-partitioning /dev/mmcblk1...")))
-	(if ((dosextend -n3 -k /dev/mmcblk1)))
-	(test -b /dev/mmcblk1p3))))))
+      '(if (test -b /dev/mmcblk1p2)
+	   if -t -n (test -b /dev/mmcblk1p3)
+	   foreground (echo "re-partitioning /dev/mmcblk1...")
+	   if (dosextend -n3 -k /dev/mmcblk1)
+	   test -b /dev/mmcblk1p3)))))
 
 ;; TODO: reverse-engineer this.
 ;; FreeRTOS is somewhere in here.
@@ -130,15 +130,15 @@
      tools:     (list libressl)
      libs:      (list uboot-mcbin)
      no-libc:   #t
-     build:   (let ((mflags `(V=1 (CROSS_COMPILE= ,$cross-compile)
+     build:   (let ((mflags `(V=1 ,(elconc 'CROSS_COMPILE= $cross-compile)
 				  SCP_BL2=/src/mrvl_scp_bl2.img
 				  PLAT=a80x0_mcbin
-				  (BL33= ,$sysroot /boot/u-boot.bin)))
-		    (bflags `(V=1 (CROSS_COMPILE= ,$cross-compile)
-				  (HOSTCC= ,$build-CC)
-				  (HOSTLD= ,$build-LD)
-				  (HOSTCCFLAGS= ,$build-CFLAGS))))
-		   (cmd*
+				  ,(elconc 'BL33= $sysroot '/boot/u-boot.bin)))
+		    (bflags `(V=1 ,(elconc 'CROSS_COMPILE= $cross-compile)
+				  ,(el= 'HOSTCC= $build-CC)
+				  ,(el= 'HOSTLD= $build-LD)
+				  ,(el= 'HOSTCCFLAGS= $build-CFLAGS))))
+		   (elif*
 		     '(cp /src/mv_ddr_build_message.c drivers/marvell/mv_ddr/)
 		     ;; do not force a clean on every make invocation:
 		     '(sed "-i" -e "/^mrvl_clean:/,+3d" plat/marvell/marvell.mk)
@@ -193,11 +193,11 @@
 			raw-output: "/img"
 			tools:  (list sfdisk imgtools execline-tools busybox-core)
 			inputs: (list boot atf-mcbin root)
-			build:  `((backtick -n fwsize ((alignsize -a20 -e2097152 ,fw)))
-				  (importas -u |-i| fwsize fwsize)
-				  ;; mmcblk1p1 is the boot partition;
-				  ;; mmcblk1p2 is the root partition;
-				  ;; the firmware lives at mmcblk1 +2M
-				  (gptimage -d -b $fwsize /out/img ((,p1 L) (,p2 L)))
-				  ;; REMOVE ME:
-				  (dd ,(string-append "if=" fw) of=/out/img bs=1M seek=2 conv=notrunc))))))))))
+			build:  `(backtick -n fwsize (alignsize -a20 -e2097152 ,fw)
+					   importas -u |-i| fwsize fwsize
+					   ;; mmcblk1p1 is the boot partition;
+					   ;; mmcblk1p2 is the root partition;
+					   ;; the firmware lives at mmcblk1 +2M
+					   gptimage -d -b $fwsize /out/img (,p1 L ,p2 L)
+					   ;; REMOVE ME:
+					   dd ,(string-append "if=" fw) of=/out/img bs=1M seek=2 conv=notrunc)))))))))

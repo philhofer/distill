@@ -1,10 +1,13 @@
 (import
   scheme
+  (srfi 88) ; keyword->string
   (chicken module)
   (distill plan)
   (distill memo)
   (distill base)
   (distill package)
+  (distill execline)
+  (distill kvector)
 
   (pkg libexpat))
 
@@ -47,6 +50,10 @@
 	     (CMAKE_FIND_ROOT_PATH_MODE_INCLUDE . ONLY)
 	     (CMAKE_FIND_ROOT_PATH_MODE_PACKAGE . ONLY)))))))))
 
+(define ($splat-build conf)
+  (let ((env (cc-toolchain-env ($build-toolchain conf))))
+    (kvector-foldl env (lambda (k v lst) (cons (keyword->string k) (cons (spaced v) lst))) '())))
+
 (define cmake
   (cc-package
    "cmake" "3.17.2"
@@ -56,23 +63,25 @@
    libs: (list linux-headers zlib libexpat libressl libzstd libbz2)
    tools: (lambda (conf)
 	    (list linux-headers (cmake-toolchain-file conf)))
-   build: (lambda (conf)
-	    `((if (,@(kvexport (cc-toolchain-env ($build-toolchain conf)))
-		   (./bootstrap --prefix=/usr
-				--system-zlib
-				--system-expat
-				--system-zstd
-				--system-bzip2
-				--no-qt-gui --
-				;; TODO: figure out how to use more system libs;
-				;; --system-libarchive and --system-curl don't work
-				;; because there isn't an (obvious?) way to add
-				;; the necessary '-lssl -lcrypto' linker flags, etc.
-				"-DCMAKE_BUILD_TYPE:STRING=Release"
-				"-DCMAKE_TOOLCHAIN_FILE=/etc/cmake-target-toolchain")))
-	      (if ((make)))
-	      (if ((make install)))
-	      (rm -rf /out/usr/doc)))))
+   build: (elif*
+	   `(exportall
+	     ;; *just* for bootstrap, export BUILDCC et al. as CC, CFLAGS, etc.
+	     (,$splat-build)
+	     ./bootstrap --prefix=/usr
+	     --system-zlib
+	     --system-expat
+	     --system-zstd
+	     --system-bzip2
+	     --no-qt-gui --
+	     ;; TODO: figure out how to use more system libs;
+	     ;; --system-libarchive and --system-curl don't work
+	     ;; because there isn't an (obvious?) way to add
+	     ;; the necessary '-lssl -lcrypto' linker flags, etc.
+	     "-DCMAKE_BUILD_TYPE:STRING=Release"
+	     "-DCMAKE_TOOLCHAIN_FILE=/etc/cmake-target-toolchain")
+	   '(make)
+	   '(make install)
+	   '(rm -rf /out/usr/doc))))
 
 (export cmake-package)
 (define (cmake-package name ver urlfmt hash
@@ -82,12 +91,13 @@
    libs: libs
    tools: (lambda (conf)
 	    (cons* pkgconf cmake (cmake-toolchain-file conf) tools))
-   build: `((if ((mkdir builddir)))
-	    (cd builddir)
-	    (if ((cmake "-DCMAKE_BUILD_TYPE:STRING=Release"
-			"-DCMAKE_TOOLCHAIN_FILE=/etc/cmake-target-toolchain"
-			"..")))
-	    (if ((make)))
-	    (if ((make install)))
-	    (if ((rm -rf /out/usr/share/man /out/usr/share/doc /out/usr/share/info)))
+   build: `(if
+	    (mkdir builddir)
+	    cd builddir
+	    if (cmake "-DCMAKE_BUILD_TYPE:STRING=Release"
+		      "-DCMAKE_TOOLCHAIN_FILE=/etc/cmake-target-toolchain"
+		      "..")
+	    if (make)
+	    if (make install)
+	    if (rm -rf /out/usr/share/man /out/usr/share/doc /out/usr/share/info)
 	    ,@cleanup)))

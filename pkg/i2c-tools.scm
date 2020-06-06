@@ -11,5 +11,6 @@
    env: (lambda (conf)
 	  (list ($cc-env conf)))
    libs: (list linux-headers)
-   build: '((if ((make DESTDIR=/out PREFIX=/usr BUILD_STATIC_LIB=1 BUILD_DYNAMIC_LIB=0 install)))
-	    (rm -rf /out/usr/share))))
+   build: '(if
+	    (make DESTDIR=/out PREFIX=/usr BUILD_STATIC_LIB=1 BUILD_DYNAMIC_LIB=0 install)
+	    rm -rf /out/usr/share)))

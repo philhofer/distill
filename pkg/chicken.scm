@@ -64,23 +64,24 @@
 			      ;; by default, chicken is built to be a 'native'
 			      ;; chicken, so it builds binaries for the host architecture
 			      ;; using the 'native' C toolchain
-			      (TARGET_C_COMPILER= ,$nat-cc)
-			      (TARGET_CXX_COMPILER= ,$nat-cxx)
-			      (TARGET_LIBRARIAN= ,$nat-ar)
-			      (TARGET_LINKER_OPTIONS= ,$nat-ldflags)
+			      ,(el= 'TARGET_C_COMPILER= $nat-cc)
+			      ,(el= 'TARGET_CXX_COMPILER= $nat-cxx)
+			      ,(el= 'TARGET_LIBRARIAN= $nat-ar)
+			      ,(el= 'TARGET_LINKER_OPTIONS= $nat-ldflags)
 			      ;; TODO: these command-line arguments
 			      ;; will only work with GCC and clang;
 			      ;; I don't think chicken will build with anything else anyhow...
-			      (TARGET_C_COMPILER_OPTIONS= ,$nat-cflags " -fno-strict-aliasing -fwrapv -DHAVE_CHICKEN_CONFIG_H")
+			      ,(el= 'TARGET_C_COMPILER_OPTIONS= $nat-cflags '-fno-strict-aliasing '-fwrapv '-DHAVE_CHICKEN_CONFIG_H)
 			      "LINKER_EXECUTABLE_OPTIONS=-static-pie -L."))
-		 (overrides `((ARCH= ,$chicken-arch)
-			      (C_COMPILER= ,$CC)
-			      (CXX_COMPILER= ,$CXX)
-			      (LIBRARIAN= ,$AR)
-			      (LIBRARIAN_OPTIONS= ,$ARFLAGS)
-			      (C_COMPILER_OPTIONS= ,$cflags)
-			      (LINKER_OPTIONS= ,$LDFLAGS))))
-	    (cmd*
+		 (overrides (list
+			     (el= 'ARCH= $chicken-arch)
+			     (el= 'C_COMPILER= $CC)
+			     (el= 'CXX_COMPILER= $CXX)
+			     (el= 'LIBRARIAN= $AR)
+			     (el= 'LIBRARIAN_OPTIONS= $ARFLAGS)
+			     (el= 'C_COMPILER_OPTIONS= $cflags)
+			     (el= 'LINKER_OPTIONS= $LDFLAGS))))
+	    (elif*
 	     `(make ,@makeflags ,@overrides chicken-config.h)
 	     `(make ,@makeflags ,@overrides ,@targets)
 	     `(make ,@makeflags ,@overrides ,@install)
@@ -134,16 +135,16 @@
 			  #o755
 			  (lambda ()
 			    (write-exexpr
-			     `((export CSC_OPTIONS ,(spaced csc-opts))
-			       (csc "$@"))
+			     `(export CSC_OPTIONS ,(spaced csc-opts)
+				      csc "$@")
 			     shebang: "#!/bin/execlineb -s0"))))
 	 (ckn-install    (interned
 			  (conc "/usr/bin/" ($triple conf) "-chicken-install")
 			  #o755
 			  (lambda ()
 			    (write-exexpr
-			     `((export CSC_OPTIONS ,(spaced csc-opts))
-			       (chicken-install "$@"))
+			     `(export CSC_OPTIONS ,(spaced csc-opts)
+				      chicken-install "$@")
 			     shebang: "#!/bin/execlineb -s0")))))
     (list csc-script ckn-install)))
 
@@ -158,15 +159,14 @@
    hash
    tools: (lambda (conf) (append (cons chicken (chicken-wrappers conf)) deps))
    libs:  (cons libchicken deps)
-   build: (csubst
-	   (lambda (var)
-	     `((backtick -n "-i" repo ((chicken-install -repository)))
-	       (importas "-i" -u repo repo)
-	       (export TMP /tmp)
-	       (export CHICKEN_INSTALL_REPOSITORY "/out/${repo}")
-	       ;; -host is just tricking chicken-install ;
-	       ;; into compiling statically ;
-	       (,(conc (var $triple) '-chicken-install) -host -no-install-dependencies))))))
+   build: `(backtick
+	    -n "-i" repo (chicken-install -repository)
+	    importas "-i" -u repo repo
+	    export TMP /tmp
+	    export CHICKEN_INSTALL_REPOSITORY "/out/${repo}"
+	    ;; -host is just tricking chicken-install ;
+	    ;; into compiling statically ;
+	    ,(elconc $triple '-chicken-install) -host -no-install-dependencies)))
 
 (define matchable-egg
   (egg "matchable" "1.1" "rygA7BrZVhDdv2x9ksqaK0fgKIc-nYT9unDIHOYlQI4="))

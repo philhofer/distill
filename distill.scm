@@ -1,14 +1,18 @@
 (import
   scheme
+  (srfi 69)
   (chicken eval)
   (chicken process-context)
   (chicken repl)
   (chicken file)
   (only (chicken string) string-split)
-  (srfi 69)
+  (only (chicken condition) print-error-message)
+
   (only (chicken read-syntax)
 	set-parameterized-read-syntax!)
   (only (chicken base) vector-resize print)
+  (only (distill coroutine)
+	push-exception-wrapper)
   (distill filepath)
   (distill eprint))
 
@@ -75,7 +79,13 @@
       (and-let* ((_ (pair? im))
                  (h (car im))
                  (_ (memq h '(pkg svc plat))))
-        (load-builtin h (cadr im))))
+        (push-exception-wrapper
+	 (lambda (exn)
+	   (print-error-message exn)
+	   (info "couldn't load" im exn)
+	   exn)
+	 (lambda ()
+	   (load-builtin h (cadr im))))))
     lst))
 
 (define (%load file)

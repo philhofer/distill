@@ -27,10 +27,9 @@
 		  '()
 		  (list tcl)))
      ;; insert missing #include in generic/tcl.h
-     prepare: '((if ((sed "-i" -e "20a #include <sys/stat.h>\n" "../generic/tcl.h"))))
-     override-make: (vargs (list $make-overrides))
-     extra-configure: (vargs `(--enable-shared=no ; doesn't always respect disable-shared
-			       --mandir=/usr/share/man
-			       --disable-load
-			       ,$64bit-flag)))))
-
+     prepare: '(sed "-i" -e "20a #include <sys/stat.h>\n" "../generic/tcl.h")
+     override-make: (list $make-overrides)
+     extra-configure: `(--enable-shared=no ; doesn't always respect disable-shared
+			--mandir=/usr/share/man
+			--disable-load
+			,$64bit-flag))))

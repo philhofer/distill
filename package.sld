@@ -8,6 +8,7 @@
     (distill memo)
     (distill eprint)
     (distill contract)
+    (distill coroutine)
     (distill kvector)
     (distill filepath)
     (distill execline)
@@ -33,15 +34,11 @@
     *this-machine*
     bind
     patchfiles*
-    script-apply-patches
-    strip-binaries-script
     $strip-cmd
     config->builder
     make-config
     config?
-    vargs
     csubst
-    cmd*
 
     expander
     configure
@@ -94,6 +91,5 @@
     spaced
     splat
     k=v*
-    kvargs
-    kvexport)
+    kvargs)
   (include "package.scm"))

@@ -28,4 +28,4 @@
 		      --disable-systemd
 		      --disable-rust)
    ;; config comes from service definition
-   cleanup: '((if ((rm -rf /out/etc))))))
+   cleanup: '(rm -rf /out/etc)))

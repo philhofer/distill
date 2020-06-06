@@ -63,6 +63,19 @@
 ;; fmt-execline produces a formatting combinator
 ;; from the list representation of an execline script
 (define (dsp-execline lst)
+  (define (sep? sym)
+    (and
+     (symbol? sym)
+     (memq sym '(if background foreground backtick
+		    forbacktickx trap tryexec pipeline
+		    ifelse ifte ifthenelse multidefine forx wait
+		    cd define dollarat elgetopt elgetpositionals
+		    elglob emptyenv envfile exec export exportall fdblock
+		    fdclose fdmove fdreserve fdswap forstdin
+		    getcwd getpid heredoc homeof importas
+		    piperw redirfd runblock shift umask
+		    unexport withstdinas chroot unshare
+		    loopwhilex xargs sudo su nice))))
   (define (execl-dsp obj)
     (cond
       ;; technically there can be spaces, etc. in symbols, too...
@@ -74,28 +87,54 @@
       ;; if you write '-i it's read as a complex number;
       ;; this shows up in 'sed -i' for example
       ((complex? obj) (error "you almost certainly didn't mean to print:" obj))
-      (else (error "can't seralize for execline:" obj))))
-  (define (join-cmds lst indent)
-    (for-each
-      (lambda (cmd)
-        (unless (pair? cmd)
-          (error "bad command list:" lst))
-        (display (tabs indent))
-        (join-arg (car cmd) (cdr cmd) indent)
-        (newline))
-      lst))
-  (define (join-arg arg rest indent)
-    (if (list? arg)
-      (begin
-        (display "{\n")
-        (join-cmds arg (+ indent 1))
-        (display (tabs indent))
-        (display "}"))
-      (execl-dsp arg))
-    (unless (null? rest)
-      (display " ")
-      (join-arg (car rest) (cdr rest) indent)))
-  (join-cmds lst 0))
+      (else (error "can't serialize for execline:" obj lst))))
+  (let loop ((lst    lst) ; items to display
+	     (indent 0)
+	     (nl     #t)) ; currently in head position 
+    (define (cont endl indent)
+      (cond
+       ((null? endl) (newline))
+       ((sep? (car endl))
+	(begin
+	  (newline)
+	  (display (tabs indent))
+	  (loop endl indent #t)))
+       (else
+	(begin
+	  (display " ")
+	  (loop endl indent #f)))))
+    (or (null? lst)
+	(let ((head (car lst))
+	      (rest (cdr lst)))
+	  (cond
+	   ((null? head)
+	    (begin
+	      (when nl
+		(error "unexpected null in execline form" lst))
+	      (display "{ }")
+	      (cont rest indent)))
+	   ((list? head)
+	    (begin	; display a block
+	      (when nl
+		;; TODO: this isn't strictly illegal,
+		;; but I'm not aware of any tools that
+		;; support {{ ... } ...} syntax
+		(error "unexpected list in head position" head))
+	      ;; if someone writes '(a b ,c) accidentally,
+	      ;; bail rather than producing a really strange
+	      ;; execline script
+	      (when (memq (car head) '(quote unquote unquote-splicing quasiquote))
+		(error "not a deliberate execline form" head))
+	      (display "{\n")
+	      (display (tabs (+ indent 1)))
+	      (loop head (+ indent 1) #t)
+	      (display (tabs indent))
+	      (display "}")
+	      (cont rest indent)))
+	   (else
+	    (begin
+	      (execl-dsp head)
+	      (cont rest indent))))))))
 
 ;; write-exexpr writes an execline expression
 ;; as a script to current-output-port
@@ -111,77 +150,105 @@
       (newline)))
   (dsp-execline expr))
 
-;; check-terminal checks the structure of an execline program
-;; and determines whether or not each block consists of zero
-;; or more non-terminal statements and finishes with one terminal
-;; statement
-;;
-;; it will either return #t or error
-(define (check-terminal lst)
-  (define (any p? lst)
-    (and (not (null? lst))
-         (or (p? (car lst))
-             (any p? (cdr lst)))))
-  (define (all p? lst)
-    (or (null? lst)
-        (and (p? (car lst))
-             (all p? (cdr lst)))))
+(: elif ((or list false) list -> list))
+(define (elif head body)
+  (unless (pair? body)
+    (error "elif: unexpected tail form" body))
+  (cond
+   ((not head) body)
+   ((list? head) (cons 'if (cons head body)))
+   (else (error "elif: unexpected head form" head))))
 
-  (define (tailn n lst)
-    (let ((len (length lst)))
-      (let loop ((i   len)
-                 (lst lst))
-        (if (or (= i n) (null? lst))
-          lst
-          (loop (- i 1) (cdr lst))))))
-
-  (define (nonterminal-cmd? lst)
-    (define (tailcheck n exe)
-      (let ((tail (tailn n (cdr lst))))
-        (unless (= (length tail) n)
-          (error "wrong number of trailing arguments in command:" lst))
-        (unless (all list? tail)
-          (error "expected trailing blocks in command:" lst))
-        (unless (or (not exe)
-                    (all check-terminal tail))
-          (error "block isn't terminal:" lst))))
-    (case (car lst)
-      ((if background foreground backtick
-         forbacktickx trap tryexec pipeline)
-       (begin
-         (tailcheck 1 #t) #t))
-      ((ifelse ifte)
-       (begin
-         (tailcheck 2 #t) #t))
-      ((ifthenelse)
-       (begin
-         (tailcheck 3 #t) #t))
-      ((multidefine forx wait)
-       (begin
-         (tailcheck 1 #f) #t))
-      ((cd define dollarat elgetopt elgetpositionals
-           elglob emptyenv envfile exec export fdblock
-           fdclose fdmove fdreserve fdswap forstdin
-           getcwd getpid heredoc homeof importas
-           piperw redirfd runblock shift umask
-           unexport withstdinas chroot unshare
-           loopwhilex xargs sudo su nice)
-       ;; none of these should have block arguments
-       (begin
-         (when (any list? (cdr lst))
-           (error "bad non-terminal command syntax" lst))
-         #t))
-      (else #f)))
-
-  (let loop ((head (car lst))
-             (rest (cdr lst)))
+(: elif* ((or list false) #!rest (or list false) -> list))
+(define (elif* head . rest)
+  (let loop ((head head)
+	     (rest rest))
     (if (null? rest)
-      (begin
-        (when (nonterminal-cmd? head)
-          (error "expected terminal command:" head))
-        #t)
-      (begin
-        (unless (nonterminal-cmd? head)
-          (error "expected nonterminal command:" head))
-        (loop (car rest) (cdr rest))))))
+	head
+	(elif head (loop (car rest) (cdr rest))))))
 
+;; el= is a monadic execline template formatter
+;; that formats its arguments as a single string
+;; where elements are space-separated
+(define (el= head . rest)
+  (lambda (conf)
+    (let ((tail (elexpand conf rest)))
+      (string-append
+       (cond
+	((string? head) head)
+	((symbol? head) (##sys#symbol->string head))
+	(else (error "unexpected head element in el=" head)))
+       (join-with " " tail)))))
+
+;; elconc is a monadic execline template formatter
+;; that formats its arguments as a single string
+;; by simply concatenating the display'd elements
+(define (elconc . args)
+  (lambda (conf)
+    (let ((lst (elexpand conf args)))
+      (with-output-to-string
+	(lambda ()
+	  (for-each display lst))))))
+
+(define (elexpand conf lst)
+  ;; literal datum (valid in execline form):
+  (define (lit? x)
+    (or (symbol? x) (string? x) (number? x) (u8vector? x)))
+
+  ;; prepend the k=v forms of kvector 'kv' to lst
+  (define (+kv kv lst)
+    (kvector-foldl
+     kv
+     (lambda (k v lst)
+       (cons (k=v k v) lst))
+     lst))
+
+  (define (->string x)
+    (cond
+     ((string? x)   x)
+     ((symbol? x)   (##sys#symbol->string x))
+     ((keyword? x)  (##sys#symbol->string x))
+     ((number? x)   (number->string x 10))
+     ((u8vector? x) (quote-bv x))
+     (else (error "can't stringify" x))))
+
+  ;; k=v displays a key-value pair as "k=v..."
+  ;; (always as a single string)
+  (define (k=v k v)
+    (string-append
+      (##sys#symbol->string k)
+      "="
+      (if (list? v)
+	  (join-with " " v)
+	  (->string v))))
+
+  (if (null? lst)
+      '()
+      (let* ((head (car lst))
+	     (rest (cdr lst))
+	     (tail (elexpand conf rest)))
+	(cond
+	 ((null? head) tail)
+	 ((lit? head)
+	  (if (eq? rest tail) lst (cons head tail)))
+	 ((kvector? head)
+	  (+kv head tail))
+	 ((procedure? head)
+	  (let ((e (head conf)))
+	    (cond
+	     ((null? e)    tail)
+	     ((lit? e)     (cons e tail))
+	     ((pair? e)    (append e tail))
+	     ((kvector? e) (+kv e tail))
+	     ;; TODO: maybe recurse on procedure?
+	     (else         (error "cannot splat" e)))))
+	 ((pair? head)
+	  (let ((h (elexpand conf head)))
+	    (if (and (eq? h head) (eq? rest tail))
+		lst
+		(cons h tail))))
+	 (else (error "unexpected form in execline template" head))))))
+
+(: eltemplate (list -> procedure))
+(define (eltemplate form)
+  (lambda (conf) (elexpand conf form)))

@@ -4,11 +4,6 @@
 	byacc reflex linux-headers)
   (distill package))
 
-;; note: upstream url is
-;; 
-;; but we're using the cdn because
-;; upstream doesn't provide an HTTPS download URL
-
 (define radvd
   (cmmi-package
    "radvd" "2.18"
@@ -17,8 +12,7 @@
    tools: (list byacc reflex)
    libs: (list linux-headers)
    ;; fix compat issues with byacc:
-   prepare: '((if ((sed |-i| -e "/YYERROR_VERBOSE/aextern FILE *yyin;"
-			-e "s/yyset_in(in);/yyin=in;/"
-			-e "s/yylex_destroy();/yyin=NULL;/" gram.y)))
-	      (unexport MAKEFLAGS)) ; parallel build issue
+   prepare: '(sed |-i| -e "/YYERROR_VERBOSE/aextern FILE *yyin;"
+		  -e "s/yyset_in(in);/yyin=in;/"
+		  -e "s/yylex_destroy();/yyin=NULL;/" gram.y)
    extra-configure: '(--with-pidfile=/run/radvd.pid)))

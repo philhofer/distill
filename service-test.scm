@@ -16,7 +16,7 @@
    users: (list (adduser 'foo group: 'foo))
    groups: (list (addgroup 'foo '(foo)))
    spec:   (oneshot*
-	    up: '((echo "foo is up!")))))
+	    up: '(echo "foo is up!"))))
 
 (define (have-line-prefix pre text)
   (let loop ((lines (string-split text "\n")))

@@ -5,7 +5,8 @@
   (distill memo)
   (distill base)
   (distill plan)
-  (distill package))
+  (distill package)
+  (distill execline))
 
 ;; prebuilt go bootstrap binaries
 ;; (easier than doing the go1.4 C bootstrap,
@@ -71,15 +72,17 @@
 	       ($go-env conf))
        tools: (list go-bootstrap busybox-core execline-tools exportall)
        inputs: '()
-       build: '((if ((mkdir -p /tmp/build-home)))
-		(if ((cd src)
-		     (/bin/ash make.bash)))
-		(if ((mkdir -p /out/usr/lib/go/bin /out/usr/bin)))
-		(if ((forx tool ((go gofmt)))
-		     (importas |-i| -u tool tool)
-		     (if ((cp bin/$tool /out/usr/lib/go/bin/$tool)))
-		     (ln -s /usr/lib/go/bin/$tool /out/usr/bin/$tool)))
-		(if ((cp -a src pkg lib /out/usr/lib/go)))
-		(if ((find /out/usr/lib/go/src -type f -name "*_test.go" -delete)))
-		(if ((find /out/usr/lib/go/src -type d -name "testdata" -exec rm -rf "{}" "+")))
-		(find /out/usr/lib/go/src -type f -name "*.rc" -o -name "*.bat" -delete))))))
+       build: (elif*
+	       '(mkdir -p /tmp/build-home)
+	       ;; /bin/ash supports the bash-isms in make.bash
+	       '(cd src /bin/ash make.bash)
+	       '(mkdir -p /out/usr/lib/go/bin /out/usr/bin)
+	       '(forx
+		 tool (go gofmt)
+		 importas |-i| -u tool tool
+		 if (cp bin/$tool /out/usr/lib/go/bin/$tool)
+		 ln -s /usr/lib/go/bin/$tool /out/usr/bin/$tool)
+	       '(cp -a src pkg lib /out/usr/lib/go)
+	       '(find /out/usr/lib/go/src -type f -name "*_test.go" -delete)
+	       '(find /out/usr/lib/go/src -type d -name "testdata" -exec rm -rf "{}" "+")
+	       '(find /out/usr/lib/go/src -type f -name "*.rc" -o -name "*.bat" -delete))))))

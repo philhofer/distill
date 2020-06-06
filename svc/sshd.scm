@@ -27,16 +27,16 @@
      ;; for interfaces to have the addresses
      ;; to which sshd will bind...
      spec:   (longrun*
-	      run: `((fdmove -c 2 1)
-		     (if ((mkdir -p /var/empty)))
-		     (if ((if -t -n ((test -f /var/etc/ssh/ssh_host_ed25519_key)))
-			  (if ((mkdir -p /var/etc/ssh)))
-			  ;; NOTE: using ssh-keygen -A here doesn't work,
-			  ;; because it disagrees with sshd on where the
-			  ;; keys ought to be found relative to the install prefix
-			  (foreground ((echo "generating new host key")))
-			  (ssh-keygen -t ed25519 -P "" -f /var/etc/ssh/ssh_host_ed25519_key)))
-		     ;; sshd needs to be invoked with an absolute path
-		     ;; in order for privsep re-exec to work
-		     (/usr/sbin/sshd -h /var/etc/ssh/ssh_host_ed25519_key
-				     -D -f ,confpath))))))
+	      run: `(fdmove -c 2 1
+			    if (mkdir -p /var/empty)
+			    if (if -t -n (test -f /var/etc/ssh/ssh_host_ed25519_key)
+				   if (mkdir -p /var/etc/ssh)
+				   ;; NOTE: using ssh-keygen -A here doesn't work,
+				   ;; because it disagrees with sshd on where the
+				   ;; keys ought to be found relative to the install prefix
+				   foreground (echo "generating new host key")
+				   ssh-keygen -t ed25519 -P "" -f /var/etc/ssh/ssh_host_ed25519_key)
+			    ;; sshd needs to be invoked with an absolute path
+			    ;; in order for privsep re-exec to work
+			    /usr/sbin/sshd -h /var/etc/ssh/ssh_host_ed25519_key
+			    -D -f ,confpath)))))

@@ -51,16 +51,27 @@
 			  (make-input
 			   basedir: sysroot
 			   link: link))))))
-    (make-plan
-     raw-output: raw-output
-     name:       label
-     inputs: (cons
-	      (make-input
-	       basedir: "/"
-	       link: (buildfile dir env patches build))
-	      (append
-	       (map ->tool (expandl exp/build (flatten src tools)))
-	       (map ->input (expandl exp/host inputs)))))))
+    (push-exception-wrapper
+     (lambda (exn)
+       (info "  ... while expanding" label)
+       exn)
+     (lambda ()
+       (make-plan
+	raw-output: raw-output
+	name:       label
+	inputs: (cons
+		 (make-input
+		  basedir: "/"
+		  link: (buildfile dir env patches
+				   (cond
+				    ((procedure? build)
+				     (build host))
+				    ((list? build)
+				     (elexpand host build))
+				    (else (error "expand-package: bad \"build:\" field" build)))))
+		 (append
+		  (map ->tool (expandl exp/build (flatten src tools)))
+		  (map ->input (expandl exp/host inputs)))))))))
 
 (define (buildfile dir env patches build)
   (interned
@@ -68,12 +79,12 @@
    (lambda ()
      (write-exexpr
       (begin
-	(cons
-	 `(cd ,dir)
+	(cons*
+	 'cd dir
 	 (append
 	  (script-apply-patches (or patches '()))
 	  (exports->script (or env '()))
-	  (if (list? build) build (error "expected build")))))))))
+	  (if (list? build) build (error "expected build; got" build)))))))))
 
 ;; new-memoizer creates a new memoizer for package expansion
 (define (new-memoizer)
@@ -144,52 +155,6 @@
 	      "./usr/libexec/" "./libexec/"
 	      "./usr/share/" "./share/"))
 
-;; vargs takes a list of arguments,
-;; some of which are functions,
-;; and delays their expansion into
-;; a list of concrete arguments once a config is supplied
-(define (vargs lst)
-  (lambda (conf)
-    (let ((sublist (lambda (lst)
-		     (foldl
-		      (lambda (str item)
-			(string-append
-			 str
-			 (cond
-			  ((string? item) item)
-			  ((symbol? item) (##sys#symbol->string item))
-			  ((procedure? item) (spaced (item conf)))
-			  ((number? item) (number->string item))
-			  (else (error "bad item in vargs" item)))))
-		      ""
-		      lst))))
-      (reverse
-       (foldl
-	(lambda (lst item)
-	  (cond
-	   ((procedure? item)
-	    ;; if the config variable is a kvector,
-	    ;; splat it into the list
-	    (let ((res (item conf)))
-	      (cond
-	       ((kvector? res)
-		(kvector-foldl
-		 res
-		 (lambda (k v lst)
-		   (if v
-		       (cons (string-append (##sys#symbol->string k) "=" (spaced v)) lst)
-		       lst))
-		 lst))
-	       ((list? res)
-		(let loop ((in res) (out lst))
-		  (if (null? in) out (loop (cdr in) (cons (car in) out)))))
-	       (else (cons res lst)))))
-	   ((list? item)
-	    (cons (sublist item) lst))
-	   (else (cons item lst))))
-	'()
-	lst)))))
-
 ;; cdelay produces a delayed evaluation
 ;; of 'proc' with a <config> as its only argument
 ;;
@@ -202,32 +167,6 @@
 (define (csubst proc)
   (lambda (conf)
     (proc (lambda (fn) (fn conf)))))
-
-(define (cmd* first . rest)
-  (csubst
-   (lambda (subst)
-     (let ((cmdline (lambda (arglst)
-		      (cond
-		       ((pair? arglst)
-			;; accept (cmd ...) forms and also
-			;; ((cmd ...) ...) forms
-			(if (pair? (car arglst))
-			    (map (lambda (cmd) (subst (vargs cmd))) arglst)
-			    (list (subst (vargs arglst)))))
-		       ((procedure? arglst)
-			(subst arglst))
-		       (else (error "unexpected argument to cmd*" arglst))))))
-       (let loop ((first first)
-		  (rest  rest))
-	 (if (null? rest)
-	     ;; allow the terminal expression to be
-	     ;; a list-of-lists, which means it is
-	     ;; another sequence of programs (perhaps another (cmd* ...) expression)
-	     (let ((tail (cmdline first)))
-	       (if (and (pair? tail) (pair? (car tail)))
-		   tail
-		   (list tail)))
-	     (cons `(if ,(cmdline first)) (loop (car rest) (cdr rest)))))))))
 
 (define (url-translate urlfmt name version)
   (string-translate* urlfmt `(("$name" . ,name)
@@ -285,7 +224,7 @@
 					(cc-toolchain-libc ntc)))
 			      '()))
 	 inputs:  (append (if no-libc '() (cc-toolchain-libc ctc)) (ll libs))
-	 build:   (if build (ll build) (error "cc-package needs build: argument")))))))
+	 build:   (if (procedure? build) build (eltemplate build)))))))
 
 ;; template for 'configure; make; make install;' or 'c;m;mi'
 ;; that has sane defaults for environment, tools, libraries
@@ -312,19 +251,19 @@
 	 (libs '())	 ;; extra libraries beyond libc
 	 (tools '())	 ;; extra tools beyond a C toolchain
 	 (extra-src '()) ;; extra source
-	 (prepare '())   ;; a place to put sed chicanery, etc.
-	 (cleanup '())   ;; a place to put extra install tweaking
+	 (prepare #f)   ;; a place to put sed chicanery, etc.
+	 (cleanup #f)   ;; a place to put extra install tweaking
 	 (native-cc #f) ;; should be one of the cc-env/for-xxx functions if not #f
+	 (parallel  #t)
 	 (extra-cflags '()))
-  (let* ((default-configure (vargs
-			     `(--disable-shared
-			       --enable-static
-			       --disable-nls
-			       --prefix=/usr
-			       --sysconfdir=/etc
-			       --build ,$build-triple
-			       --host ,$triple)))
-	 (make-args (or override-make (vargs (list $make-overrides)))))
+  (let* ((default-configure `(--disable-shared
+			      --enable-static
+			      --disable-nls
+			      --prefix=/usr
+			      --sysconfdir=/etc
+			      --build ,$build-triple
+			      --host ,$triple))
+	 (make-args (or override-make (list $make-overrides))))
     (cc-package
      name version urlfmt hash
      dir: dir
@@ -345,25 +284,24 @@
 		  (if native-cc
 		      (cons (ll native-cc) (ll env))
 		      (ll env)))))
-     build:   (cdelay
-	       (lambda (ll)
-		 (append
-		  (ll prepare)
-		  (let ((args (or (ll override-configure)
-				  (append (ll default-configure)
-					  (ll extra-configure)))))
-		    (if out-of-tree
-			`((if ((mkdir -p distill-builddir)))
-			  (cd distill-builddir)
-			  (if ((../configure ,@args))))
-			`((if ((./configure ,@args))))))
-		  `((if ((make ,@(ll make-args))))
-		    (if ((make ,@(or (ll override-install) '(DESTDIR=/out install)))))
-		    (foreground ((rm -rf /out/usr/share/man /out/usr/share/info)))
-		    (foreground ((find /out -name "*.la" -delete))))
-		  (ll cleanup)
-		  (ll (lambda (conf)
-			(strip-binaries-script ($triple conf))))))))))
+     build:   (append
+	       (if parallel '() '(unexport MAKEFLAGS))
+	       (if prepare (list 'if prepare) '())
+	       (let ((args (or override-configure
+			       (append default-configure
+				       extra-configure))))
+		 (if out-of-tree
+		     `(if (mkdir -p distill-builddir)
+			  cd distill-builddir
+			  if (../configure ,@args))
+		     `(if (./configure ,@args))))
+	       `(if
+		 (make ,@make-args)
+		 if (make ,@(or override-install '(DESTDIR=/out install)))
+		 foreground (rm -rf /out/usr/share/man /out/usr/share/info)
+		 foreground (find /out -name "*.la" -delete))
+	       (if cleanup (list 'if cleanup) '())
+	       (list $strip-cmd)))))
 
 (: <cc-env> vector)
 (define <cc-env>
@@ -587,7 +525,8 @@
 ;; for each element in the given kvector,
 ;; taking care to format values as a single
 ;; string, even if they are lists
-(: kvexport (vector --> list))
+;(: kvexport (vector --> list))
+#;
 (define (kvexport kvec)
   `((exportall ,(kvector-map
 		 kvec
@@ -633,20 +572,19 @@
 	(or (null? plans) (build-graph! plans))
 	(map ->out plans)))))
 
-;; generator for an execline sequence that strips binaries
-(define (strip-binaries-script triple)
-  `((forbacktickx file ((find /out -type f -perm -o+x)))
-    (importas "-i" -u file file)
-    (backtick prefix ((head -c4 $file)))
-    (importas "-i" -u prefix prefix)
-    ;; the execline printing code knows
-    ;; how to escape a raw byte sequence
-    ;; (elf binaries begin with (0x7f)ELF)
-    (if ((test $prefix "=" #u8(127 69 76 70))))
-    (if ((echo "strip" $file)))
-    (,(conc triple "-strip") $file)))
-
-(define ($strip-cmd conf) (strip-binaries-script ($triple conf)))
+(define $strip-cmd
+  (eltemplate
+   `(forbacktickx
+     file (find /out -type f -perm -o+x)
+     importas "-i" -u file file
+     backtick prefix (head -c4 $file)
+     importas "-i" -u prefix prefix
+     ;; the execline printing code knows
+     ;; how to escape a raw byte sequence
+     ;; (elf binaries begin with (0x7f)ELF)
+     if (test $prefix "=" #u8(127 69 76 70))
+     if (echo "strip" $file)
+     ,(elconc $triple "-strip") $file)))
 
 ;; bind locates a file relative to the current working directory,
 ;; the current install directory, or the current install's lib directory,
@@ -680,26 +618,29 @@
 ;; script-apply-patches produces the execline expressions
 ;; for applying a series of patches from artifact files
 (define (script-apply-patches lst)
-  (map
-   (lambda (pf)
-     `(if ((patch -p1 "-i" ,(vector-ref (vector-ref pf 0) 1)))))
-   lst))
+  (if (null? lst)
+      '()
+      (cons*
+       'if `(patch -p1 "-i" ,(vector-ref (vector-ref (car lst) 0) 1))
+       (script-apply-patches (cdr lst)))))
 
 (define (exports->script lst)
   (let loop ((in  lst)
 	     (exp '()))
     (if (null? in)
-	(if (null? exp) '() `((exportall ,(reverse exp))))
+	(if (null? exp) '() `(exportall ,exp))
 	(let ((h (car in)))
 	  (cond
 	   ((pair? h)
-	    (loop (cdr in) (cons (list (car h) (spaced (cdr h))) exp)))
+	    (loop (cdr in)
+		  (cons (car h) (cons (spaced (cdr h)) exp))))
 	   ((kvector? h)
-	    (loop (cdr in) (kvector-foldl
-			    (car in)
-			    (lambda (k v lst)
-			      (if v (cons (list (##sys#symbol->string k) (spaced v)) lst) lst))
-			    exp)))
+	    (loop (cdr in)
+		  (kvector-foldl
+		   (car in)
+		   (lambda (k v lst)
+		     (if v (cons (##sys#symbol->string k) (cons (spaced v) lst)) lst))
+		   exp)))
 	   (else (error "bad env element" (car in))))))))
 
 

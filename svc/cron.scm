@@ -39,5 +39,5 @@
      name:   'cron
      inputs: inputs ;; note: busybox crond from busybox-full is implied
      spec:   (longrun*
-	      run: `((fdmove -c 2 1)
-		     (crond -f -d 8 -c ,dir))))))
+	      run: `(fdmove -c 2 1
+			    crond -f -d 8 -c ,dir)))))

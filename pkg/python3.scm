@@ -5,6 +5,7 @@
   (distill package)
   (distill base)
   (distill kvector)
+  (distill execline)
 
   (pkg ncurses)
   (pkg libexpat)
@@ -431,18 +432,16 @@ EOF
 	    (if (eq? ($triple conf) ($build-triple conf)) '() (list python3)))
    env:   '((ac_cv_file__dev_ptmx . yes)
 	    (ac_cv_file__dev_ptc . no))
-   prepare: '((if ((cp /src/py-setup Modules/Setup))))
-   cleanup: '((if ((pipeline ((find /out -type d -name __pycache__ -print0)))
-		   (xargs "-0")
-		   (rm -rf))))
-   extra-configure: (vargs
-		     `((--with-openssl= ,$sysroot /usr)
+   prepare: '(cp /src/py-setup Modules/Setup)
+   cleanup: '(pipeline (find /out -type d -name __pycache__ -print0)
+		       xargs "-0" rm -rf)
+   extra-configure: `(,(elconc '--with-openssl= $sysroot '/usr)
 		       --enable-ipv6
 		       --enable-optimizations=no
 		       --with-computed-gotos
 		       --with-dbmliborder=gdbm
 		       --with-system-expat
-		       --without-ensurepip))
+		       --without-ensurepip)
    override-make: (let (($py-cflags (lambda (conf)
 				      (cons '-DTHREAD_STACK_SIZE=0x100000 ($CFLAGS conf)))))
-		    (vargs `((EXTRA_CFLAGS= ,$py-cflags) ,$make-overrides)))))
+		    `(,(el= 'EXTRA_CFLAGS= $py-cflags) ,$make-overrides))))

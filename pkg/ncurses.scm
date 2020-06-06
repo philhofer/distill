@@ -2,6 +2,7 @@
   scheme
   (distill base)
   (distill package)
+  (distill execline)
   (only (chicken keyword) keyword->string string->keyword)
   (only (chicken string) conc))
 
@@ -23,19 +24,17 @@
 		  '()
 		  (list ncurses)))
      native-cc: $cc-for-build
-     cleanup: (let ((libs '(ncurses form panel menu)))
-		(cons
-		 `(if ((ln -s libncurses.a /out/usr/lib/libcurses.a)))
-		 (map
-		  (lambda (lib)
-		    `(if ((ln -s ,(conc "lib" lib "w.a") ,(conc "/out/usr/lib/lib" lib ".a")))))
-		  libs)))
-     extra-configure: (vargs
-		       `(--without-ada
-			 --without-tests --disable-termcap
-			 --disable-rpath-hack --disable-stripping
-			 --disable-pc-files --with-terminfo-dirs=/etc/terminfo
-			 --without-cxx-binding --enable-widec
-			 ,$cc-for-build)))))
+     cleanup: (elif*
+	       '(ln -s libncurses.a  /out/usr/lib/libcurses.a)
+	       '(ln -s libncursesw.a /out/usr/lib/libncurses.a)
+	       '(ln -s libformw.a    /out/usr/lib/libform.a)
+	       '(ln -s libpanelw.a   /out/usr/lib/libpanel.a)
+	       '(ln -s libmenuw.a    /out/usr/lib/libmenu.a))
+     extra-configure: `(--without-ada
+			--without-tests --disable-termcap
+			--disable-rpath-hack --disable-stripping
+			--disable-pc-files --with-terminfo-dirs=/etc/terminfo
+			--without-cxx-binding --enable-widec
+			,$cc-for-build))))
 
 

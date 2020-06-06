@@ -21,7 +21,7 @@
    ;; necessary for cross-compilation:
    env:   '((ac_cv_fread_reads_directories . yes)
 	    (ac_cv_snprintf_returns_bogus . no))
-   override-make: (vargs `(,$make-overrides NO_GETTEXT=1))
+   override-make: `(,$make-overrides NO_GETTEXT=1)
    override-install: '(NO_GETTEXT=1 DESTDIR=/out install)
    extra-configure: '(--with-curl
 		      --with-openssl --with-expat

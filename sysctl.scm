@@ -69,8 +69,8 @@
                 ;; (it will log every sysctl line),
                 ;; but that seems okay given that it
                 ;; is likely going to the standard logger
-                up: `((fdmove -c 2 1)
-                      (/sbin/sysctl -p ,file))))))
+                up: `(fdmove -c 2 1
+			     /sbin/sysctl -p ,file)))))
 
 ;; generic hardening sysctls; suitable for most systems
 (define default-sysctls

@@ -203,18 +203,18 @@
 	label: (conc "musl-headers-" (triple->arch target-triple))
 	tools: (list make execline-tools busybox-core)
 	inputs: '()
-	build: `((make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
-		   ,(conc "ARCH=" (musl-arch-name target-triple))
-		   "prefix=/usr" install-headers)))))))
+	build: `(make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
+		  ,(conc "ARCH=" (musl-arch-name target-triple))
+		  "prefix=/usr" install-headers))))))
 
 (define musl
   (cc-package
    "musl" *musl-version*
    *musl-url* *musl-hash*
    no-libc: #t ; compiled as -ffreestanding
-   build: (cmd*
+   build: (elif*
 	   `(./configure --disable-shared --enable-static
-			 --prefix=/usr (CC= ,$CC) (CFLAGS= ,$CFLAGS)
+			 --prefix=/usr ,(el= 'CC= $CC) ,(el= 'CFLAGS= $CFLAGS)
 			 --target ,$arch)
 	   `(make ,$make-overrides)
 	   '(make DESTDIR=/out install))))
@@ -227,15 +227,12 @@
      tools:   (cc-for-target conf)
      inputs:  '()
      dir:     "/src"
-     src:     (interned "/src/ssp-nonshared.c" #o644 #<<EOF
-			extern void __stack_chk_fail(void);
-			void __attribute__((visibility ("hidden"))) __stack_chk_fail_local(void) { __stack_chk_fail(); }
-EOF
-)
-     build: `((if ((,($CC conf) ,@($CFLAGS conf) -c ssp-nonshared.c -o __stack_chk_fail_local.o)))
-	      (if ((,($AR conf) -Dcr libssp_nonshared.a __stack_chk_fail_local.o)))
-	      (if ((mkdir -p /out/usr/lib)))
-	      (cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))
+     src:     (bind "patches/ssp-nonshared/ssp-nonshared.c" "/src/ssp-nonshared.c")
+     build: (elif*
+	      `(,$CC ,$CFLAGS -c ssp-nonshared.c -o __stack_chk_fail_local.o)
+	      `(,$AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)
+	      '(mkdir -p /out/usr/lib)
+	      '(cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))
 
 ;; Dependencies necessary to statically link an ordinary C executable
 (define libc (list musl libssp-nonshared))
@@ -249,9 +246,9 @@ EOF
      "exportall" "0.1"
      (string-append "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
      hash
-     build: (cmd*
-	     `(make DESTDIR=/out (CC= ,$CC) (CFLAGS= ,$CFLAGS) install)
-	     $strip-cmd))))
+     build: (elif*
+	     `(make DESTDIR=/out ,(el= 'CC= $CC) ,(el= 'CFLAGS= $CFLAGS) install)
+	     (list $strip-cmd)))))
 
 (define m4
   (cmmi-package
@@ -259,14 +256,14 @@ EOF
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
    "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0="
    ;; m4 leaves some garbage in /usr/lib
-   cleanup: '((if ((rm -rf /out/usr/lib))))))
+   cleanup: '(rm -rf /out/usr/lib)))
 
 (define gawk
   (cmmi-package
    "gawk" "5.1.0"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
    "qPUwDbyEw75NjMOALy2nyYWv_LSMprTZEfAYjIos0-c="
-   cleanup: '((foreground ((rm -f /out/usr/bin/awk))))))
+   cleanup: '(rm -f /out/usr/bin/awk)))
 
 (define libgmp
   (cmmi-package
@@ -300,9 +297,9 @@ EOF
    "bzip2" "1.0.8"
    "https://sourceware.org/pub/$name/$name-$version.tar.gz"
    "pZGXjBOF4VYQnwdDp2UYObANElrjShQaRbMDj5yef1A="
-   build: (cmd*
+   build: (elif*
 	   `(make PREFIX=/out/usr ,$cc-env ,$make-overrides install)
-	   $strip-cmd)))
+	   (list $strip-cmd))))
 
 (define bzip2  (binaries %bzip2))
 (define libbz2 (libs %bzip2))
@@ -318,18 +315,16 @@ EOF
    name version
    "https://skarnet.org/software/$name/$name-$version.tar.gz" hash
    libs:     libs
-   prepare:  '((if ((sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure))))
-   override-configure: (vargs
-			(append
-			`(--prefix=/
-			  --libdir=/usr/lib
-			  --disable-shared --enable-static
-			  --target ,$triple
-			  (--with-include= ,$sysroot /include)
-			  (--with-include= ,$sysroot /usr/include)
-			  (--with-lib= ,$sysroot /lib)
-			  (--with-lib= ,$sysroot /usr/lib))
-			  extra-configure))))
+   prepare:  '(sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)
+   override-configure: `(--prefix=/
+			 --libdir=/usr/lib
+			 --disable-shared --enable-static
+			 --target ,$triple
+			 ,(elconc '--with-include= $sysroot '/include)
+			 ,(elconc '--with-include= $sysroot '/usr/include)
+			 ,(elconc '--with-lib= $sysroot '/lib)
+			 ,(elconc '--with-lib= $sysroot '/usr/lib)
+			 ,@extra-configure)))
 
 (define skalibs
   (ska-cmmi-package
@@ -342,7 +337,7 @@ EOF
    "execline" "2.6.0.1"
    "0AwX9jiwZt0b0KiHeuWYvuzZdHlP22cZ0088gDI_iRc="
    libs: (list skalibs)
-   extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
+   extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
 		      --enable-pedantic-posix
 		      --enable-static-libc)))
 
@@ -363,10 +358,11 @@ EOF
    "SsgYKYUlYwedhJWxTvBAO2hdfrAMJ8mNpFjuIveGpSo="
    tools: (list byacc)
    ;; install flex(1) and lex(1) symlinks
-   cleanup: '((if ((ln -s reflex /out/usr/bin/lex)))
-	      (if ((ln -s reflex++ /out/usr/bin/lex++)))
-	      (if ((ln -s reflex /out/usr/bin/flex)))
-	      (if ((ln -s reflex++ /out/usr/bin/flex++))))))
+   cleanup: (elif*
+	     '(ln -s reflex /out/usr/bin/lex)
+	     '(ln -s reflex++ /out/usr/bin/lex++)
+	     '(ln -s reflex /out/usr/bin/flex)
+	     '(ln -s reflex++ /out/usr/bin/flex++))))
 
 (define zlib
   (cmmi-package
@@ -386,7 +382,6 @@ EOF
    "bFSNjbp4fE4N5xcaqSGTnNfLPVv7QhnEb2IByFGBZUY="
    libs: (list libgmp)))
 
-
 (define make
   (cmmi-package
    "make" "4.3"
@@ -394,7 +389,7 @@ EOF
    "HaL2VGA5mzktijZa2L_IyOv2OTKTGkf8D-AVI_wvARc="
    ;; can't call exit(3) inside a procedure registered with atexit(3);
     ;; just exit promptly
-   prepare: '((if ((sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c))))))
+   prepare: '(sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c)))
 
 (define binutils-for-triple
   (memoize-eq
@@ -406,27 +401,28 @@ EOF
       tools: (list byacc reflex)
       libs:  (list zlib)
       native-cc: $cc-env/for-build
-      prepare: '((if ((sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in))))
-      override-configure: (vargs `(--disable-nls
-				   --disable-shared --enable-static
-				   --disable-multilib --enable-gold=yes --with-ppl=no
-				   --disable-install-libiberty --enable-relro
-				   --disable-plugins --enable-deterministic-archives
-				   --with-mmap --enable-ld=default
-				   --with-system-zlib --enable-64-bit-bfd
-				   --disable-install-libbfd
-				   --prefix=/usr
-				   ;; no libdir, etc. because we discard any
-				   ;; libraries and headers produced
-				   (--program-prefix= ,target-triple -)
-				   (--build= ,$build-triple)
-				   (--target= ,target-triple)
-				   (--host= ,$triple)
-				   (--with-sysroot= ,(triple->sysroot target-triple))))
-      cleanup: '((if ((rm -rf /out/usr/include)))
-		 (if ((rm -rf /out/include)))
-		 (if ((rm -rf /out/usr/lib)))
-		 (if ((rm -rf /out/lib))))))))
+      prepare: '(sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in)
+      override-configure: `(--disable-nls
+			    --disable-shared --enable-static
+			    --disable-multilib --enable-gold=yes --with-ppl=no
+			    --disable-install-libiberty --enable-relro
+			    --disable-plugins --enable-deterministic-archives
+			    --with-mmap --enable-ld=default
+			    --with-system-zlib --enable-64-bit-bfd
+			    --disable-install-libbfd
+			    --prefix=/usr
+			    ;; no libdir, etc. because we discard any
+			    ;; libraries and headers produced
+			    ,(elconc '--program-prefix= target-triple '-)
+			    ,(elconc '--build= $build-triple)
+			    ,(elconc '--target= target-triple)
+			    ,(elconc '--host= $triple)
+			    ,(elconc '--with-sysroot= (triple->sysroot target-triple)))
+     cleanup: (elif*
+	       '(rm -rf /out/usr/include)
+	       '(rm -rf /out/include)
+	       '(rm -rf /out/usr/lib)
+	       '(rm -rf /out/lib))))))
 
 ;; this is a hack that allows us to build a cross-gcc
 ;; without circular dependencies: install a fake set of
@@ -457,9 +453,10 @@ EOF
 			busybox-core)
 	   inputs: '()
 	   build: (let* ((outdir (filepath-join "/out" (triple->sysroot target-triple))))
-		    `((if ((make ,@(k=v* AS: (conc target-triple "-as")
-					 AR: (conc target-triple "-ar")) all)))
-		      (make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
+		    (elif*
+		      `(make ,(conc "AS=" target-triple "-as")
+			     ,(conc "AR=" target-triple "-ar") all)
+		      `(make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
 
 (define (if-native-target? tg yes no)
   (lambda (conf)
@@ -498,10 +495,11 @@ EOF
 		       '(gcc_cv_no_pie . no)
 		       '(gcc_cv_c_no_pie . no)
 		       '(gcc_cv_c_no_fpie . no)))
-	prepare: '((if ((find "." -name Makefile.in -exec sed "-i"
-			      -e "/^AR = ar/d"        ; please don't hard-code AR
-			      -e "/^ARFLAGS = cru/d"  ; please don't hard-code ARFLAGS
-			      "{}" ";")))
+	prepare: (elif*
+		  '(find "." -name Makefile.in -exec sed "-i"
+			 -e "/^AR = ar/d"        ; please don't hard-code AR
+			 -e "/^ARFLAGS = cru/d"  ; please don't hard-code ARFLAGS
+			 "{}" ";")
 		   ;; this $(MAKE) command invocation
 		   ;; for libraries for the *build* system
 		   ;; overrides the wrong variables; the
@@ -512,51 +510,51 @@ EOF
 		    ;; you can repro this build failure by
 		   ;; cross-building a "native" GCC with
 		   ;; CFLAGS that are invalid for the *build* system
-		   (if ((sed "-i"
-			     -e "s/\\$(MAKE) \\$(BASE_FLAGS_TO_PASS) \\$(EXTRA_BUILD_FLAGS)/\\$(MAKE)/g"
-			     Makefile.in)))
+		   '(sed "-i"
+			 -e "s/\\$(MAKE) \\$(BASE_FLAGS_TO_PASS) \\$(EXTRA_BUILD_FLAGS)/\\$(MAKE)/g"
+			 Makefile.in)
 		   ;; don't pull in GNU tar just to install headers;
 		   ;; force the makefile to use busybox cpio instead
-		   (if ((sed "-i"
-			     -e "s/=install-headers-tar/=install-headers-cpio/g"
-			     gcc/config.build))))
-	override-configure: (vargs
-			     `(--prefix=/usr
-			       --exec-prefix=/usr --disable-lto
-			       --disable-nls --disable-shared --enable-static
-			       --disable-host-shared --enable-host-static
-			       --disable-multilib --enable-default-ssp
-			       --disable-bootstrap --disable-libssp
-			       --enable-default-pie --with-cloog=no
-			       --with-ppl=no --disable-libquadmath
-			       --disable-libgomp --disable-fixed-point
-			       --enable-__cxa_atexit --disable-libstdcxx-pch
-			       --disable-libmpx --disable-libsanitizer
-			       --enable-libstdcxx-time --disable-libitm
-			       --enable-threads --enable-tls
-			       --disable-install-libiberty
-			       --enable-relro --disable-plugins
-			       --with-mmap --disable-symvers
-			       --enable-version-specific-runtime-libs
-			       --with-system-zlib
-			       "--enable-languages=c,c++"
-			       ;; target-specific options:
-			       ,@(case (triple->arch target-triple)
-				   ((ppc64le ppc64) '(--enable-secureplt --enable-decimal-float=no))
-				   (else '()))
-			       (--with-sysroot= ,(triple->sysroot target-triple))
-			       (--build= ,$build-triple)
-			       (--target= ,target-triple)
-			       (--host= ,$triple)))
-	 cleanup: (if-native-target?
+		   '(sed "-i"
+			 -e "s/=install-headers-tar/=install-headers-cpio/g"
+			 gcc/config.build))
+	override-configure: `(--prefix=/usr
+			      --exec-prefix=/usr --disable-lto
+			      --disable-nls --disable-shared --enable-static
+			      --disable-host-shared --enable-host-static
+			      --disable-multilib --enable-default-ssp
+			      --disable-bootstrap --disable-libssp
+			      --enable-default-pie --with-cloog=no
+			      --with-ppl=no --disable-libquadmath
+			      --disable-libgomp --disable-fixed-point
+			      --enable-__cxa_atexit --disable-libstdcxx-pch
+			      --disable-libmpx --disable-libsanitizer
+			      --enable-libstdcxx-time --disable-libitm
+			      --enable-threads --enable-tls
+			      --disable-install-libiberty
+			      --enable-relro --disable-plugins
+			      --with-mmap --disable-symvers
+			      --enable-version-specific-runtime-libs
+			      --with-system-zlib
+			      "--enable-languages=c,c++"
+			      ;; target-specific options:
+			      ,@(case (triple->arch target-triple)
+				  ((ppc64le ppc64) '(--enable-secureplt --enable-decimal-float=no))
+				  (else '()))
+			      ,(conc   '--with-sysroot= (triple->sysroot target-triple))
+			      ,(elconc '--build= $build-triple)
+			      ,(conc   '--target= target-triple)
+			      ,(elconc '--host= $triple))
+	cleanup: (list
+		  (if-native-target?
 		   target-triple
 		   ;; native targets still shouldn't keep /usr/bin/gcc, etc.;
 		   ;; we'll install those as symlinks when native-cc is required
-		   `((if ((find /out/usr/bin -type f ! -name ,(conc target-triple "*") -delete))))
+		   `(find /out/usr/bin -type f ! -name ,(conc target-triple "*") -delete)
 		   ;; only the native version of gcc should have
 		   ;; the python gdb helpers
-		   '((if ((elglob dir "/out/usr/share/gcc-*/python")
-			  (rm -rf $dir))))))))))
+		   '(elglob dir "/out/usr/share/gcc-*/python"
+			    rm -rf $dir))))))))
 
 (define (busybox/config config-path extra-inputs)
   (cc-package
@@ -570,21 +568,21 @@ EOF
    use-native-cc: #t
    env:     (list
 	     '(KCONFIG_NOTIMESTAMP . 1))
-   build:   (cmd*
+   build:   (elif*
 	     '(mv /src/config.head .config)
 	     `(make V=1
-		(CROSS_COMPILE= ,$cross-compile)
-		(CONFIG_SYSROOT= ,$sysroot)
-		(CONFIG_EXTRA_CFLAGS= ,$CFLAGS)
+		,(elconc 'CROSS_COMPILE= $cross-compile)
+		,(elconc 'CONFIG_SYSROOT= $sysroot)
+		,(el= 'CONFIG_EXTRA_CFLAGS= $CFLAGS)
 		,$cc-env/for-kbuild
 		busybox)
               '(make V=1 busybox.links)
 	      '(install -D -m "755" busybox /out/bin/busybox)
 	      '(mkdir -p /out/usr/bin /out/sbin /out/usr/sbin)
-	      '((redirfd -r 0 busybox.links)
-		(forstdin -o 0 link)
-		(importas "-i" -u link link)
-		(ln -s /bin/busybox "/out/${link}")))))
+	      '(redirfd -r 0 busybox.links
+		forstdin -o 0 link
+		importas "-i" -u link link
+		ln -s /bin/busybox "/out/${link}"))))
 
 ;; busybox-core is just enough busybox to build packages;
 ;; it doesn't include system utilities that would require
@@ -625,6 +623,8 @@ EOF
 
 (define linux-headers
   (lambda (conf)
+    (define $arch-name
+      (o linux-arch-name $arch))
     (expand-package
      conf
      src:    *linux-source*
@@ -632,16 +632,16 @@ EOF
      label:  (conc "linux-headers-" *linux-major* "." *linux-patch* "-" ($arch conf))
      tools:  (list xz-tools native-toolchain)
      inputs: '()
-     build:  `((if ((pipeline ((xzcat /src/linux.patch)))
-		    (patch -p1)))
-	       (if ((make ,(conc 'ARCH= (linux-arch-name ($arch conf)))
-		      ,@(kvargs ($cc-env/for-kbuild conf))
-		      headers)))
+     build:  (elif*
+	      '(pipeline (xzcat /src/linux.patch) patch -p1)
+	      `(make ,(elconc 'ARCH= $arch-name)
+		 ,$cc-env/for-kbuild
+		 headers)
 	       ;; headers_install uses rsync, which is a
 	       ;; silly large dependency to pull in
 	       ;; at this stage...
-	       (if ((cp -r usr /out)))
-	       (find /out -type f ! -name "*.h" -delete)))))
+	      '(cp -r usr /out)
+	      '(find /out -type f ! -name "*.h" -delete)))))
 
 (define (installkernel* script)
   (interned "/sbin/installkernel" #o755
@@ -684,13 +684,14 @@ EOF
                         (fix-yacc-cmdline #f)) ;; scripts/Makefile.host or scripts/Makefile.lib
   (unless (and fix-lex-options fix-yacc-cmdline)
     (error "fix-dtc-script is missing required keyword arguments"))
-  `((if ((sed "-i" -e "/^%option/s/ full / /" ,fix-lex-options)))
-    (if ((sed "-i" -e "3a override YACC:=$(YACC) -L"
-              scripts/dtc/Makefile)))
-    (if ((sed "-i"
-              -e "/^extern.*yyerror(/a #define YYERROR_CALL(msg) yyerror(msg)" scripts/dtc/dtc-parser.y)))
-    ;; byacc: use -H <file> instead of --defines=<file>
-    (if ((sed "-i" -e "/cmd_bison/s/--defines=/-H /" ,fix-yacc-cmdline)))))
+  (elif*
+   `(sed "-i" -e "/^%option/s/ full / /" ,fix-lex-options)
+   '(sed "-i" -e "3a override YACC:=$(YACC) -L"
+	 scripts/dtc/Makefile)
+   '(sed "-i"
+	 -e "/^extern.*yyerror(/a #define YYERROR_CALL(msg) yyerror(msg)" scripts/dtc/dtc-parser.y)
+   ;; byacc: use -H <file> instead of --defines=<file>
+   `(sed "-i" -e "/cmd_bison/s/--defines=/-H /" ,fix-yacc-cmdline)))
 
 ;; linux/config takes a name and configuration hash
 ;; and produces a kernel package named "linux-<version>-<name>"
@@ -726,30 +727,27 @@ EOF
 		(KBUILD_BUILD_HOST . distill)
 		(CROSS_COMPILE . ,($cross-compile conf)))
        patches: patches
-       build: (let ((make-args (append
-				(kvargs ($cc-env/for-kbuild conf))
-				(k=v*
-				 YACC: 'yacc ;; not bison -y
-				 ARCH: (linux-arch-dir-name ($arch conf))
-				 HOST_LIBELF_LIBS: '(-lelf -lz)))))
-		`((if ((pipeline ((xzcat /src/linux.patch)))
-		       (patch -p1)))
-		  ,@(fix-dtc-script
-		     fix-lex-options: 'scripts/kconfig/lexer.l
-		     fix-yacc-cmdline: 'scripts/Makefile.host)
+       build: (let ((make-args (list
+				$cc-env/for-kbuild
+				'YACC=yacc ;; not bison -y
+				(elconc 'ARCH= (o linux-arch-dir-name $arch))
+				"HOST_LIBELF_LIBS=-lelf -lz")))
+		(elif*
+		 '(pipeline (xzcat /src/linux.patch) patch -p1)
+		 (fix-dtc-script
+		  fix-lex-options: 'scripts/kconfig/lexer.l
+		  fix-yacc-cmdline: 'scripts/Makefile.host)
 		  ;; libelf is built with zlib, so -lelf should imply -lz
-		  (if ((find "." -type f -name "Make*"
-			     -exec sed "-i" -e
-			     "s/-lelf/-lelf -lz/g" "{}" ";")))
-		  (if ((make
-			   V=1 KCONFIG_ALLCONFIG=/src/config
-			   ,@make-args
-			   allnoconfig)))
-		  (if ((make V=1 ,@make-args)))
-		  ,@(if dtb
-			`((if ((install -D -m "644" -t /out/boot ,dtb))))
-			'())
-		  (make V=1 ,@make-args install)))))))
+		 '(find "." -type f -name "Make*"
+			    -exec sed "-i" -e
+			    "s/-lelf/-lelf -lz/g" "{}" ";")
+		 `(make
+		      V=1 KCONFIG_ALLCONFIG=/src/config
+		      ,@make-args
+		      allnoconfig)
+		 `(make V=1 ,@make-args)
+		 (and dtb `(install -D -m "644" -t /out/boot ,dtb))
+		 `(make V=1 ,@make-args install)))))))
 
 (define linux-virt-x86_64
   (linux/config-static "virt-x86_64" "FTMQoxE4ClKOWLDdcDVzWt8UuizXfMmR4duX8Z-5qlY="))
@@ -773,8 +771,8 @@ EOF
      ;; (the included config.h would be generated by ./configure
      ;; if the script could actually run correctly...)
 
-     build: (cmd*
-	     `(cp /src/config.h config.h)
+     build: (elif*
+	     '(cp /src/config.h config.h)
 	     '(find lib/ libelf/ -type f -name "*.[ch]"
 		    -exec sed "-i"
 		    -e "/#include <libintl.h>/d"
@@ -782,12 +780,11 @@ EOF
 		    "{}" ";")
 	     '(find lib/ -type f -name "*.h"
 		    -exec sed "-i" -e "s/<error.h>/<err.h>/g" "{}" ";")
-	     `((cd libelf/)
-	       (elglob -s csrc "*.c")
-	       (,$CC ,$cflags -c $csrc))
-	     `((cd libelf/)
-	       (elglob -s objs "*.o")
-	       (,$AR ,$ARFLAGS libelf.a $objs))
+	     `(cd libelf/
+	       elglob -s csrc "*.c"
+	       if (,$CC ,$cflags -c $csrc)
+	       elglob -s objs "*.o"
+	       ,$AR ,$ARFLAGS libelf.a $objs)
 	     '(mkdir -p /out/usr/include /out/usr/lib)
 	     '(cp libelf/gelf.h /out/usr/include/gelf.h)
 	     '(cp libelf/libelf.h /out/usr/include/libelf.h)
@@ -814,12 +811,12 @@ EOF
      ;; atypical:
      ;; e2fsprogs wants BUILD_CC, etc. to be specified
      ;; as configure script arguments
-     extra-configure: (vargs `(--enable-symlink-install
-			       --enable-libuuid
-			       --enable-libblkid
-			       --disable-uuidd
-			       --disable-fsck
-			       ,$buildcc-env))
+     extra-configure: `(--enable-symlink-install
+			--enable-libuuid
+			--enable-libblkid
+			--disable-uuidd
+			--disable-fsck
+			,$buildcc-env)
      override-install: '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))
 
 (define e2fsprogs
@@ -834,7 +831,7 @@ EOF
 	 (interned "/bin/samedate" #o755
 		   (lambda ()
 		     (write-exexpr
-                      '((echo "Fri Apr 3 20:09:47 UTC 2020"))
+                      '(echo "Fri Apr 3 20:09:47 UTC 2020")
                       shebang: "#!/bin/execlineb -s0")))))
     (cc-package
      "perl" "5.30.2"
@@ -847,18 +844,19 @@ EOF
 		(BUILD_BZIP2 . 0)
 		(BZIP2_LIB . ,(filepath-join ($sysroot conf) "/usr/lib"))
 		(BZIP2_INCLUDE . ,(filepath-join ($sysroot conf) "/usr/include"))))
-     build: (cmd*
+     build: (elif*
 	     '(ln -sf /bin/samedate /bin/date)
-	     `(./Configure -des (-Dcc= ,$CC)
-			   (-Dccflags= ,$CFLAGS)
-			   (-Dar= ,$AR)
-			   (-Darflags= ,$ARFLAGS)
-			   (-Dld= ,$LD)
-			   (-Dldflags= ,$LDFLAGS)
-                           (-Doptimize= -Os) ;; TODO: pull this out of $CFLAGS
-			   (-Dnm= ,$NM)
-			   (-Dranlib= ,$RANLIB)
-			   (-Dsysroot= ,$sysroot)
+	     `(./Configure -des
+			   ,(el= '-Dcc= $CC)
+			   ,(el= '-Dccflags= $CFLAGS)
+			   ,(el= '-Dar= $AR)
+			   ,(el= '-Darflags= $ARFLAGS)
+			   ,(el= '-Dld= $LD)
+			   ,(el= '-Dldflags= $LDFLAGS)
+                           -Doptimize=-Os ;; TODO: pull this out of $CFLAGS
+			   ,(el= '-Dnm= $NM)
+			   ,(el= '-Dranlib= $RANLIB)
+			   ,(el= '-Dsysroot= $sysroot)
 			   ;; force reproducible uname
 			   -A "define:osname=linux"
 			   -A "define:osvers=5.4.x"
@@ -899,28 +897,26 @@ EOF
      patches:   (patchfiles* "patches/dtc/lexer.patch")
      extra-src: (list envfile dotconf)
      tools:     (list byacc reflex)
-     build: (lambda (conf)
-	      (let ((make-args (vargs `("YACC=yacc -d"
-					(CONFIG_BOOTCOMMAND= ,bootcmd)
-					(CROSS_COMPILE= ,$cross-compile)
-					,$cc-env/for-kbuild))))
-		`((importas -D 0 epoch SOURCE_DATE_EPOCH)
-		  (backtick SOURCE_DATE_EPOCH
-			    ((pipeline ((echo -n $epoch)))
-			     (sed -e "s/@//")))
-		  (if ((cp /src/uboot-config .config)))
-		  ,@(fix-dtc-script
-		     fix-lex-options: 'scripts/kconfig/zconf.l
-		     fix-yacc-cmdline: 'scripts/Makefile.lib)
-		  ;; busybox xxd doesn't support '-i'; emulate it with hexdump
-		  (if ((sed "-i"
-			    -e "s/xxd -i/hexdump -v -e '\\/1 \"0x%X, \"'/g"
-			    -e "s/echo \", 0x00\"/echo \" 0x00\"/g" Makefile)))
-		  ;; we're using yacc -d, so the zconf.tab.c needs to #include the generated definitions
-		  (if ((sed "-i"
-			    -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)))
-		  (if ((make V=1 ,@(make-args conf))))
-		  (install -D -m 644 -t /out/boot u-boot.bin)))))))
+     build: (let ((make-args `("YACC=yacc -d"
+			       ,(elconc 'CONFIG_BOOTCOMMAND= bootcmd)
+			       ,(elconc 'CROSS_COMPILE= $cross-compile)
+			       ,$cc-env/for-kbuild)))
+	      (elif*
+	       `(importas -D 0 epoch SOURCE_DATE_EPOCH
+			  backtick SOURCE_DATE_EPOCH (pipeline (echo -n $epoch) sed -e "s/@//"))
+	       '(cp /src/uboot-config .config)
+	       (fix-dtc-script
+		fix-lex-options: 'scripts/kconfig/zconf.l
+		fix-yacc-cmdline: 'scripts/Makefile.lib)
+	       ;; busybox xxd doesn't support '-i'; emulate it with hexdump
+	       '(sed "-i"
+		     -e "s/xxd -i/hexdump -v -e '\\/1 \"0x%X, \"'/g"
+		     -e "s/echo \", 0x00\"/echo \" 0x00\"/g" Makefile)
+	       ;; we're using yacc -d, so the zconf.tab.c needs to #include the generated definitions
+	       '(sed "-i"
+		     -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)
+	       `(make V=1 ,@make-args)
+	       '(install -D -m 644 -t /out/boot u-boot.bin))))))
 
 (define xz-utils
   (cmmi-package
@@ -936,9 +932,9 @@ EOF
   "lz4" "1.9.2"
   "https://github.com/lz4/$name/archive/v$version.tar.gz"
   "uwHhgT74Tk7ds0TQeFZTodoI1_5IZsRnVRNNHi7ywlc="
-  build: (cmd*
+  build: (elif*
 	  `(make DESTDIR=/out PREFIX=/usr ,$cc-env ,$make-overrides install)
-	  $strip-cmd)))
+	  (list $strip-cmd))))
 
 (define lz4 (binaries %lz4))
 (define liblz4 (libs %lz4))
@@ -954,11 +950,11 @@ EOF
 			     HAVE_LZ4=0
 			     ZSTD_LEGACY_SUPPORT=0
 			     ZSTD_LIB_DEPRECATED=0)))
-	    (cmd*
-	     `((cd lib/)
-	       (make PREFIX=/usr DESTDIR=/out ,$cc-env ,$make-overrides ,@makeflags install-static install-includes))
-	     `((cd programs/)
-	       (make ,$cc-env ,$make-overrides ,@makeflags zstd))
+	    (elif*
+	     `(cd lib/
+		  make PREFIX=/usr DESTDIR=/out ,$cc-env ,$make-overrides ,@makeflags install-static install-includes)
+	     `(cd programs/
+		  make ,$cc-env ,$make-overrides ,@makeflags zstd)
 	     '(install -D -m "755" programs/zstd /out/usr/bin/zstd)))))
 
 (define zstd (binaries %zstd))
@@ -974,19 +970,19 @@ EOF
      dir:   (string-append "squashfs-tools-" ver "/squashfs-tools")
      env:   (csubst (lambda (subst) (list (subst $cc-env))))
      libs:  (list libzstd liblz4 liblzma zlib)
-     build: (cmd*
+     build: (elif*
 	     `(make XZ_SUPPORT=1 LZO_SUPPORT=0
 		    LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0 ,$make-overrides)
 	     '(mkdir -p /out/usr/bin)
 	     '(cp mksquashfs unsquashfs /out/usr/bin)
-	     $strip-cmd))))
+	     (list $strip-cmd)))))
 
 (define libressl
   (cmmi-package
    "libressl" "3.2.0"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
    "tekDV77_P7E1zG9efeE2gENaGd6nDZd4Q9lk_lkLuCg="
-   cleanup: '((if ((ln -s openssl /out/usr/bin/libressl))))))
+   cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
   (cmmi-package
@@ -1057,22 +1053,22 @@ EOF
 		   "patches/iproute2/fix-install-errors.patch")
 	 tools: tools
 	 libs:  (list linux-headers iptables libmnl libelf zlib)
-	 build: (cmd*
+	 build: (elif*
 		 '(cp /src/config.mk config.mk)
                  '(sed "-i" -e "/^SUBDIRS/s: netem::" Makefile)
-                 `(make (CCOPTS= ,$CFLAGS) SHARED_LIBS=n PREFIX=/usr all)
+                 `(make ,(el= 'CCOPTS= $CFLAGS) SHARED_LIBS=n PREFIX=/usr all)
                  '(make SHARED_LIBS=n DESTDIR=/out PREFIX=/usr install)
                  '(rm -rf /out/usr/share/bash-completion)
                  '(rm -rf /out/var)
                  '(rm -rf /out/usr/share/man)
-		 $strip-cmd))))
+		 (list $strip-cmd)))))
 
 (define libs6+tools
   (ska-cmmi-package
    "s6" "2.9.1.0"
    "-YjvL_kpeegF4FFOlDizjsxkC8gSqPftHDsII5sDmEc="
    libs: (list skalibs libexecline)
-   extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
+   extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
 		      --enable-static-libc)))
 
 (define s6 (binaries libs6+tools))
@@ -1083,7 +1079,7 @@ EOF
    "s6-rc" "0.5.1.2"
    "y8awbxd6B7btH4qmlyx2FWwhdlysT4n19Twc-x0lotc="
    libs: (list libs6 skalibs libexecline)
-   extra-configure: `((--with-sysdeps= ,$sysroot /lib/skalibs/sysdeps)
+   extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
 		      --enable-static-libc)))
 
 (define s6-rc (binaries libs6rc+tools))
@@ -1096,9 +1092,9 @@ EOF
      "hard" "0.1"
      (string-append "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
      hash
-     build: (cmd*
-	     `(make (CC= ,$CC) (CFLAGS= ,$CFLAGS) (LDFLAGS= ,$LDFLAGS) DESTDIR=/out install)
-	     $strip-cmd))))
+     build: (elif*
+	     `(make ,(el= 'CC= $CC) ,(el= 'CFLAGS= $CFLAGS) ,(el= 'LDFLAGS= $LDFLAGS) DESTDIR=/out install)
+	     (list $strip-cmd)))))
 
 (define busybox-full
   (busybox/config
@@ -1147,7 +1143,7 @@ EOF
    "pkgconf" "1.1.0"
    "https://distfiles.dereferenced.org/$name/$name-$version.tar.xz"
    "Gz7Gt_OuMI4GXzuBsAnhjSQCdjZG7gLqY8rxCPze-AI="
-   cleanup: '((if ((ln -sf pkg-config /out/usr/bin/pkgconf))))))
+   cleanup: '(ln -sf pkg-config /out/usr/bin/pkgconf)))
 
 (define dosfstools
   (cmmi-package
@@ -1197,8 +1193,9 @@ EOF
       "https://b2cdn.sunfi.sh/pub-cdn/file/" hash)
      hash
      libs: (list linux-headers)
-     build: (cmd*
-	     `(make (CC= ,$CC) (CFLAGS= ,$CFLAGS) (LDFLAGS= ,$LDFLAGS) DESTDIR=/out install)))))
+     build: (elif*
+	     `(make ,(el= 'CC= $CC) ,(el= 'CFLAGS= $CFLAGS) ,(el= 'LDFLAGS= $LDFLAGS) DESTDIR=/out install)
+	     (list $strip-cmd)))))
 
 (define nasm
   (cmmi-package
@@ -1214,5 +1211,6 @@ EOF
       "https://b2cdn.sunfi.sh/pub-cdn/file/" hash)
      hash
      tools: (list nasm)
-     build: (cmd*
-	     `(make (CC= ,$CC) (LD= ,$LD) (CFLAGS= ,$CFLAGS) (LDFLAGS= ,$LDFLAGS) DESTDIR=/out install)))))
+     build: (elif*
+	     `(make ,(el= 'CC= $CC) ,(el= 'LD= $LD) ,(el= 'CFLAGS= $CFLAGS) ,(el= 'LDFLAGS= $LDFLAGS) DESTDIR=/out install)
+	     (list $strip-cmd)))))

@@ -5,13 +5,11 @@
     inputs: '()
     after:  (list dev)
     spec:   (oneshot*
-              up:   `(;; TODO: detect swap and don't mkswap
-                      (fdmove -c 2 1)
-                      (foreground ((mkswap ,dev)))
-                      (swapon ,dev))
-              down: `((fdmove -c 2 1)
-                      (foreground ((swapoff ,dev)))
-                      (true)))))
+              up:   `( ;; TODO: detect swap and don't mkswap
+                      fdmove -c 2 1
+                      foreground (mkswap ,dev)
+                      swapon ,dev)
+              down: `(fdmove -c 2 1 swapoff ,dev))))
 
 ;; logging services will generally depend on var-mounted-rw
 (define var-mounted-rw 'var-mount)
@@ -33,25 +31,25 @@
      inputs: (list e2fsprogs)
      after:  (list dev)
      spec:   (oneshot*
-	      up: `((fdmove -c 2 1)
-		    (if ((test -b ,dev)))
-		    ;; TODO: figure out a better way
-		    ;; to determine if this device has actually
-		    ;; been formatted yet...
-		    (if ((if -t -n ((fsck.ext4 -p ,dev)))
-			 (foreground ((echo "fsck didn't work; running mkfs.ext4 on /var ...")))
-			 (mkfs.ext4 ,@mkopts ,dev)))
-		    (if ((mount -t ext4 -o ,(join-with "," opts) ,dev /var)))
-		    (if ((mkdir -p /var/empty /var/db)))
-		    (if -t -n ((test -L /var/run)))
-		    (foreground ((rm -rf /var/run)))
-		    (foreground ((ln -Tnsf /run /var/run)))
-		    (true))
-	      down: `((fdmove -c 2 1)
-		      (foreground ((mount -o "ro,remount,noexec,nosuid" ,dev /var)))
-		      (foreground ((sync)))
-		      (foreground ((umount /var)))
-		      (true))))))
+	      up: `(fdmove -c 2 1
+			   if (test -b ,dev)
+			   ;; TODO: figure out a better way
+			   ;; to determine if this device has actually
+			   ;; been formatted yet...
+			   if (if -t -n (fsck.ext4 -p ,dev)
+				  foreground (echo "fsck didn't work; running mkfs.ext4 on /var ...")
+				  mkfs.ext4 ,@mkopts ,dev)
+			   if (mount -t ext4 -o ,(join-with "," opts) ,dev /var)
+			   if (mkdir -p /var/empty /var/db)
+			   if -t -n (test -L /var/run)
+			   foreground (rm -rf /var/run)
+			   foreground (ln -Tnsf /run /var/run)
+			   true)
+	      down: `(fdmove -c 2 1
+			     foreground (mount -o "ro,remount,noexec,nosuid" ,dev /var)
+			     foreground (sync)
+			     foreground (umount /var)
+			     true)))))
 
 ;; kmsg is a super lightweight syslogd-style service
 ;; that reads logs from /dev/kmsg and stores them in
@@ -67,16 +65,16 @@
      after:  (list var-mounted-rw)
      spec:   (longrun*
 	      notification-fd: nfd
-	      run: `((fdmove -c 2 1)
-		     (if ((mkdir -p ,dir)))
-		     (if ((chown -R catchlog:catchlog ,dir)))
-		     (if ((chmod "2700" ,dir)))
-		     (pipeline -w ((s6-setuidgid catchlog)
-				   (s6-log -d ,nfd -- ,@opts /var/log/services/kmsg)))
-		     (redirfd -r 0 /dev/kmsg)
-		     (s6-setuidgid catchlog)
-		     ;; strip off timestamps and have s6-log prepend tai64n timestamps instead;
-		     (sed -e "s/^[0-9].*-;//g"))))))
+	      run: `(fdmove -c 2 1
+			    if (mkdir -p ,dir)
+			    if (chown -R catchlog:catchlog ,dir)
+			    if (chmod "2700" ,dir)
+			    pipeline -w (s6-setuidgid catchlog
+						      s6-log -d ,nfd -- ,@opts /var/log/services/kmsg)
+			    redirfd -r 0 /dev/kmsg
+			    s6-setuidgid catchlog
+			    ;; strip off timestamps and have s6-log prepend tai64n timestamps instead;
+			    sed -e "s/^[0-9].*-;//g")))))
 
 (define (var-log-services svcs #!key
                           ;; keep at most 10 old logs
@@ -113,12 +111,11 @@
 			 consumer-for: (service-name old)
                          dependencies: (conc var-mounted-rw "\n")
                          notification-fd: 3
-                         run: `((if ((mkdir -p ,dir)))
-                                (if ((chown -R catchlog:catchlog ,dir)))
-                                (if ((chmod "2700" ,dir)))
-                                (s6-setuidgid catchlog)
-                                (exec -c)
-                                (s6-log -d 3 ,@log-opts ,dir))))
+                         run: `(if (mkdir -p ,dir)
+				   if (chown -R catchlog:catchlog ,dir)
+				   if (chmod "2700" ,dir)
+				   s6-setuidgid catchlog
+				   exec -c s6-log -d 3 ,@log-opts ,dir)))
               (cons
                 (update-service
                   old

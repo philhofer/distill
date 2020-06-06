@@ -25,13 +25,13 @@
    #o555
    (lambda ()
      (write-exexpr
-      `((importas "-i" reason reason)
-	(elglob "-0" -s hooks ,(filepath-join hook-dir "${reason}/*"))
-	(forx hook (("${hooks}")))
-	(importas "-i" -u hook hook)
-	(if ((test -x "${hook}")))
-	(foreground ((echo "running hook ${hook}")))
-	("${hook}"))))))
+      `(importas "-i" reason reason
+		 elglob "-0" -s hooks ,(filepath-join hook-dir "${reason}/*")
+		 forx hook ("${hooks}")
+		 importas "-i" -u hook hook
+		 if (test -x "${hook}")
+		 foreground (echo "running hook ${hook}")
+		 "${hook}")))))
 
 (define (hook-for-reason reason name contents)
   (interned
@@ -47,20 +47,20 @@
 (define resolvconf-hooks
   ;; TODO: handle more than just 'nameserver' entries
   (let* ((nshook (lambda (ipv evar)
-		   `((multisubstitute ((importas -Cnu nameservers ,evar)
-				       (importas -u |-i| ifname interface)
-				       (define version ,ipv)))
-		     (mkdir -p /run/resolv.conf.d)
-		     (if ((redirfd -w 1 "/run/resolv.${ifname}.dhcp${version}.conf")
-			  (forx ns (( $nameservers )))
-			  (importas -u |-i| ns ns)
-			  (echo nameserver $ns)))
-		     (/usr/libexec/dhcpcd/update-resolv-conf))))
-	 (upd    '((if ((elglob -0 -s runfiles /run/resolv.*.conf)
-			(redirfd -w 1 /run/resolv.conf.new)
-			(if -n -t ((test -z $runfiles)))
-			(cat $runfiles)))
-		   (mv /run/resolv.conf.new /run/resolv.conf)))
+		   `(multisubstitute (importas -Cnu nameservers ,evar
+					       importas -u |-i| ifname interface
+					       define version ,ipv)
+				     mkdir -p /run/resolv.conf.d
+				     if (redirfd -w 1 "/run/resolv.${ifname}.dhcp${version}.conf"
+						 forx ns ( $nameservers )
+						 importas -u |-i| ns ns
+						 echo nameserver $ns)
+				     /usr/libexec/dhcpcd/update-resolv-conf)))
+	 (upd    '(if (elglob -0 -s runfiles /run/resolv.*.conf
+			      redirfd -w 1 /run/resolv.conf.new
+			      if -n -t (test -z $runfiles)
+			      cat $runfiles)
+		      mv /run/resolv.conf.new /run/resolv.conf))
 	 (v4p     "/usr/libexec/dhcpcd/dhcp-nameserver-hook")
 	 (v6p     "/usr/libexec/dhcpcd/dhcp6-nameserver-hook")
 	 (v4r     '("BOUND" "RENEW" "REBIND" "REBOOT" "INFORM" "EXPIRE" "STOP" "NAK"))
@@ -131,18 +131,18 @@
      groups: (list (addgroup 'dhcpcd '(dhcpcd)))
      after:  (list var-mounted-rw)
      spec:   (longrun*
-	      run: `((fdmove -c 2 1)
-		     ;; set up chroot bind-mounts:
-		     (if ((forx mnt (,chroot-bind))
-			  (importas -u "-i" mnt mnt)
-			  (define dst ,(chroot-fmt "${mnt}"))
-			  (if -n -t ((mountpoint -q "${dst}")))
-			  (if ((mkdir -p "${dst}")))
-			  (mount --bind "/${mnt}" "${dst}")))
-		     (if ((mkdir -p /var/run/dhcpcd)))
-		     (dhcpcd -B -c ,hook-script-path -f /etc/dhcpcd.conf))
-	      finish: `((forx mnt (,chroot-bind))
-			(importas -u "-i" mnt mnt)
-			(define dst ,(chroot-fmt "${mnt}"))
-			(if ((mountpoint -q "${dst}")))
-			(umount "${dst}"))))))
+	      run: `(fdmove -c 2 1
+			    ;; set up chroot bind-mounts:
+			    if (forx mnt ,chroot-bind
+				     importas -u "-i" mnt mnt
+				     define dst ,(chroot-fmt "${mnt}")
+				     if -n -t (mountpoint -q "${dst}")
+				     if (mkdir -p "${dst}")
+				     mount --bind "/${mnt}" "${dst}")
+			    if (mkdir -p /var/run/dhcpcd)
+			    dhcpcd -B -c ,hook-script-path -f /etc/dhcpcd.conf)
+	      finish: `(forx mnt ,chroot-bind
+			     importas -u "-i" mnt mnt
+			     define dst ,(chroot-fmt "${mnt}")
+			     if (mountpoint -q "${dst}")
+			     umount "${dst}")))))
