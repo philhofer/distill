@@ -2,6 +2,7 @@
   (import
     scheme
     (srfi 6)  ;; string ports
+    (srfi 12)
     (srfi 26) ;; cut
     (srfi 39) ;; parameters
     (srfi 69) ;; make-hash-table, etc
@@ -26,7 +27,8 @@
                (only (chicken port)
                      with-output-to-string
                      call-with-output-string)
-               (only (chicken base) include error flatten unless o disjoin foldl))))
+	       (only (chicken condition) print-error-message)
+               (only (chicken base) include error flatten when unless o disjoin foldl))))
   (cond-expand
     (chicken (import-for-syntax
                (chicken keyword))))
@@ -91,5 +93,6 @@
     spaced
     splat
     k=v*
-    kvargs)
+    kvargs
+    exports->script)
   (include "package.scm"))

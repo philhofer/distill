@@ -270,11 +270,9 @@
    "gmp" "6.2.0"
    "https://gmplib.org/download/gmp/gmp-$version.tar.xz"
    "YQMYgwK95PJL5gS5-l_Iw59tc1O31Kx3X2XFdWm8t6M="
-   env: (lambda (conf)
-	  ;; gmp's configure script ignores CFLAGS_FOR_BUILD,
-	  ;; so we have to shove everything into CC_FOR_BUILD
-	  `((CC_FOR_BUILD . ,(cons ($build-CC conf)
-				   ($build-CFLAGS conf)))))
+   ;; gmp's configure script ignores CFLAGS_FOR_BUILD,
+   ;; so we have to shove everything into CC_FOR_BUILD
+   env: `((CC_FOR_BUILD ,$build-CC ,$build-CFLAGS))
    tools: (list m4 native-toolchain)
    extra-configure: '(--with-pic)))
 
@@ -490,11 +488,10 @@
 	out-of-tree: #t
 	extra-cflags: '(-DCROSS_DIRECTORY_STRUCTURE)
 	native-cc: $cc-env/for-build
-	env:  (lambda (conf)
-		 (list ($make-overrides conf)
-		       '(gcc_cv_no_pie . no)
-		       '(gcc_cv_c_no_pie . no)
-		       '(gcc_cv_c_no_fpie . no)))
+	env:  (list $make-overrides
+		    '(gcc_cv_no_pie . no)
+		    '(gcc_cv_c_no_pie . no)
+		    '(gcc_cv_c_no_fpie . no))
 	prepare: (elif*
 		  '(find "." -name Makefile.in -exec sed "-i"
 			 -e "/^AR = ar/d"        ; please don't hard-code AR
@@ -725,7 +722,7 @@ EOF
 		(KBUILD_BUILD_TIMESTAMP . "@0")
 		(KBUILD_BUILD_USER . distill)
 		(KBUILD_BUILD_HOST . distill)
-		(CROSS_COMPILE . ,($cross-compile conf)))
+		(CROSS_COMPILE . ,$cross-compile))
        patches: patches
        build: (let ((make-args (list
 				$cc-env/for-kbuild
@@ -832,18 +829,20 @@ EOF
 		   (lambda ()
 		     (write-exexpr
                       '(echo "Fri Apr 3 20:09:47 UTC 2020")
-                      shebang: "#!/bin/execlineb -s0")))))
+                      shebang: "#!/bin/execlineb -s0"))))
+	(pathto    (lambda (p)
+		     (lambda (conf)
+		       (filepath-join ($sysroot conf) p)))))
     (cc-package
      "perl" "5.30.2"
      "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
      "1LHYN7a4aIRWLowcJRJWNNTMSLl5btVOydsEyFCL2Yo="
      tools: (list samedate)
      libs:  (list libbz2 zlib)
-     env:   (lambda (conf)
-	      `((BUILD_ZLIB . 0)
-		(BUILD_BZIP2 . 0)
-		(BZIP2_LIB . ,(filepath-join ($sysroot conf) "/usr/lib"))
-		(BZIP2_INCLUDE . ,(filepath-join ($sysroot conf) "/usr/include"))))
+     env:   `((BUILD_ZLIB . 0)
+	      (BUILD_BZIP2 . 0)
+	      (BZIP2_LIB . ,(pathto "/usr/lib"))
+	      (BZIP2_INCLUDE . ,(pathto "/usr/include")))
      build: (elif*
 	     '(ln -sf /bin/samedate /bin/date)
 	     `(./Configure -des
@@ -968,7 +967,7 @@ EOF
      "o-ja9XdUjDj8KcrNOfKi7jQ1z37f7dtf3YUFgqRTIuo="
      ;; non-standard directory:
      dir:   (string-append "squashfs-tools-" ver "/squashfs-tools")
-     env:   (csubst (lambda (subst) (list (subst $cc-env))))
+     env:   (list $cc-env)
      libs:  (list libzstd liblz4 liblzma zlib)
      build: (elif*
 	     `(make XZ_SUPPORT=1 LZO_SUPPORT=0

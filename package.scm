@@ -53,7 +53,14 @@
 			   link: link))))))
     (push-exception-wrapper
      (lambda (exn)
-       (info "  ... while expanding" label)
+       (let* ((get (condition-property-accessor 'exn 'call-chain))
+	      (ch  (and get (get exn))))
+	 (when ch
+	   (for-each
+	    (lambda (e) (info "  <trace>" (vector-ref e 0)))
+	    ch)))
+       (print-error-message exn)
+       (fatal "error while expanding" label)
        exn)
      (lambda ()
        (make-plan
@@ -62,7 +69,7 @@
 	inputs: (cons
 		 (make-input
 		  basedir: "/"
-		  link: (buildfile dir env patches
+		  link: (buildfile host dir env patches
 				   (cond
 				    ((procedure? build)
 				     (build host))
@@ -73,7 +80,7 @@
 		  (map ->tool (expandl exp/build (flatten src tools)))
 		  (map ->input (expandl exp/host inputs)))))))))
 
-(define (buildfile dir env patches build)
+(define (buildfile conf dir env patches build)
   (interned
    "/build" #o744
    (lambda ()
@@ -83,7 +90,7 @@
 	 'cd dir
 	 (append
 	  (script-apply-patches (or patches '()))
-	  (exports->script (or env '()))
+	  (exports->script conf (or env '()))
 	  (if (list? build) build (error "expected build; got" build)))))))))
 
 ;; new-memoizer creates a new memoizer for package expansion
@@ -210,7 +217,7 @@
 	 patches: patches
 	 label:   (conc name "-" version "-" ($arch conf))
 	 src:     (cons src (append patches extra-src))
-	 env:     (ll env)
+	 env:     env
 	 dir:     (or dir (conc name "-" version))
 	 tools:   (append (cc-toolchain-tools ctc)
 			  (ll tools)
@@ -273,17 +280,16 @@
      tools: tools
      extra-src: extra-src
      use-native-cc: (if native-cc #t #f)
-     env:     (cdelay
-	       (lambda (ll)
-		 (cons
-		  (if (null? extra-cflags)
-		      (ll $cc-env)
-		      (kwith (ll $cc-env)
-			     CFLAGS: (+= extra-cflags)
-			     CXXFLAGS: (+= extra-cflags)))
-		  (if native-cc
-		      (cons (ll native-cc) (ll env))
-		      (ll env)))))
+     env:     (cons
+	       (if (null? extra-cflags)
+		   $cc-env
+		   (lambda (conf)
+		     (kwith ($cc-env conf)
+			    CFLAGS: (+= extra-cflags)
+			    CXXFLAGS: (+= extra-cflags))))
+	       (if native-cc
+		   (cons native-cc env)
+		   env))
      build:   (append
 	       (if parallel '() '(unexport MAKEFLAGS))
 	       (if prepare (list 'if prepare) '())
@@ -519,24 +525,6 @@
      (k=v k (kref conf k)))
    keywords))
 
-;; kvexport produces a list of non-terminal
-;; execline expressions of the form
-;;   (export <key> <value>)
-;; for each element in the given kvector,
-;; taking care to format values as a single
-;; string, even if they are lists
-;(: kvexport (vector --> list))
-#;
-(define (kvexport kvec)
-  `((exportall ,(kvector-map
-		 kvec
-		 (lambda (k v)
-		   (list (##sys#symbol->string k) (spaced v)))))))
-
-;; recursively apply 'proc' to items of lst
-;; while the results are lists, and deduplicate
-;; precisely-equivalent items along the way
-;;
 ;; this is used to expand package#tools and package#inputs
 ;; so that meta-packages are recursively unpacked into a single
 ;; list of packages and artifacts
@@ -624,23 +612,42 @@
        'if `(patch -p1 "-i" ,(vector-ref (vector-ref (car lst) 0) 1))
        (script-apply-patches (cdr lst)))))
 
-(define (exports->script lst)
+(define (exports->script conf lst)
+  ;; expand a variable as the left-hand-side
+  ;; of a key=value environment variable expression
+  (define (lhs x)
+    (cond
+     ((symbol? x) x)
+     ((string? x) x)
+     ((procedure? x) (lhs (x conf)))
+     (else (error "env: cannot use value as literal" x))))
+  (define (rhs x)
+    (cond
+     ((symbol? x)  x)
+     ((string? x)  x)
+     ((number? x)  x)
+     ((list? x)      (spaced (map rhs x)))
+     ((procedure? x) (rhs (x conf)))
+     (else (error "env: cannot use value as env var" x))))
   (let loop ((in  lst)
 	     (exp '()))
     (if (null? in)
 	(if (null? exp) '() `(exportall ,exp))
-	(let ((h (car in)))
+	(let kons ((h    (car in))
+		   (rest (cdr in)))
 	  (cond
 	   ((pair? h)
-	    (loop (cdr in)
-		  (cons (car h) (cons (spaced (cdr h)) exp))))
+	    (loop rest
+		  (cons (lhs (car h)) (cons (rhs (cdr h)) exp))))
 	   ((kvector? h)
-	    (loop (cdr in)
+	    (loop rest
 		  (kvector-foldl
-		   (car in)
+		   h
 		   (lambda (k v lst)
-		     (if v (cons (##sys#symbol->string k) (cons (spaced v) lst)) lst))
+		     (if v (cons (##sys#symbol->string k) (cons (rhs v) lst)) lst))
 		   exp)))
+	   ((procedure? h)
+	    (kons (h conf) rest))
 	   (else (error "bad env element" (car in))))))))
 
 
