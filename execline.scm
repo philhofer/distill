@@ -66,16 +66,29 @@
   (define (sep? sym)
     (and
      (symbol? sym)
-     (memq sym '(if background foreground backtick
-		    forbacktickx trap tryexec pipeline
-		    ifelse ifte ifthenelse multidefine forx wait
-		    cd define dollarat elgetopt elgetpositionals
-		    elglob emptyenv envfile exec export exportall fdblock
-		    fdclose fdmove fdreserve fdswap forstdin
-		    getcwd getpid heredoc homeof importas
-		    piperw redirfd runblock shift umask
-		    unexport withstdinas chroot unshare
-		    loopwhilex xargs sudo su nice))))
+     (let* ((v '#(background
+		 backtick cd chroot
+		 define dollarat elgetopt elgetpositionals
+		 elglob emptyenv envfile exec export exportall
+		 fdblock fdclose fdmove fdreserve fdswap
+		 forbacktickx foreground forstdin forx getcwd getpid gptimage
+		 heredoc homeof if ifelse ifte ifthenelse
+		 importas loopwhilex multidefine nice pipeline
+		 piperw redirfd runblock shift su
+		 sudo trap tryexec umask
+		 unexport unshare wait withstdinas xargs))
+	    (e<? (lambda (a b)
+		  (string<? (##sys#symbol->string a) (##sys#symbol->string b))))
+	    (ref (lambda (i) (vector-ref v i))))
+       (let loop ((i 0)
+		  (j (- (vector-length v) 1)))
+	 (and (<= i j)
+	      (let* ((mid (+ (quotient (- j i) 2) i))
+		     (e   (ref mid)))
+		(or (eq? e sym)
+		    (if (e<? sym e)
+			(loop i (- mid 1))
+			(loop (+ mid 1) j)))))))))
   (define (execl-dsp obj)
     (cond
       ;; technically there can be spaces, etc. in symbols, too...
