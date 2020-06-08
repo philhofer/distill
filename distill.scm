@@ -104,8 +104,6 @@
               (real-eval expr)
               (loop (read))))))))
 
-
-
 (define (sum-cmd args)
   (import
     (distill hash))
@@ -118,6 +116,13 @@
    (if (null? args)
        (list "/proc/self/fd/0")
        args)))
+
+(define (again-cmd args)
+  (import
+    (distill plan))
+  (when (null? args)
+    (fatal "usage: distill again <plan-hash> ..."))
+  (for-each build-plan! (map load-plan args)))
 
 (define (args->plan args)
   (import
@@ -266,11 +271,12 @@
 
 (let ((dirs (get-environment-variable "DISTILL_PATH"))
       (args (command-line-arguments))
-      (cmds `((sum   . ,sum-cmd)
-	      (build . ,build-cmd)
-	      (list  . ,list-cmd)
-	      (run   . ,run-cmd)
-	      (intern . ,intern-cmd))))
+      (cmds `((sum    . ,sum-cmd)
+	      (build  . ,build-cmd)
+	      (list   . ,list-cmd)
+	      (run    . ,run-cmd)
+	      (intern . ,intern-cmd)
+	      (again  . ,again-cmd))))
   (when dirs
     (search-dirs
      (append (string-split dirs ":") (search-dirs))))
