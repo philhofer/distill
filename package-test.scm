@@ -15,5 +15,6 @@
 	'(exportall
 	  (cmdline "gcc -O2 -fwrapv"
 		   CFLAGS "-O2 -fwrapv"
-		   CC "gcc"))
-	(exports->script "gcc" expr)))
+		   CC "gcc")
+	  echo done)
+	(exports->script "gcc" expr '(echo done))))

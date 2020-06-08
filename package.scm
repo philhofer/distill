@@ -69,13 +69,7 @@
 	inputs: (cons
 		 (make-input
 		  basedir: "/"
-		  link: (buildfile host dir env patches
-				   (cond
-				    ((procedure? build)
-				     (build host))
-				    ((list? build)
-				     (elexpand host build))
-				    (else (error "expand-package: bad \"build:\" field" build)))))
+		  link: (buildfile host dir env patches build))
 		 (append
 		  (map ->tool (expandl exp/build (flatten src tools)))
 		  (map ->input (expandl exp/host inputs)))))))))
@@ -85,13 +79,19 @@
    "/build" #o744
    (lambda ()
      (write-exexpr
-      (begin
-	(cons*
-	 'cd dir
-	 (append
-	  (script-apply-patches (or patches '()))
-	  (exports->script conf (or env '()))
-	  (if (list? build) build (error "expected build; got" build)))))))))
+      (cons*
+       'cd dir
+       (elpatch
+	patches
+	(exports->script
+	 conf
+	 env
+	 (cond
+	  ((list? build)
+	   (elexpand conf build))
+	  ((procedure? build)
+	   (build conf))
+	  (else (error "expected build; got" build))))))))))
 
 ;; new-memoizer creates a new memoizer for package expansion
 (define (new-memoizer)
@@ -161,19 +161,6 @@
 	      "./usr/sbin/" "./sbin/"
 	      "./usr/libexec/" "./libexec/"
 	      "./usr/share/" "./share/"))
-
-;; cdelay produces a delayed evaluation
-;; of 'proc' with a <config> as its only argument
-;;
-;; useful for wrapping script generation
-(define (cdelay proc)
-  (lambda (conf)
-    (proc (lambda (v) (if (procedure? v) (v conf) v)))))
-
-;; csubst is similar to cdelay
-(define (csubst proc)
-  (lambda (conf)
-    (proc (lambda (fn) (fn conf)))))
 
 (define (url-translate urlfmt name version)
   (string-translate* urlfmt `(("$name" . ,name)
@@ -507,14 +494,6 @@
 		    (vp (cdr rest)))
 		(loop k (car vp) (cdr vp)))))))
 
-;; kvargs takes a kvector
-;; and produces a list of strings
-;; where each string is formatted as "key=value"
-;; for each key-value mapping in the kvector
-(: kvargs (vector --> (list-of string)))
-(define (kvargs kvec)
-  (kvector-map kvec k=v))
-
 ;; splat takes a kvector and a list of keywords
 ;; and produces a list of key=value strings
 ;; for just those keywords in the kvector
@@ -603,16 +582,18 @@
 	 (bind head (conc "/src/patch-" n ".patch"))
 	 (if (null? rest) '() (loop (+ n 1) (car rest) (cdr rest)))))))
 
-;; script-apply-patches produces the execline expressions
-;; for applying a series of patches from artifact files
-(define (script-apply-patches lst)
+;; elpatch takes a list of patches and prepends
+;; the code for applying those patches to the execline
+;; template 'body', i.e.
+;;   (elpatch (patchfiles* ...) body ...)
+(define (elpatch lst body)
   (if (null? lst)
-      '()
+      body
       (cons*
        'if `(patch -p1 "-i" ,(vector-ref (vector-ref (car lst) 0) 1))
-       (script-apply-patches (cdr lst)))))
+       (elpatch (cdr lst) body))))
 
-(define (exports->script conf lst)
+(define (exports->script conf lst body)
   ;; expand a variable as the left-hand-side
   ;; of a key=value environment variable expression
   (define (lhs x)
@@ -629,26 +610,25 @@
      ((list? x)      (spaced (map rhs x)))
      ((procedure? x) (rhs (x conf)))
      (else (error "env: cannot use value as env var" x))))
-  (let loop ((in  lst)
-	     (exp '()))
-    (if (null? in)
-	(if (null? exp) '() `(exportall ,exp))
-	(let kons ((h    (car in))
-		   (rest (cdr in)))
-	  (cond
-	   ((pair? h)
-	    (loop rest
-		  (cons (lhs (car h)) (cons (rhs (cdr h)) exp))))
-	   ((kvector? h)
-	    (loop rest
-		  (kvector-foldl
-		   h
-		   (lambda (k v lst)
-		     (if v (cons (##sys#symbol->string k) (cons (rhs v) lst)) lst))
-		   exp)))
-	   ((procedure? h)
-	    (kons (h conf) rest))
-	   (else (error "bad env element" (car in))))))))
-
-
-
+  (if (null? lst)
+      body
+      (let loop ((in  lst)
+		 (exp '()))
+	(if (null? in)
+	    (cons* 'exportall exp body)
+	    (let kons ((h    (car in))
+		       (rest (cdr in)))
+	      (cond
+	       ((pair? h)
+		(loop rest
+		      (cons (lhs (car h)) (cons (rhs (cdr h)) exp))))
+	       ((kvector? h)
+		(loop rest
+		      (kvector-foldl
+		       h
+		       (lambda (k v lst)
+			 (if v (cons (##sys#symbol->string k) (cons (rhs v) lst)) lst))
+		       exp)))
+	       ((procedure? h)
+		(kons (h conf) rest))
+	       (else (error "bad env element" (car in)))))))))

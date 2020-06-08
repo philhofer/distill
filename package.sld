@@ -40,7 +40,6 @@
     config->builder
     make-config
     config?
-    csubst
 
     expander
     configure
@@ -91,8 +90,6 @@
     $cc-env/for-build
     $cc-env/for-kbuild
     spaced
-    splat
     k=v*
-    kvargs
     exports->script)
   (include "package.scm"))

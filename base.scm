@@ -1030,19 +1030,18 @@ EOF
 		   "/src/config.mk"
 		   #o644
 		   (lines
-		    (append
-		     '("YACC=yacc")
-		     (splat
-		      ($cc-env conf)
-		      CC: LDFLAGS: AR:)
-		     (list
-		      "TC_CONFIG_IPSET:=y"
-		      "TC_CONFIG_NO_XT:=y"
-		      "HAVE_MNL:=y"
-		      "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
-		      "LDLIBS += -lelf -lmnl -lz"
-		      "%.o: %.c"
-		      "\t$(CC) $(CFLAGS) -c -o $@ $<"))))))))
+		    (list
+		     (conc "CC=" ($CC conf))
+		     (conc "LDFLAGS=" (spaced ($LDFLAGS conf)))
+		     (conc "AR=" ($AR conf))
+		     "YACC=yacc"
+		     "TC_CONFIG_IPSET:=y"
+		     "TC_CONFIG_NO_XT:=y"
+		     "HAVE_MNL:=y"
+		     "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
+		     "LDLIBS += -lelf -lmnl -lz"
+		     "%.o: %.c"
+		     "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
 	(cc-package
 	 "iproute2" "5.6.0"
 	 "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
