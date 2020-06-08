@@ -157,7 +157,7 @@
 	 conf
 	 label: (string-append name "-mbr-image")
 	 raw-output: "/img"
-	 tools:  (list mlb2 sfdisk imgtools execline-tools busybox-core)
+	 tools:  (list mlb2 imgtools execline-tools busybox-core)
 	 inputs: (list kern root)
 	 build:  `(gptimage
 		   -d /out/img (,kfile L ,rfile L)
@@ -175,7 +175,7 @@
 	 conf
 	 label:  (string-append name "-efi-image")
 	 raw-output: "/img"
-	 tools:  (list sfdisk imgtools execline-tools busybox-core)
+	 tools:  (list imgtools execline-tools busybox-core)
 	 inputs: (list esp root)
 	 build:  `(gptimage
 		   -d ,@(if uuid '(-u ,uuid) '())

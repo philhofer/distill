@@ -1136,13 +1136,6 @@ EOF
 		     build: #f)))
       (config* build: #f bootstrap: stage1))))
 
-(define pkgconf
-  (cmmi-package
-   "pkgconf" "1.1.0"
-   "https://distfiles.dereferenced.org/$name/$name-$version.tar.xz"
-   "Gz7Gt_OuMI4GXzuBsAnhjSQCdjZG7gLqY8rxCPze-AI="
-   cleanup: '(ln -sf pkg-config /out/usr/bin/pkgconf)))
-
 (define dosfstools
   (cmmi-package
    "dosfstools" "4.1"
@@ -1157,32 +1150,6 @@ EOF
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
    "TDTnHIdZ2Sr-dDRK4r7Jus0HR0WaSkVypAykJJAsU0o="))
 
-;; NOTE: many of the binaries produced by util-linux
-;; will conflict with a busybox install, so you should
-;; probably use subpackages of util-linux instead
-(define util-linux
-  (cmmi-package
-   "util-linux" "2.35"
-   "https://mirrors.edge.kernel.org/pub/linux/utils/$name/v$version/$name-$version.tar.gz"
-   "J3nPDeHgZQXLown0lpq6WziuI31gu9kY-tDZGQGjvBc="
-   tools: (list pkgconf)
-   libs: (list linux-headers)
-   extra-configure: '(--without-python
-		      --without-udev
-		      --disable-nologin
-		      --disable-sulogin
-		      --disable-makeinstall-chown
-		      --disable-makeinstall-setuid)))
-
-(define sfdisk
-  (subpackage "sfdisk-" util-linux "./sbin/sfdisk"))
-
-(define diskutils
-  (subpackage "diskutils-" util-linux
-	      "./sbin/blk*" "./sbin/blockdev"
-	      "./sbin/sfdisk"))
-
-;; NOTE: imgtools has a run-time dependency on sfdisk (diskutils)
 (define imgtools
   (let ((hash "q_64uUxDhbgZf5FD5aQLWUIhehbsjahGBVTjKkyzqMk="))
     (cc-package

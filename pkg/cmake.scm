@@ -9,7 +9,8 @@
   (distill execline)
   (distill kvector)
 
-  (pkg libexpat))
+  (pkg libexpat)
+  (pkg pkgconf))
 
 ;; generate a cmake 'toolchain file' from a configuration
 (define cmake-toolchain-file

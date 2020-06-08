@@ -98,15 +98,14 @@
       s6-rc
       linux-headers
       libelf
-      pkgconf
       exportall
       e2fsprogs
       dosfstools
       mtools
-      diskutils
       imgtools
       nasm
       mlb2
+      hard
       libmnl
       libnftnl
       iptables
@@ -114,7 +113,7 @@
       matchable-egg
       srfi-13-egg
       srfi-14-egg
-      srfi-69-egg
+      srfi-69-egg      
       (perl (eq? ($arch conf) *this-machine*)))))
 
 (let* ((config  (let ((args (command-line-arguments)))
