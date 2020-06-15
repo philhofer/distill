@@ -8,71 +8,82 @@
    ((and ppc64 little-endian) 'ppc64le)
    ((and ppc64 big-endian) 'ppc64)))
 
-;; expand-package is a helper
+;; package-template is a helper
 ;; for writing package definitions
-;; as raw lambdas
-(define (expand-package host
-			#!key
-			label
-			build
-			(src '())
-			(tools '())
-			(inputs '())
-			(patches '())
-			(dir "/")
-			(env '())
-			(raw-output #f))
-  (let* ((bld       ($build host))
-	 (strap     (%bootstrap bld))
-	 (ex        (%current-expander))
-	 (boot      (cc-toolchain-tools ($cc-toolchain bld)))
-	 ;; tools are built with the 'build' config,
-	 ;; unless they are part of the build config toolchain,
-	 ;; in which case they are built with the bootstrap config
-	 (exp/build (lambda (item)
-		      (cond
-		       ((artifact? item) item)
-		       ((plan? item) item)
-		       ((memq item boot)
-			(if strap
-			    (ex item strap)
-			    (error "cannot expand item (no bootstrap in <config>)" item)))
-		       (else (ex item bld)))))
-	 (exp/host  (lambda (item)
-		      (ex item host)))
-	 (->tool  (lambda (link)
-		    (make-input
-		     basedir: "/"
-		     link: link)))
-	 (->input (let ((sysroot ($sysroot host)))
-		    (lambda (link)
-		      (if (input? link)
-			  link
-			  (make-input
-			   basedir: sysroot
-			   link: link))))))
-    (push-exception-wrapper
-     (lambda (exn)
-       (let* ((get (condition-property-accessor 'exn 'call-chain))
-	      (ch  (and get (get exn))))
-	 (when ch
-	   (for-each
-	    (lambda (e) (info "  <trace>" (vector-ref e 0)))
-	    ch)))
-       (print-error-message exn)
-       (fatal "error while expanding" label)
-       exn)
-     (lambda ()
-       (make-plan
-	raw-output: raw-output
-	name:       label
-	inputs: (cons
-		 (make-input
-		  basedir: "/"
-		  link: (buildfile host dir env patches build))
-		 (append
-		  (map ->tool (expandl exp/build (flatten src tools)))
-		  (map ->input (expandl exp/host inputs)))))))))
+(define (package-template
+	 #!key
+	 label
+	 build
+	 (src '())
+	 (cross '())
+	 (tools '())
+	 (inputs '())
+	 (patches '())
+	 (dir "/")
+	 (env '())
+	 (raw-output #f)
+	 (cc-tools   #t))
+  (lambda (host)
+    (let* ((name      (conc label "-" ($arch host)))
+	   (bld       ($build host))
+	   (strap     (%bootstrap bld))
+	   (ex        (%current-expander))
+	   (boot      ($cc-tools bld))
+	   ;; tools are built with the 'build' config,
+	   ;; unless they are part of the build config toolchain,
+	   ;; in which case they are built with the bootstrap config
+	   (exp/build (lambda (item)
+			(cond
+			 ((artifact? item) item)
+			 ((plan? item) item)
+			 ((memq item boot)
+			  (if strap
+			      (ex item strap)
+			      (error "cannot expand item (no bootstrap in <config>)" item)))
+			 (else (ex item bld)))))
+	   (uncross   (lambda (item)
+			(cond
+			 ((artifact? item) item)
+			 ((plan? item) item)
+			 ((procedure? item)
+			  (item host))
+			 (else (error "cannot expand item in 'cross:'" item)))))
+	   (exp/host  (lambda (item)
+			(ex item host)))
+	   (->tool  (lambda (link)
+		      (make-input
+		       basedir: "/"
+		       link: link)))
+	   (->input (let ((sysroot ($sysroot host)))
+		      (lambda (link)
+			(if (input? link)
+			    link
+			    (make-input
+			     basedir: sysroot
+			     link: link))))))
+      (push-exception-wrapper
+       (lambda (exn)
+	 (let* ((get (condition-property-accessor 'exn 'call-chain))
+		(ch  (and get (get exn))))
+	   (when ch
+	     (for-each
+	      (lambda (e) (info "  <trace>" (vector-ref e 0)))
+	      ch)))
+	 (print-error-message exn)
+	 (fatal "error while expanding" label)
+	 exn)
+       (lambda ()
+	 (make-plan
+	  raw-output: raw-output
+	  name:       label
+	  inputs: (cons
+		   (make-input
+		    basedir: "/"
+		    link: (buildfile host dir env patches build))
+		   (append
+		    (map ->tool (expandl exp/build
+					 (flatten src tools (map uncross cross))))
+		    (map ->input (expandl exp/host inputs))))))))))
 
 (define (buildfile conf dir env patches build)
   (interned
@@ -105,7 +116,10 @@
 	 ((plan? obj) obj)
 	 ((artifact? obj) obj)
 	 ((input? obj) obj)
-	 (else (error "unexpected expansion value" obj)))))))
+	 (else (begin
+		 (import (chicken pretty-print))
+		 (pp obj)
+		 (error "unexpected expansion value" obj))))))))
 
 ;; %current-expander is the current memoization
 ;; context, which is used to recursively expand
@@ -179,46 +193,36 @@
 (define (cc-package
 	 name version urlfmt hash
 	 #!key
-	 (dir #f) ;; directory override
+	 (dir #f)        ;; directory override
 	 (build #f)
-	 (prebuilt #f) ;; prebuilt function
+	 (prebuilt #f)   ;; prebuilt function
 	 (no-libc #f)	 ;; do not bring in a libc implicitly
 	 (use-native-cc #f)
 	 (raw-output #f)
-	 (patches '()) ;; patches to apply
+	 (patches '())   ;; patches to apply
 	 (env '())	 ;; extra environment
 	 (libs '())	 ;; extra libraries beyond libc
 	 (tools '())	 ;; extra tools beyond a C toolchain
 	 (extra-src '()))
   (let* ((url (url-translate urlfmt name version))
-	 (src (remote-archive url hash)))
-    (lambda (conf)
-      (let* ((ll  (lambda (l) (if (procedure? l) (l conf) l)))
-	     (bld ($build conf))
-	     (ctc ($cc-toolchain conf))
-	     (al  (lambda (item msg)
-		    (if (list? item) item (error msg)))))
-	(expand-package
-	 conf
-	 raw-output: raw-output
-	 patches: patches
-	 label:   (conc name "-" version "-" ($arch conf))
-	 src:     (cons src (append patches extra-src))
-	 env:     env
-	 dir:     (or dir (conc name "-" version))
-	 tools:   (append (cc-toolchain-tools ctc)
-			  (ll tools)
-			  (if use-native-cc
-			      ;; xxx reimplementation of base#native-toolchain
-			      (let ((btc ($cc-toolchain bld))
-				    (ntc ($native-toolchain bld)))
-				(append (cc-toolchain-tools btc)
-					(cc-toolchain-libc btc)
-					(cc-toolchain-tools ntc)
-					(cc-toolchain-libc ntc)))
-			      '()))
-	 inputs:  (append (if no-libc '() (cc-toolchain-libc ctc)) (ll libs))
-	 build:   (if (procedure? build) build (eltemplate build)))))))
+	 (src (remote-archive url hash))
+	 ($native-libc  (o cc-toolchain-libc $native-toolchain))
+	 ($native-tools (o cc-toolchain-tools $native-toolchain)))
+    (package-template
+     raw-output: raw-output
+     cc-tools: #t
+     patches: patches
+     label:   (conc name "-" version)
+     src:     (cons src (append patches extra-src))
+     env:     env
+     dir:     (or dir (conc name "-" version))
+     cross:   (list $cc-tools)
+     tools:   (if use-native-cc
+		  (cons* $cc-tools $libc $native-libc $native-tools
+			 (if (list? tools) tools (list tools)))
+		  tools)
+     inputs:  (if no-libc libs (cons $libc libs))
+     build:   (if (procedure? build) build (eltemplate build)))))
 
 ;; template for 'configure; make; make install;' or 'c;m;mi'
 ;; that has sane defaults for environment, tools, libraries
@@ -360,6 +364,9 @@
 (define $cc-env (o cc-toolchain-env $cc-toolchain))
 
 (define ($cross-compile conf) (conc ($triple conf) "-"))
+
+(define $cc-tools (o cc-toolchain-tools $cc-toolchain))
+(define $libc     (o cc-toolchain-libc $cc-toolchain))
 
 (define (triple->sysroot trip)
   (string-append "/sysroot/" (symbol->string trip)))
@@ -504,9 +511,14 @@
      (k=v k (kref conf k)))
    keywords))
 
-;; this is used to expand package#tools and package#inputs
-;; so that meta-packages are recursively unpacked into a single
-;; list of packages and artifacts
+;; core list-expanding procedure:
+;;
+;; use 'proc' to expand items of 'lst',
+;; where any sub-lists that are expanded
+;; are recursively expanded and spliced
+;; into the parent list so that the result
+;; is always a flat list with no elements
+;; that are 'eq?' to one another
 (define (expandl proc lst)
   (let loop ((in  lst)
 	     (out '()))
@@ -619,6 +631,8 @@
 	    (let kons ((h    (car in))
 		       (rest (cdr in)))
 	      (cond
+	       ((not h)
+		(loop rest exp))
 	       ((pair? h)
 		(loop rest
 		      (cons (lhs (car h)) (cons (rhs (cdr h)) exp))))

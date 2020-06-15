@@ -44,7 +44,7 @@
     expander
     configure
 
-    expand-package
+    package-template
     url-translate
     cc-package
     cmmi-package
@@ -59,6 +59,7 @@
     $native?
     $leaf
     $cc-toolchain
+    $cc-tools
     $native-toolchain
     make-cc-toolchain
     cc-toolchain-env

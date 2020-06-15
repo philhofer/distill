@@ -4,6 +4,7 @@
     elif*
     el=
     elconc
+    elpath
     elexpand
     eltemplate
     write-exexpr
@@ -14,6 +15,7 @@
     (srfi 26)
     (srfi 88)
     (distill kvector)
+    (distill filepath)
     (distill text))
   (cond-expand
     (chicken

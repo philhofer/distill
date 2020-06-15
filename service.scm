@@ -73,16 +73,14 @@
      lst)))
 
 (define (s6-rc-db artifacts)
-  (lambda (conf)
-    (expand-package
-     conf
-     label:  "s6-rc-db"
-     src:    artifacts
-     dir:    "/"
-     tools:  (list busybox-core execline-tools s6 s6-rc)
-     inputs: '()
-     build:  `(if (mkdir -p "/out/etc/s6-rc")
-		  s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services"))))
+  (package-template
+   label:  "s6-rc-db"
+   src:    artifacts
+   dir:    "/"
+   tools:  (list busybox-core execline-tools s6 s6-rc)
+   inputs: '()
+   build:  `(if (mkdir -p "/out/etc/s6-rc")
+		s6-rc-compile "/out/etc/s6-rc/compiled" "/src/services")))
 
 (define-kvector-type
   <service>

@@ -203,6 +203,13 @@
 	(lambda ()
 	  (for-each display lst))))))
 
+;; elpath expands a list of arguments into
+;; a filepath by concatenating the resolved values
+;; into (apply filepath-join args ...)
+(define (elpath . args)
+  (lambda (conf)
+    (apply filepath-join (elexpand conf args))))
+
 (define (elexpand conf lst)
   ;; literal datum (valid in execline form):
   (define (lit? x)

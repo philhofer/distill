@@ -2,6 +2,7 @@
   scheme
   (only (chicken base) error)
   (only (chicken string) conc)
+  (only (chicken module) export)
   (distill memo)
   (distill base)
   (distill plan)
@@ -24,6 +25,8 @@
 	   (string-append "https://b2cdn.sunfi.sh/files/pub-cdn/" (cdr c))
 	   (cdr c) kind: 'tar.zst)
 	  (error "no go-bootstrap for arch" ($arch conf))))))
+
+(export $GOARCH $GOEXTRA)
 
 (define ($GOARCH conf)
   (case ($arch conf)
@@ -56,12 +59,11 @@
 	       (conc "https://dl.google.com/go/go" ver ".src.tar.gz")
 	       "c_Qn6BrbxHUKEeZ7ZdYlUnGUtjqqgXjYmHiTInzjFpU=")))
     (lambda (conf)
-      (expand-package
-       conf
-       label: (conc "go-" ver "-" ($arch conf))
+      (package-template
+       label: "go"
        dir:   "/go"
        src:   (list src)
-       env:   (cons*
+       env:   (list
 	       ;; until we can figure out how to make go
 	       ;; cooperate with parallel builds, do serial builds
 	       '(GOMAXPROCS . 1)
@@ -69,7 +71,10 @@
 	       '(HOME . /tmp/build-home)
 	       '(CGO_ENABLED . 0)
 	       '(GOROOT_FINAL . /usr/lib/go)
-	       ($go-env conf))
+	       '(GOROOT . /usr/lib/go)
+	       '(GOOS . linux)
+	       `(GOARCH . ,$GOARCH)
+	       $GOEXTRA)
        tools: (list go-bootstrap busybox-core execline-tools exportall)
        inputs: '()
        build: (elif*

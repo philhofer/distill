@@ -190,22 +190,18 @@
 (define musl-headers-for-triple
   (memoize-eq
    (lambda (target-triple)
-     (lambda (host)
-       (if (eq? ($triple host) target-triple)
-	   (error "musl-headers-for-triple native will cause bootstrap loops"))
-       (expand-package
-	host
-	src:   (remote-archive
-		(url-translate *musl-url* "musl" *musl-version*)
-		*musl-hash*)
-	dir:   (string-append "musl-" *musl-version*)
-	env:   '()
-	label: (conc "musl-headers-" (triple->arch target-triple))
-	tools: (list make execline-tools busybox-core)
-	inputs: '()
-	build: `(make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
-		  ,(conc "ARCH=" (musl-arch-name target-triple))
-		  "prefix=/usr" install-headers))))))
+     (package-template
+      src:   (remote-archive
+	      (url-translate *musl-url* "musl" *musl-version*)
+	      *musl-hash*)
+      dir:   (string-append "musl-" *musl-version*)
+      env:   '()
+      label: (conc "musl-headers-" (triple->arch target-triple))
+      tools: (list make execline-tools busybox-core)
+      inputs: '()
+      build: `(make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
+		,(conc "ARCH=" (musl-arch-name target-triple))
+		"prefix=/usr" install-headers)))))
 
 (define musl
   (cc-package
@@ -220,22 +216,18 @@
 	   '(make DESTDIR=/out install))))
 
 (define libssp-nonshared
-  (lambda (conf)
-    (expand-package
-     conf
-     label:   (conc "libssp-nonshared-" ($arch conf))
-     tools:   (cc-for-target conf)
-     inputs:  '()
-     dir:     "/src"
-     src:     (bind "patches/ssp-nonshared/ssp-nonshared.c" "/src/ssp-nonshared.c")
-     build: (elif*
-	      `(,$CC ,$CFLAGS -c ssp-nonshared.c -o __stack_chk_fail_local.o)
-	      `(,$AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)
-	      '(mkdir -p /out/usr/lib)
-	      '(cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a)))))
-
-;; Dependencies necessary to statically link an ordinary C executable
-(define libc (list musl libssp-nonshared))
+  (package-template
+   label:   "libssp-nonshared"
+   cross:   (list $cc-tools)
+   tools:   '() ; just cc-tools
+   inputs:  '()
+   dir:     "/src"
+   src:     (bind "patches/ssp-nonshared/ssp-nonshared.c" "/src/ssp-nonshared.c")
+   build: (elif*
+	   `(,$CC ,$CFLAGS -c ssp-nonshared.c -o __stack_chk_fail_local.o)
+	   `(,$AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)
+	   '(mkdir -p /out/usr/lib)
+	   '(cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))
 
 ;; exportall(1) is an execline tool for exporting a block of variables
 ;; (in execline syntax, it works like 'exportall { key val ... } prog ...'
@@ -436,8 +428,7 @@
                        (conc "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
                        hash kind: 'tar.zst))
                (version '0.1))
-          (expand-package
-	   host
+          (package-template
 	   label: (conc "fakemusl-" version "-" (triple->arch target-triple))
 	   src:   leaf
 	   dir:   (conc "fakemusl-" version)
@@ -452,9 +443,9 @@
 	   inputs: '()
 	   build: (let* ((outdir (filepath-join "/out" (triple->sysroot target-triple))))
 		    (elif*
-		      `(make ,(conc "AS=" target-triple "-as")
-			     ,(conc "AR=" target-triple "-ar") all)
-		      `(make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
+		     `(make ,(conc "AS=" target-triple "-as")
+			,(conc "AR=" target-triple "-ar") all)
+		     `(make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
 
 (define (if-native-target? tg yes no)
   (lambda (conf)
@@ -622,11 +613,10 @@
   (lambda (conf)
     (define $arch-name
       (o linux-arch-name $arch))
-    (expand-package
-     conf
+    (package-template
      src:    *linux-source*
      dir:    (conc "linux-" *linux-major*)
-     label:  (conc "linux-headers-" *linux-major* "." *linux-patch* "-" ($arch conf))
+     label:  (conc "linux-headers-" *linux-major* "." *linux-patch*)
      tools:  (list xz-tools native-toolchain)
      inputs: '()
      build:  (elif*
@@ -705,49 +695,45 @@ EOF
 (define (linux/config-static name config-path #!key
                              (install *default-installkernel*)
                              (dtb     #f))
-  (lambda (conf)
-    (let ((config  (bind config-path "/src/config"))
-	  (install (installkernel* install))
-	  (patches (patchfiles* "patches/dtc/lexer.patch")))
-      (expand-package
-       conf
-       src:   (append (list install config) *linux-source* patches)
-       dir:   (conc "linux-" *linux-major*)
-       label: (conc "linux-" *linux-major* "." *linux-patch* "-" name)
-       tools: (cons*
-	       perl xz-tools reflex byacc libelf zlib linux-headers
-	       (cc-for-target conf #t))
-       inputs: '()
-       env:   `((KCONFIG_NOTIMESTAMP . 1)
-		(KBUILD_BUILD_TIMESTAMP . "@0")
-		(KBUILD_BUILD_USER . distill)
-		(KBUILD_BUILD_HOST . distill)
-		(CROSS_COMPILE . ,$cross-compile))
-       patches: patches
-       build: (let ((make-args (list
-				$cc-env/for-kbuild
-				'YACC=yacc ;; not bison -y
-				(elconc 'ARCH= (o linux-arch-dir-name $arch))
-				"HOST_LIBELF_LIBS=-lelf -lz")))
-		(elif*
-		 '(pipeline (xzcat /src/linux.patch) patch -p1)
-		 (fix-dtc-script
-		  fix-lex-options: 'scripts/kconfig/lexer.l
-		  fix-yacc-cmdline: 'scripts/Makefile.host)
-		  ;; libelf is built with zlib, so -lelf should imply -lz
-		 '(find "." -type f -name "Make*"
-			    -exec sed "-i" -e
-			    "s/-lelf/-lelf -lz/g" "{}" ";")
-		 `(make
-		      V=1 KCONFIG_ALLCONFIG=/src/config
-		      ,@make-args
-		      allnoconfig)
-		 `(make V=1 ,@make-args)
-		 (and dtb `(install -D -m "644" -t /out/boot ,dtb))
-		 `(make V=1 ,@make-args install)))))))
-
-(define linux-virt-x86_64
-  (linux/config-static "virt-x86_64" "FTMQoxE4ClKOWLDdcDVzWt8UuizXfMmR4duX8Z-5qlY="))
+  (let ((config  (bind config-path "/src/config"))
+	(install (installkernel* install))
+	(patches (patchfiles* "patches/dtc/lexer.patch")))
+    (package-template
+     src:   (append (list install config) *linux-source* patches)
+     dir:   (conc "linux-" *linux-major*)
+     label: (conc "linux-" *linux-major* "." *linux-patch* "-" name)
+     tools: (list
+	     perl xz-tools reflex
+	     byacc libelf zlib linux-headers
+	     native-toolchain)
+     inputs: '()
+     env:   `((KCONFIG_NOTIMESTAMP . 1)
+	      (KBUILD_BUILD_TIMESTAMP . "@0")
+	      (KBUILD_BUILD_USER . distill)
+	      (KBUILD_BUILD_HOST . distill)
+	      (CROSS_COMPILE . ,$cross-compile))
+     patches: patches
+     build: (let ((make-args (list
+			      $cc-env/for-kbuild
+			      'YACC=yacc ;; not bison -y
+			      (elconc 'ARCH= (o linux-arch-dir-name $arch))
+			      "HOST_LIBELF_LIBS=-lelf -lz")))
+	      (elif*
+	       '(pipeline (xzcat /src/linux.patch) patch -p1)
+	       (fix-dtc-script
+		fix-lex-options: 'scripts/kconfig/lexer.l
+		fix-yacc-cmdline: 'scripts/Makefile.host)
+	       ;; libelf is built with zlib, so -lelf should imply -lz
+	       '(find "." -type f -name "Make*"
+		      -exec sed "-i" -e
+		      "s/-lelf/-lelf -lz/g" "{}" ";")
+	       `(make
+		    V=1 KCONFIG_ALLCONFIG=/src/config
+		    ,@make-args
+		    allnoconfig)
+	       `(make V=1 ,@make-args)
+	       (and dtb `(install -D -m "644" -t /out/boot ,dtb))
+	       `(make V=1 ,@make-args install))))))
 
 ;; libelf is *just* libelf.a and headers;
 ;; it does not include the rest of elfutils
@@ -829,10 +815,7 @@ EOF
 		   (lambda ()
 		     (write-exexpr
                       '(echo "Fri Apr 3 20:09:47 UTC 2020")
-                      shebang: "#!/bin/execlineb -s0"))))
-	(pathto    (lambda (p)
-		     (lambda (conf)
-		       (filepath-join ($sysroot conf) p)))))
+                      shebang: "#!/bin/execlineb -s0")))))
     (cc-package
      "perl" "5.30.2"
      "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
@@ -841,8 +824,8 @@ EOF
      libs:  (list libbz2 zlib)
      env:   `((BUILD_ZLIB . 0)
 	      (BUILD_BZIP2 . 0)
-	      (BZIP2_LIB . ,(pathto "/usr/lib"))
-	      (BZIP2_INCLUDE . ,(pathto "/usr/include")))
+	      (BZIP2_LIB . ,(elpath $sysroot "/usr/lib"))
+	      (BZIP2_INCLUDE . ,(elpath $sysroot "/usr/include")))
      build: (elif*
 	     '(ln -sf /bin/samedate /bin/date)
 	     `(./Configure -des

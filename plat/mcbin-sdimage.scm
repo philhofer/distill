@@ -187,8 +187,7 @@
 		     (let ((fw (filepath-join ($sysroot conf) "/boot/flash-image.bin"))
 			   (p1 (filepath-join ($sysroot conf) "/fs.img"))
 			   (p2 (filepath-join ($sysroot conf) "/rootfs.img")))
-		       (expand-package
-			conf
+		       (package-template
 			label: "mcbin-sdimage"
 			raw-output: "/img"
 			tools:  (list sfdisk imgtools execline-tools busybox-core)
