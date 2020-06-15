@@ -21,8 +21,7 @@
 	 (patches '())
 	 (dir "/")
 	 (env '())
-	 (raw-output #f)
-	 (cc-tools   #t))
+	 (raw-output #f))
   (lambda (host)
     (let* ((name      (conc label "-" ($arch host)))
 	   (bld       ($build host))
@@ -486,30 +485,6 @@
    (##sys#symbol->string k)
    "="
    (spaced v)))
-
-;; k=v* takes an arbitrary set of keyword: value forms
-;; and converts them into a list of strings of the form keyword=value
-(: k=v* (keyword * #!rest * --> (list-of string)))
-(define (k=v* k v . rest)
-  (let loop ((k k)
-	     (v v)
-	     (rest rest))
-    (cons (k=v k v)
-	  (if (null? rest)
-	      '()
-	      (let ((k  (car rest))
-		    (vp (cdr rest)))
-		(loop k (car vp) (cdr vp)))))))
-
-;; splat takes a kvector and a list of keywords
-;; and produces a list of key=value strings
-;; for just those keywords in the kvector
-(: splat (vector #!rest keyword --> (list-of string)))
-(define (splat conf . keywords)
-  (map
-   (lambda (k)
-     (k=v k (kref conf k)))
-   keywords))
 
 ;; core list-expanding procedure:
 ;;

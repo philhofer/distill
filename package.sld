@@ -91,6 +91,5 @@
     $cc-env/for-build
     $cc-env/for-kbuild
     spaced
-    k=v*
     exports->script)
   (include "package.scm"))
