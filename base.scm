@@ -580,19 +580,15 @@
    "patches/busybox/config-core" ; OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=
    '()))
 
-(define *linux-major* 5.4)
-(define *linux-patch* 43)
+(define *linux-version* "5.4.46")
+(define *linux-hash* "VwcNQ36vw2wuFXZUtZVpv0kLsov2Lj6odVc0i4eEB3g=")
 
-(define *linux-source*
-  (list
-    (remote-archive
-     (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-" *linux-major* ".tar.xz")
-     "SUt0rAz8S3yXkXuSN8sG6lm4sW7Bvssxg_oAKuNjqzs=")
-    (remote-file
-     (conc "https://cdn.kernel.org/pub/linux/kernel/v5.x/patch-" *linux-major* "." *linux-patch* ".xz")
-     "bE4X9alKMXiNylHXwX-yZmR8Cep8CrqO4py4-RMtcCQ="
-     "/src/linux.patch"
-     #o644)))
+(define (linux-source version hash)
+  (remote-archive
+   (url-translate
+    "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-$version.tar.xz"
+    "linux" version)
+   hash))
 
 (define (linux-arch-name arch)
   (case arch
@@ -610,25 +606,21 @@
       (else aname))))
 
 (define linux-headers
-  (lambda (conf)
-    (define $arch-name
-      (o linux-arch-name $arch))
-    (package-template
-     src:    *linux-source*
-     dir:    (conc "linux-" *linux-major*)
-     label:  (conc "linux-headers-" *linux-major* "." *linux-patch*)
-     tools:  (list xz-tools native-toolchain)
-     inputs: '()
-     build:  (elif*
-	      '(pipeline (xzcat /src/linux.patch) patch -p1)
-	      `(make ,(elconc 'ARCH= $arch-name)
-		 ,$cc-env/for-kbuild
-		 headers)
-	       ;; headers_install uses rsync, which is a
-	       ;; silly large dependency to pull in
-	       ;; at this stage...
-	      '(cp -r usr /out)
-	      '(find /out -type f ! -name "*.h" -delete)))))
+  (package-template
+   src:    (linux-source *linux-version* *linux-hash*)
+   dir:    (conc "linux-" *linux-version*)
+   label:  (conc "linux-headers-" *linux-version*)
+   tools:  (list native-toolchain)
+   inputs: '()
+   build:  (elif*
+	    `(make ,(elconc 'ARCH= (o linux-arch-name $arch))
+	       ,$cc-env/for-kbuild
+	       headers)
+	    ;; headers_install uses rsync, which is a
+	    ;; silly large dependency to pull in
+	    ;; at this stage...
+	    '(cp -r usr /out)
+	    '(find /out -type f ! -name "*.h" -delete))))
 
 (define (installkernel* script)
   (interned "/sbin/installkernel" #o755
@@ -699,9 +691,11 @@ EOF
 	(install (installkernel* install))
 	(patches (patchfiles* "patches/dtc/lexer.patch")))
     (package-template
-     src:   (append (list install config) *linux-source* patches)
-     dir:   (conc "linux-" *linux-major*)
-     label: (conc "linux-" *linux-major* "." *linux-patch* "-" name)
+     src:   (append
+	     (list (linux-source *linux-version* *linux-hash*) install config)
+	     patches)
+     dir:   (conc "linux-" *linux-version*)
+     label: (conc "linux-" *linux-version* "-" name)
      tools: (list
 	     perl xz-tools reflex
 	     byacc libelf zlib linux-headers
@@ -719,7 +713,6 @@ EOF
 			      (elconc 'ARCH= (o linux-arch-dir-name $arch))
 			      "HOST_LIBELF_LIBS=-lelf -lz")))
 	      (elif*
-	       '(pipeline (xzcat /src/linux.patch) patch -p1)
 	       (fix-dtc-script
 		fix-lex-options: 'scripts/kconfig/lexer.l
 		fix-yacc-cmdline: 'scripts/Makefile.host)
