@@ -4,6 +4,20 @@
 
 (include "test-helpers.scm")
 
+(test* eq? string-prefix?
+       ((#t "pre" "prefix")
+	(#t "pre" "pre")
+	(#f "pre" "pr")
+	(#t ""    "anything")
+	(#f "anything" "")))
+
+(test* eq? string-suffix?
+       ((#t "fix" "prefix")
+	(#f "ref" "prefix")
+	(#t "fix" "fix")
+	(#t ""    "anything")
+	(#f "anything" "")))
+
 (test* string=? filepath-join
        (("a/b/c"   "a/b/c")
         ("a/b/c"   "a/b/c/")

@@ -14,6 +14,7 @@
     (chicken
       (import
         (only (chicken base) include error)
+	(only (chicken string) substring=?)
         (only (chicken process-context) current-directory)
         (chicken type))))
   (include "filepath.scm"))
