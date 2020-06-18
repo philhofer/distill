@@ -29,7 +29,7 @@
              (hi (vector-length vec)))
     (if (fx>= lo hi)
       #f
-      (let* ((mid  (fx+ lo (fx/ (fx- hi lo) 2)))
+      (let* ((mid  (fx+ lo (fxshr (fx- hi lo) 1)))
              (mval (vector-ref vec mid)))
         (cond
           ((eq? mval kw)  (fx+ mid 1))
@@ -252,37 +252,38 @@
   (let* ((ktlen    (vector-length kt))
          (template (make-vector (fx+ ktlen 1) #f))
          (contract (make-vector ktlen #f))
-         (conform? (lambda (out)
+         (conform? (lambda (out contract)
                      (let loop ((i 0))
                        (or (fx>= i ktlen)
                            (let ((c (vector-ref contract i))
                                  (i (fx+ i 1)))
-                             (and (or (not c)
-                                      (c (vector-ref out i)))
-                                  (loop i))))))))
+			     (and (or (not c)
+				      (c (vector-ref out i)))
+				  (loop i))))))))
     (vector-set! template 0 kt)
     (let loop ((args spec))
       (or (null? args)
           (let ((idx (kidx kt (car args)))
                 (val (cadr args))
                 (ok? (caddr args)))
+	    (unless (procedure? ok?)
+	      (error "kvector-constructor: not a contract" ok?))
             (vector-set! template idx val)
             (vector-set! contract (fx- idx 1) ok?)
             (loop (cdddr args)))))
-  (lambda args
-    (let ((vec (vector-copy template)))
-      (let loop ((args args))
-        (if (null? args)
-          (begin
-            (unless (conform? vec)
-              (error "kvector doesn't conform to spec" spec))
-            vec)
-          (let ((idx (kidx kt (car args))))
-            (if idx
-              (begin
-                (vector-set! vec idx (cadr args))
-                (loop (cddr args)))
-              (error "kvector-constructor: keyword not part of kvector:" (car args))))))))))
+    (lambda args
+      (let ((vec (vector-copy template)))
+	(let loop ((args args))
+	  (if (null? args)
+	      (if (conform? vec contract)
+		  vec
+		  (error "kvector doesn't conform to spec" spec))
+	      (let ((idx (kidx kt (car args))))
+		(if idx
+		    (begin
+		      (vector-set! vec idx (cadr args))
+		      (loop (cddr args)))
+		    (error "kvector-constructor: keyword not part of kvector:" (car args))))))))))
 
 ;; subvector-constructor takes a kvector type
 ;; and a list of keywords and produces a function

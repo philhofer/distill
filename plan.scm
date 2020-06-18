@@ -191,14 +191,12 @@
 (define (artifact-path art)
   (filepath-join (artifact-dir) (artifact-hash art)))
 
-(define plan?)
-
 (define-kvector-type
   <input>
   make-input
   input?
   (input-basedir basedir: "/" string?)
-  (input-link    link:    #f  (disjoin artifact? plan?))
+  (input-link    link:    #f  vector?)
   (input-wrap    wrap:    #f  (perhaps procedure?)))
 
 (define input-set-link! (kvector-setter <input> link:))
