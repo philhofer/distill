@@ -18,16 +18,28 @@
 ;; data that changes the filesystem representation
 ;; of the artifact (it is ignored for plan hashing purposes)
 (define-type artifact (vector vector string *))
-(: %artifact (forall (a) (vector string a --> (vector vector string a))))
+(: %artifact (forall (a) (vector (or string procedure) a --> (vector vector (or string procedure) a))))
 (define (%artifact format hash extra)
   (vector format hash extra))
 
 (: artifact-format (artifact -> vector))
 (define (artifact-format v) (vector-ref v 0))
+
 (: artifact-hash (artifact -> string))
-(define (artifact-hash v)   (vector-ref v 1))
+(define (artifact-hash v)
+  (let ((h (vector-ref v 1)))
+    (cond
+     ((string? h) h)
+     ((procedure? h)
+      (let ((res (h)))
+	(vector-set! v 1 res)
+	res))
+     (else (error "unexpected value in artifact-hash slot" v)))))
+
 (: artifact-extra (artifact -> *))
-(define (artifact-extra v)  (vector-ref v 2))
+(define (artifact-extra v) (vector-ref v 2))
+
+(: artifact? (* -> boolean))
 (define (artifact? v) (and (vector? v) (= (vector-length v) 3)))
 
 (: artifact-kind (artifact -> symbol))
@@ -55,6 +67,7 @@
 ;; guess the format of a remote source bundle
 (define (impute-format src)
   (let loop ((suff '((".tar.xz" . tar.xz)
+		     (".txz"    . tar.xz)
                      (".tar.gz" . tar.gz)
                      (".tgz"    . tar.gz)
                      (".tar.bz" . tar.bz)
@@ -148,9 +161,9 @@
   (let ((kind `#(file ,abspath ,mode)))
     (cond
       ((string? contents)
-       (%artifact kind (hash-of contents) (cons 'inline contents)))
+       (%artifact kind (lambda () (hash-of contents)) (cons 'inline contents)))
       ((procedure? contents)
-       (%artifact kind (with-interned-output contents) #f))
+       (%artifact kind (lambda () (with-interned-output contents)) #f))
       (else (error "bad argument to plan#interned")))))
 
 ;; interned-symlink creates a link at 'abspath'
@@ -162,6 +175,7 @@
     (hash-of lnk)
     #f))
 
+(: interned-dir (string integer -> vector))
 (define (interned-dir abspath mode)
   (%artifact
     `#(dir ,abspath ,mode)
@@ -170,16 +184,16 @@
 
 (: overlay (string string -> vector))
 (define (overlay herepath therepath)
-  (let* ((h (hash-file herepath)))
-    (unless h
-      (error "overlay file doesn't exist" herepath))
-    (let ((dst (filepath-join (artifact-dir) h)))
-      (unless (file-exists? dst)
-        (copy-file herepath dst #f)))
-    (%artifact
-      `#(file ,therepath ,(file-permissions herepath))
-      h
-      (cons 'local herepath))))
+  (%artifact
+   `#(file ,therepath ,(file-permissions herepath))
+   (lambda ()
+     (let ((h (hash-file herepath)))
+       (unless h (error "overlay file doesn't exist" herepath))
+       (let ((dst (filepath-join (artifact-dir) h)))
+	 (or (file-exists? dst)
+	     (copy-file herepath dst #f))
+	 h)))
+   (cons 'local herepath)))
 
 ;; by default, dump stuff into these directories
 (define plan-dir
@@ -595,8 +609,8 @@
                (plan-saved-output-set! p vec)
                vec)))))
 
-(define cdn-url (make-parameter
-                  "https://b2cdn.sunfi.sh/file/pub-cdn/"))
+(define cdn-url
+  (make-parameter "https://b2cdn.sunfi.sh/file/pub-cdn/"))
 
 ;; unpack! unpacks an artifact at a given root directory
 (: unpack! (artifact string -> *))
