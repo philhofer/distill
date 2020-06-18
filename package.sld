@@ -91,5 +91,9 @@
     $cc-env/for-build
     $cc-env/for-kbuild
     spaced
+    ;; TODO: right now this is only
+    ;; exported for testing;
+    ;; not sure this should be part
+    ;; of the public API
     exports->script)
   (include "package.scm"))

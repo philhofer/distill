@@ -59,7 +59,41 @@
 			    link
 			    (make-input
 			     basedir: sysroot
-			     link: link))))))
+			     link: link)))))
+	   (flatmap   (lambda (proc lst)
+			(let loop ((in  lst)
+				   (out '()))
+			  (if (null? in)
+			      out
+			      (let ((head (car in))
+				    (rest (cdr in)))
+				(if (memq head rest)
+				    (loop rest out)
+				    (let ((h (proc head)))
+				      (loop (cdr in)
+					    (cond
+					     ((list? h) (loop h out))
+					     ;; deduplicate 'eq?'-equivalent items
+					     ((memq h out) out)
+		       (else (cons h out)))))))))))
+	   (buildfile (lambda (conf dir env pathces build)
+			(interned
+			 "/build" #o744
+			 (lambda ()
+			   (write-exexpr
+			    (cons*
+			     'cd dir
+			     (elpatch
+			      patches
+			      (exports->script
+			       conf
+			       env
+			       (cond
+				((list? build)
+				 (elexpand conf build))
+				((procedure? build)
+				 (build conf))
+				(else (error "expected build; got" build))))))))))))
       (push-exception-wrapper
        (lambda (exn)
 	 (let* ((get (condition-property-accessor 'exn 'call-chain))
@@ -80,28 +114,9 @@
 		    basedir: "/"
 		    link: (buildfile host dir env patches build))
 		   (append
-		    (map ->tool (expandl exp/build
+		    (map ->tool (flatmap exp/build
 					 (flatten src tools (map uncross cross))))
-		    (map ->input (expandl exp/host inputs))))))))))
-
-(define (buildfile conf dir env patches build)
-  (interned
-   "/build" #o744
-   (lambda ()
-     (write-exexpr
-      (cons*
-       'cd dir
-       (elpatch
-	patches
-	(exports->script
-	 conf
-	 env
-	 (cond
-	  ((list? build)
-	   (elexpand conf build))
-	  ((procedure? build)
-	   (build conf))
-	  (else (error "expected build; got" build))))))))))
+		    (map ->input (flatmap exp/host inputs))))))))))
 
 ;; new-memoizer creates a new memoizer for package expansion
 (define (new-memoizer)
@@ -485,31 +500,6 @@
    (##sys#symbol->string k)
    "="
    (spaced v)))
-
-;; core list-expanding procedure:
-;;
-;; use 'proc' to expand items of 'lst',
-;; where any sub-lists that are expanded
-;; are recursively expanded and spliced
-;; into the parent list so that the result
-;; is always a flat list with no elements
-;; that are 'eq?' to one another
-(define (expandl proc lst)
-  (let loop ((in  lst)
-	     (out '()))
-    (if (null? in)
-	out
-	(let ((head (car in))
-	      (rest (cdr in)))
-	  (if (memq head rest)
-	      (loop rest out)
-	      (let ((h (proc head)))
-		(loop (cdr in)
-		      (cond
-		       ((list? h) (loop h out))
-		       ;; deduplicate 'eq?'-equivalent items
-		       ((memq h out) out)
-		       (else (cons h out))))))))))
 
 ;; config->builder takes a configuration (as an alist or conf-lambda)
 ;; and returns a function that builds the package
