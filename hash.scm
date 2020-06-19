@@ -22,7 +22,7 @@
   (make-output-port
    (lambda (str)
      (hash-write! h str)
-      (string-length str))
+     (string-length str))
    (lambda () #t)))
 
 ;; with-output-to-hash calls (thunk) with

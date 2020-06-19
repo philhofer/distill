@@ -311,7 +311,8 @@
 ;; artifact directory
 (: with-interned-output ((-> *) -> string))
 (define (with-interned-output thunk)
-  (let* ((h  (new-hasher))
+  (let* ((_  (check-tmp-perms))
+	 (h  (new-hasher))
          (f  (create-temporary-file ".to-intern"))
          (fp (open-output-file f))
          (bp (make-broadcast-port (hasher->output-port h) fp)))
@@ -367,6 +368,22 @@
   ;; have the code that generated them (as long as
   ;; we have the original artifacts)
   (sort (map ->repr inputs) art<?))
+
+;; check-tmp-perms performs a check (once)
+;; that create-temporary-file won't create files
+;; in a world-writable directory
+(define check-tmp-perms
+  (let ((self
+	 (delay
+	   (let* ((f    (create-temporary-file ".check"))
+		  (dir  (dirname f))
+		  (perm (file-permissions dir)))
+	     (unless (or (not (= (bitwise-and perm perm/isvtx) 0))
+			 (= (bitwise-and perm perm/iwoth) 0))
+	       (fatal "please set $TMP to a directory that is sticky or not world-writable"))
+	     (delete-file* f)
+	     #t))))
+    (lambda () (force self))))
 
 ;; plan-hash returns the canonical hash of a plan,
 ;; or #f if any of its inputs have unknown outputs
@@ -684,7 +701,8 @@
 
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
 (define (with-tmpdir proc)
-  (let ((dir (create-temporary-directory)))
+  (let ((_   (check-tmp-perms))
+	(dir (create-temporary-directory)))
     (set-file-permissions! dir #o700)
     (with-cleanup
       (lambda () (delete-directory dir #t))
@@ -947,4 +965,3 @@
     (unless (string=? newhash hash)
       (error "loaded plan has different hash:" newhash))
     plan))
-

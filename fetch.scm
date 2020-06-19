@@ -25,7 +25,7 @@
 	      ((pathfind "curl")
 	       (lambda (url dst)
 		 (run "curl" "-s" "-o" dst url)))
-	      (else (fatal "neither curl(1) nor wget(1) available for fetching")))))))
+	      (else (fatal "neither curl(1) nor wget(1) in $PATH")))))))
     (lambda (url dst)
       ((force %fetch) url dst))))
 
