@@ -11,7 +11,7 @@ CHICKEN_DO:=chicken-do-5.2
 
 SLDS:=$(wildcard *.sld)
 MODS:=$(SLDS:%.sld=%.mod.scm)
-UNITS:=distill.hash distill.nproc \
+UNITS:=distill.fetch distill.hash distill.nproc \
 	distill.plan distill.package distill.execline \
 	distill.filepath distill.eprint distill.memo \
 	distill.text distill.base distill.system \

@@ -77,5 +77,6 @@
     (distill contract)
     (distill kvector)
     (distill tai64)
-    (distill hash))
+    (distill hash)
+    (distill fetch))
   (include "plan.scm"))

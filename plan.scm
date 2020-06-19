@@ -552,11 +552,10 @@
          (dst (filepath-join (artifact-dir) hash))
          (tmp (string-append dst ".tmp")))
     (infoln "fetching" url)
-    (run "wget" (list "-q" "-O" tmp url))
-    (let ((h (hash-file tmp)))
+    (let ((h (fetch+hash url tmp)))
       (cond
         ((not h)
-         (error "fetch failed? output file doesn't exist..."))
+         (error "fetching url failed" url))
         ((string=? h hash)
          (rename-file tmp dst #t))
         (else
