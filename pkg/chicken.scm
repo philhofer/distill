@@ -4,6 +4,7 @@
   (only (chicken port) with-output-to-string)
   (chicken module)
   (distill plan)
+  (only (distill text) join-with)
   (distill execline)
   (distill package)
   (distill kvector)
@@ -135,7 +136,7 @@
 			  #o755
 			  (lambda ()
 			    (write-exexpr
-			     `(export CSC_OPTIONS ,(spaced csc-opts)
+			     `(export CSC_OPTIONS ,(join-with " " csc-opts)
 				      csc "$@")
 			     shebang: "#!/bin/execlineb -s0"))))
 	 (ckn-install    (interned
@@ -143,7 +144,7 @@
 			  #o755
 			  (lambda ()
 			    (write-exexpr
-			     `(export CSC_OPTIONS ,(spaced csc-opts)
+			     `(export CSC_OPTIONS ,(join-with " " csc-opts)
 				      chicken-install "$@")
 			     shebang: "#!/bin/execlineb -s0")))))
     (list csc-script ckn-install)))
@@ -157,7 +158,8 @@
    name version
    "https://code.call-cc.org/egg-tarballs/5/$name/$name-$version.tar.gz"
    hash
-   tools: (lambda (conf) (append (cons chicken (chicken-wrappers conf)) deps))
+   cross: (list chicken-wrappers)
+   tools: (cons chicken deps)
    libs:  (cons libchicken deps)
    build: `(backtick
 	    -n "-i" repo (chicken-install -repository)

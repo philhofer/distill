@@ -19,10 +19,10 @@
      "yMw83zJIGrC7h2uhSt_NgbUA2Rx8nn8gX6Wncy1NEek="
      ;; the ncurses installation process needs a runnable
      ;; ncurses binary, and we won't get that when cross-compiling
-     tools: (lambda (conf)
-	      (if (eq? ($triple conf) ($build-triple conf))
-		  '()
-		  (list ncurses)))
+     cross: (list (lambda (conf)
+		    (if (eq? ($triple conf) ($build-triple conf))
+			'()
+			(list ncurses))))
      native-cc: $cc-for-build
      cleanup: (elif*
 	       '(ln -s libncurses.a  /out/usr/lib/libcurses.a)

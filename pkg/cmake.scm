@@ -2,6 +2,8 @@
   scheme
   (srfi 88) ; keyword->string
   (chicken module)
+  (only (chicken base) o)
+  (distill text)
   (distill plan)
   (distill memo)
   (distill base)
@@ -27,7 +29,7 @@
 		       ;; the rhs has to be "-quoted if
 		       ;; it is multiple words
 		       (if (list? (cdr p))
-			   (write (spaced (cdr p)))
+			   (write (join-with " " (cdr p)))
 			   (display (cdr p)))
 		       (display ")\n"))))
 	  (for-each
@@ -51,9 +53,13 @@
 	     (CMAKE_FIND_ROOT_PATH_MODE_INCLUDE . ONLY)
 	     (CMAKE_FIND_ROOT_PATH_MODE_PACKAGE . ONLY)))))))))
 
-(define ($splat-build conf)
-  (let ((env (cc-toolchain-env ($build-toolchain conf))))
-    (kvector-foldl env (lambda (k v lst) (cons (keyword->string k) (cons (spaced v) lst))) '())))
+(define (kvlist kv)
+  (kvector-foldl kv (lambda (k v lst)
+		      (if v
+			  (cons (##sys#symbol->string k)
+				(cons (if (list? v) (join-with " " v) v) lst))
+			  lst))
+		 '()))
 
 (define cmake
   (cc-package
@@ -67,7 +73,7 @@
    build: (elif*
 	   `(exportall
 	     ;; *just* for bootstrap, export BUILDCC et al. as CC, CFLAGS, etc.
-	     (,$splat-build)
+	     (,(o kvlist cc-toolchain-env $build-toolchain))
 	     ./bootstrap --prefix=/usr
 	     --system-zlib
 	     --system-expat

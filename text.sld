@@ -2,9 +2,10 @@
   (export
    lines
    map-lines
-   join-with)
+   join-with
+   tabular)
   (import
     scheme
     (only (chicken port) with-output-to-string)
-    (only (chicken base) include intersperse identity))
+    (only (chicken base) include intersperse identity unless))
   (include "text.scm"))

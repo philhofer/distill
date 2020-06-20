@@ -220,7 +220,7 @@
     (kvector-foldl
      kv
      (lambda (k v lst)
-       (cons (k=v k v) lst))
+       (if v (cons (k=v k v) lst) lst))
      lst))
 
   (define (->string x)

@@ -58,7 +58,7 @@
 ;; takes everything in 'inputs' and produces
 ;; an ext2 filesystem image (as a sparse file)
 (define (ext2fs name uuid . inputs)
-  (let* ((outfile '/fs.img)
+  (let* ((outfile "/fs.img")
 	 (dst     (filepath-join '/out outfile)))
     (package-template
      dir: "/"

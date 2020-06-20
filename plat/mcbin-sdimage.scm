@@ -32,17 +32,21 @@
 ;;
 ;; the sd card slot is mmcblk1; on-board eMMC is mmcblk0
 (define uboot-env
-  (k=v*
-    scriptaddr:     "0x4d00000"
-    pxefile_addr_r: "0x4e00000"
-    fdt_addr_r:     "0x4f00000"
-    kernel_addr_r:  "0x5000000"
-    ramdisk_addr_r: "0x8000000"
-    fdtfile:        "armada-8040-mcbin.dtb"
-    loadkernel:     "ext2load mmc 1:1 ${kernel_addr_r} boot/vmlinuz"
-    loadfdt:        "ext2load mmc 1:1 ${fdt_addr_r} boot/${fdtfile}"
-    bootargs:       "root=/dev/mmcblk1p2 rootfstype=squashfs"
-    bootcmd:        "run loadkernel loadfdt; booti ${kernel_addr_r} - ${fdt_addr_r}"))
+  (map
+   (lambda (lst)
+     (string-append (##sys#symbol->string (car lst))
+		    "="
+		    (cadr lst)))
+   '((scriptaddr:     "0x4d00000")
+     (pxefile_addr_r: "0x4e00000")
+     (fdt_addr_r:     "0x4f00000")
+     (kernel_addr_r:  "0x5000000")
+     (ramdisk_addr_r: "0x8000000")
+     (fdtfile:        "armada-8040-mcbin.dtb")
+     (loadkernel:     "ext2load mmc 1:1 ${kernel_addr_r} boot/vmlinuz")
+     (loadfdt:        "ext2load mmc 1:1 ${fdt_addr_r} boot/${fdtfile}")
+     (bootargs:       "root=/dev/mmcblk1p2 rootfstype=squashfs")
+     (bootcmd:        "run loadkernel loadfdt; booti ${kernel_addr_r} - ${fdt_addr_r}"))))
 
 (define uboot-mcbin
   (uboot/config
@@ -190,7 +194,7 @@
 		       (package-template
 			label: "mcbin-sdimage"
 			raw-output: "/img"
-			tools:  (list sfdisk imgtools execline-tools busybox-core)
+			tools:  (list imgtools execline-tools busybox-core)
 			inputs: (list boot atf-mcbin root)
 			build:  `(backtick -n fwsize (alignsize -a20 -e2097152 ,fw)
 					   importas -u |-i| fwsize fwsize

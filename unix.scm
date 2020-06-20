@@ -32,12 +32,6 @@
       (name: nobody   gid: 65534 users: (nobody))
       (name: catchlog gid: 99    users: (catchlog)))))
 
-(define grp/root
-  (make-group
-    name:  'root
-    gid:   0
-    users: '(root)))
-
 (define (adduser name #!key
                  (group #f)
                  (home "/var/empty")
@@ -94,30 +88,26 @@
 (: etc/passwd ((list-of vector) --> vector))
 (define (etc/passwd users)
   (let ((usr->line (lambda (u)
-                     (string-append
-                       (symbol->string (user-name u))
-                       ":x:"
-                       (number->string (user-uid u))
-                       ":"
-                       (number->string (user-gid u))
-                       "::"
-                       (user-home u)
-                       ":"
-                       (user-login u)))))
+                     (list
+		      (user-name u)
+		      "x"
+		      (user-uid u)
+		      (user-gid u)
+		      ""
+		      (user-home u)
+		      (user-login u)))))
     (interned "/etc/passwd"
               #o644
-              (map-lines usr->line users))))
+	      (tabular usr->line ":" "\n" users))))
 
 (: etc/group ((list-of vector) --> vector))
 (define (etc/group groups)
   (let ((grp->line (lambda (g)
-                     (string-append
-                       (symbol->string (group-name g))
-                       ":x:"
-                       (number->string (group-gid g))
-                       ":"
-                       (join-with "," (group-users g))))))
+                     (list
+		      (group-name g)
+		      "x"
+		      (number->string (group-gid g))
+		      (join-with "," (group-users g))))))
     (interned "/etc/group"
               #o644
-              (map-lines grp->line groups))))
-
+              (tabular grp->line ":" "\n" groups))))

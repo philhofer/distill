@@ -466,15 +466,15 @@
 	"https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
 	"Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="
 	patches: (patchfiles* "patches/gcc/pie-gcc.patch")
+	tools: (list byacc reflex gawk)
 	;; we depend on cc-for-build automatically,
 	;; so we only need additional target tools
 	;; if target!=build
-	tools: (if-native-target?
-		target-triple
-		(list byacc reflex gawk)
-		(cons* byacc reflex gawk
-		       (binutils-for-triple target-triple)
-		       (fakelibc target-triple)))
+	cross: (list (if-native-target?
+		      target-triple
+		      '()
+		      (list (fakelibc target-triple)
+			    (binutils-for-triple target-triple))))
 	libs: (list libgmp libmpfr libmpc libisl zlib)
 	out-of-tree: #t
 	extra-cflags: '(-DCROSS_DIRECTORY_STRUCTURE)
@@ -696,6 +696,7 @@ EOF
 	     patches)
      dir:   (conc "linux-" *linux-version*)
      label: (conc "linux-" *linux-version* "-" name)
+     cross: (list $cc-tools)
      tools: (list
 	     perl xz-tools reflex
 	     byacc libelf zlib linux-headers
@@ -999,25 +1000,25 @@ EOF
 		      libnftnl_LIBS=-lnftnl)))
 
 (define iproute2
-  (let ((tools (lambda (conf)
-		 (list
-		  byacc reflex
-		  (interned
-		   "/src/config.mk"
-		   #o644
-		   (lines
-		    (list
-		     (conc "CC=" ($CC conf))
-		     (conc "LDFLAGS=" (spaced ($LDFLAGS conf)))
-		     (conc "AR=" ($AR conf))
-		     "YACC=yacc"
-		     "TC_CONFIG_IPSET:=y"
-		     "TC_CONFIG_NO_XT:=y"
-		     "HAVE_MNL:=y"
-		     "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
-		     "LDLIBS += -lelf -lmnl -lz"
-		     "%.o: %.c"
-		     "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
+  (let ((config.mk (lambda (conf)
+		     (list
+		      byacc reflex
+		      (interned
+		       "/src/config.mk"
+		       #o644
+		       (lines
+			(list
+			 (conc "CC=" ($CC conf))
+			 (conc "LDFLAGS=" (join-with " " ($LDFLAGS conf)))
+			 (conc "AR=" ($AR conf))
+			 "YACC=yacc"
+			 "TC_CONFIG_IPSET:=y"
+			 "TC_CONFIG_NO_XT:=y"
+			 "HAVE_MNL:=y"
+			 "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
+			 "LDLIBS += -lelf -lmnl -lz"
+			 "%.o: %.c"
+			 "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
 	(cc-package
 	 "iproute2" "5.6.0"
 	 "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
@@ -1025,7 +1026,7 @@ EOF
 	 patches: (patchfiles*
 		   "patches/iproute2/musl-fixes.patch"
 		   "patches/iproute2/fix-install-errors.patch")
-	 tools: tools
+	 cross: (list config.mk)
 	 libs:  (list linux-headers iptables libmnl libelf zlib)
 	 build: (elif*
 		 '(cp /src/config.mk config.mk)

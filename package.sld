@@ -6,6 +6,7 @@
     (srfi 26) ;; cut
     (srfi 39) ;; parameters
     (srfi 69) ;; make-hash-table, etc
+    (distill text)
     (distill memo)
     (distill eprint)
     (distill contract)
@@ -90,7 +91,6 @@
     cc-env/build
     $cc-env/for-build
     $cc-env/for-kbuild
-    spaced
     ;; TODO: right now this is only
     ;; exported for testing;
     ;; not sure this should be part

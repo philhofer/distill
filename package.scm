@@ -217,6 +217,7 @@
 	 (env '())	 ;; extra environment
 	 (libs '())	 ;; extra libraries beyond libc
 	 (tools '())	 ;; extra tools beyond a C toolchain
+	 (cross '())
 	 (extra-src '()))
   (let* ((url (url-translate urlfmt name version))
 	 (src (remote-archive url hash))
@@ -230,7 +231,7 @@
      src:     (cons src (append patches extra-src))
      env:     env
      dir:     (or dir (conc name "-" version))
-     cross:   (list $cc-tools)
+     cross:   (cons $cc-tools cross)
      tools:   (if use-native-cc
 		  (cons* $cc-tools $libc $native-libc $native-tools
 			 (if (list? tools) tools (list tools)))
@@ -262,6 +263,7 @@
 
 	 (libs '())	 ;; extra libraries beyond libc
 	 (tools '())	 ;; extra tools beyond a C toolchain
+	 (cross '())
 	 (extra-src '()) ;; extra source
 	 (prepare #f)   ;; a place to put sed chicanery, etc.
 	 (cleanup #f)   ;; a place to put extra install tweaking
@@ -283,6 +285,7 @@
      prebuilt: prebuilt
      libs: libs
      tools: tools
+     cross: cross
      extra-src: extra-src
      use-native-cc: (if native-cc #t #f)
      env:     (cons
@@ -468,39 +471,6 @@
        "HOST"
        (keyword->string kw))))))
 
-(: spaced (* -> string))
-(define (spaced lst)
-  (let ((out (open-output-string)))
-    (cond
-     ((list? lst)
-      (let loop ((lst lst))
-	(or (null? lst)
-	    (let ((head (car lst))
-		  (rest (cdr lst)))
-	      (if (list? head)
-		  (loop head)
-		  (display head out))
-	      (unless (null? rest)
-		      (display " " out))
-	      (loop rest)))))
-     (else (display lst out)))
-    (let ((s (get-output-string out)))
-      (close-output-port out)
-      s)))
-
-;; k=v takes a key and a value
-;; and returns a string like "key=value"
-;; where 'value' becomes space-separated
-;; if it is a list
-(: k=v (keyword * --> string))
-(define (k=v k v)
-  (unless (keyword? k)
-	  (error "k=v expected a keyword but got" k))
-  (string-append
-   (##sys#symbol->string k)
-   "="
-   (spaced v)))
-
 ;; config->builder takes a configuration (as an alist or conf-lambda)
 ;; and returns a function that builds the package
 ;; and yields its output artifact
@@ -584,7 +554,7 @@
      ((symbol? x)  x)
      ((string? x)  x)
      ((number? x)  x)
-     ((list? x)      (spaced (map rhs x)))
+     ((list? x)      (join-with " " (map rhs x)))
      ((procedure? x) (rhs (x conf)))
      (else (error "env: cannot use value as env var" x))))
   (if (null? lst)
