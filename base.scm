@@ -324,8 +324,8 @@
 
 (define libexecline+tools
   (ska-cmmi-package
-   "execline" "2.6.0.1"
-   "0AwX9jiwZt0b0KiHeuWYvuzZdHlP22cZ0088gDI_iRc="
+   "execline" "2.6.1.0"
+   "NX42vfXT0Fuh7CeNeED4Uq49S7qgdebywTOWvO2xC8s="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
 		      --enable-pedantic-posix
@@ -580,8 +580,8 @@
    "patches/busybox/config-core" ; OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=
    '()))
 
-(define *linux-version* "5.4.46")
-(define *linux-hash* "VwcNQ36vw2wuFXZUtZVpv0kLsov2Lj6odVc0i4eEB3g=")
+(define *linux-version* "5.4.48")
+(define *linux-hash* "91YnLvmAd-Jane6ZKw9huZVRz5yeEORW8bkw4mX9LCA=")
 
 (define (linux-source version hash)
   (remote-archive
@@ -737,9 +737,9 @@ EOF
 	(config  (remote-file
                      #f "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
     (cc-package
-     "elfutils" "0.178"
+     "elfutils" "0.180"
      "https://sourceware.org/$name/ftp/$version/$name-$version.tar.bz2"
-     "ibDvVn8CMIhlIQAZGAsl7Yf13fm42qO7NJDctqLd2Hc="
+     "UFOiYGMUAwV4w3uwL07JyAOZrbPB4Xcu6S34dZMVLf0="
      libs: (list zlib)
      extra-src: (list config)
      ;; the elfutils configure script is a basket case,
@@ -779,9 +779,9 @@ EOF
 			      "BUILD_"
 			      (keyword->string kw))))))))
     (cmmi-package
-     "e2fsprogs" "1.45.5"
+     "e2fsprogs" "1.45.6"
      "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
-     "w7R6x_QX6QpTEtnNihjwlHLBBtfo-r9RrWVjt9Nc818="
+     "JPnv_uv4MebWFHZWvwghtda0O-l8X3OF0m7yp16-1mI="
      patches: (patchfiles* "patches/e2fsprogs/repro.patch")
      native-cc: $buildcc-env
      libs: (list linux-headers)
@@ -917,9 +917,9 @@ EOF
 
 (define %zstd
   (cc-package
-   "zstd" "1.4.4"
+   "zstd" "1.4.5"
    "https://github.com/facebook/$name/archive/v$version.tar.gz"
-   "PKNr93GxvtI1hA4Oia-Ut7HNNGjAcxlvfSr3TYdpdX4="
+   "d9Na3jBddIFbIronfi6bQz9FAUPgPZSW5HTaxZlNrlg="
    build: (let ((makeflags '(HAVE_PTHREAD=1
 			     HAVE_ZLIB=0
 			     HAVE_LZMA=0
@@ -1040,8 +1040,8 @@ EOF
 
 (define libs6+tools
   (ska-cmmi-package
-   "s6" "2.9.1.0"
-   "-YjvL_kpeegF4FFOlDizjsxkC8gSqPftHDsII5sDmEc="
+   "s6" "2.9.2.0"
+   "OSuPaQ4eMzzIAHCi4_ZM5h1e7Rv1AxXp5pE2GnBu2Ng="
    libs: (list skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
 		      --enable-static-libc)))
