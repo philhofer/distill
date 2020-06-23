@@ -158,7 +158,7 @@
       (display sldf)
       (newline)
       (display (string-append name ".import.scm "))
-      (display (string-append name ".o: "))
+      (display (string-append name ".c: "))
       (display modf)
       (display " ")
       (display (string-join deps " "))
