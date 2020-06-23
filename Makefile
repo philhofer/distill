@@ -1,20 +1,22 @@
 # NOTE: you need at least chicken-5.2 to build this code;
 # earlier chickens do not know about the -M flag
 PREFIX ?= /usr
+AR ?= ar
 
 # TODO: detect these better?
 CHICKEN_INSTALL:=chicken-install-5.2
 CSI:=csi-5.2
-CHICKEN:=chicken-5.2
+export CHICKEN:=chicken-5.2
 
-CC:=gcc
+export CC:=gcc
 # NOTE: you *really* do not want to remove "-fwrapv -fno-strict-aliasing"
-CFLAGS:=-ffunction-sections -fdata-sections -D_GNU_SOURCE -DHAVE_CHICKEN_CONFIG_H -DC_ENABLE_PTABLES \
-	-I/usr/include/chicken-5.2/ -static-pie -O2 -fwrapv -fno-strict-aliasing -Wno-unused
-CHICKEN_FLAGS:=-optimize-level 3 -disable-interrupts -clustering -setup-mode
-CHICKEN_LIBDIR=$(shell \$(CHICKEN_INSTALL) -repository)
-# TODO: vendor these dependencies
-LDFLAGS:=-Wl,-gc-sections -lchicken-5.2
+export CFLAGS:=-ffunction-sections -fdata-sections -D_GNU_SOURCE -DHAVE_CHICKEN_CONFIG_H -DC_ENABLE_PTABLES \
+	-static-pie -O2 -fno-stack-protector -fwrapv -fno-strict-aliasing -Wno-unused
+export CHICKEN_FLAGS:=-optimize-level 3 -disable-interrupts -clustering -setup-mode -include-path libchicken/
+export LDFLAGS:=-Wl,-gc-sections
+
+libchicken/libchicken.a:
+	$(MAKE) -C libchicken/ libchicken.a
 
 SLDS:=$(wildcard *.sld)
 MODS:=$(SLDS:%.sld=%.mod.scm)
@@ -55,16 +57,17 @@ distill.c: distill.scm ${UNITS:%=%.import.scm}
 	$(CHICKEN) $< -module main -static $(CHICKEN_FLAGS)
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $^ -o $@
+	$(CC) $(CFLAGS) -I./libchicken -c $^ -o $@
 
-distill: distill.o ${UNITS:%=%.o}
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+distill: distill.o ${UNITS:%=%.o} libchicken/libchicken.a
+	$(CC) $(CFLAGS) -I./libchicken -o $@ $^ $(LDFLAGS) libchicken/libchicken.a
 
 TESTS:=$(wildcard *-test.scm)
 test: distill $(TESTS)
 	@for x in $(TESTS); do echo $$x; ./distill run $$x || exit 1; done
 
 clean:
+	$(MAKE) -C libchicken/ clean
 	$(RM) distill Makefile.dep *.types *.import.scm *.mod.scm *.so *.o *.link ${UNITS:%=%.c}
 
 install: all

@@ -511,7 +511,7 @@
 	    (file-exists? herepath)
 	    (let ((ep (executable-pathname)))
 	      (or (file-exists? (filepath-join ep herepath))
-		  (file-exists? (filepath-join ep "../lib/distill/" herepath))
+		  (file-exists? (filepath-join ep "../../lib/distill/" herepath))
 		  (error "couldn't find file" herepath))))))
     (overlay f therepath)))
 
