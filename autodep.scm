@@ -1,5 +1,4 @@
 (import
-  (srfi 13)
   (srfi 69)
   (chicken file)
   (chicken string)
@@ -12,7 +11,7 @@
   (let ((n (cadr form)))
     (cond
       ((symbol? n) (symbol->string n))
-      ((list? n)   (string-join (map symbol->string n) "."))
+      ((list? n)   (string-intersperse (map symbol->string n) "."))
       (else        (error "unexpected library name" n)))))
 
 (define (lib-import form)
@@ -161,6 +160,6 @@
       (display (string-append name ".c: "))
       (display modf)
       (display " ")
-      (display (string-join deps " "))
+      (display (string-intersperse deps " "))
       (newline)))
   slds)
