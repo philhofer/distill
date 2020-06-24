@@ -5,9 +5,9 @@
 
 (define curl
   (cmmi-package
-   "curl" "7.69.1"
+   "curl" "7.71.0"
    "https://curl.haxx.se/download/$name-$version.tar.xz"
-   "SE9rx8lnJG7UyJMz8kbJ8affBfFBp4YCMwLwNB_1ErE="
+   "IEzcN01pG47UmNoDbt_D-VZk3z2-aQUzzInvQ6ny6ow="
    tools: (list perl)
    libs:  (list libressl zlib)
    extra-configure: '(--with-ca-bundle=/etc/ssl/cert.pem
