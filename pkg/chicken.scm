@@ -12,6 +12,7 @@
   (distill base))
 
 (export
+ $chicken-features
  libchicken
  egg
  matchable-egg
@@ -24,12 +25,12 @@
 ;; csi(1), csc(1), etc.
 
 (define (without syms lst)
-  (if (null? lst)
-    lst
-    (let ((head (car lst)))
-      (if (memq head syms)
-        (cdr lst)
-        (cons head (without syms (cdr lst)))))))
+  (let loop ((lst lst)
+	     (out '()))
+    (cond
+     ((null? lst) out)
+     ((memq (car lst) syms) (loop (cdr lst) out))
+     (else (loop (cdr lst) (cons (car lst) out))))))
 
 (define ($chicken-arch conf)
   (let ((arch ($arch conf)))
@@ -93,6 +94,19 @@
 
 (define libchicken
   (%chicken-src "libchicken" '(libchicken.a) '(install-dev)))
+
+(define ($chicken-features conf)
+  (let ((real-features (case ($arch conf)
+			 ((x86_64)  '(64bit little-endian x86-64))
+			 ((aarch64) '(64bit little-endian arm64 aarch64))
+			 ((armv7 armv6) '(32bit little-endian arm))
+			 ((ppc64)   '(64bit big-endian ppc64))
+			 ((ppc64le) '(64bit little-endian ppc64le))))
+	(clear-features '(64bit 32bit big-endian little-endian
+				x86-64 aarch64 x32 i386 arm ppc64)))
+    (list
+     "-no-feature" (join-with "," (without real-features clear-features))
+     "-feature" (join-with "," real-features))))
 
 ;; chicken-wrappers are wrappers for chicken-install and csc
 ;; named ${triple}-chicken-install and ${triple}-csc that

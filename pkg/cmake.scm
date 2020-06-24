@@ -68,8 +68,8 @@
    "6gtLvB0LcFAcUl1DyOV8L5rGPN9lRABACyyFVImARAI="
    use-native-cc: #t ;; for bootstrap
    libs: (list linux-headers zlib libexpat libressl libzstd libbz2)
-   tools: (lambda (conf)
-	    (list linux-headers (cmake-toolchain-file conf)))
+   cross: (list cmake-toolchain-file)
+   tools: (list linux-headers)
    build: (elif*
 	   `(exportall
 	     ;; *just* for bootstrap, export BUILDCC et al. as CC, CFLAGS, etc.
@@ -96,8 +96,8 @@
   (cc-package
    name ver urlfmt hash
    libs: libs
-   tools: (lambda (conf)
-	    (cons* pkgconf cmake (cmake-toolchain-file conf) tools))
+   cross: (list cmake-toolchain-file)
+   tools: (cons* pkgconf cmake tools)
    build: `(if
 	    (mkdir builddir)
 	    cd builddir
