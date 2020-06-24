@@ -20,10 +20,8 @@ libchicken.a: ${UNITS:%=%.o}
 # from the rules.make file in chicken-core.git
 
 bootstrap-lib = $(CHICKEN) $< $(CHICKEN_OPTIONS) -output-file $@
-generated-imports =
 
 define declare-emitted-import-lib-dependency
-generated-imports += $(1).import.scm
 .SECONDARY: $(1).import.scm
 $(1).import.scm: $(2).c
 endef
@@ -64,6 +62,8 @@ $(eval $(call declare-emitted-import-lib-dependency,chicken.memory.representatio
 $(eval $(call declare-emitted-import-lib-dependency,chicken.sort,data-structures))
 $(eval $(call declare-emitted-import-lib-dependency,chicken.string,data-structures))
 
+srfi-4.import.scm: srfi-4.c
+
 modules.c: modules.scm \
 		chicken.internal.import.scm \
 		chicken.keyword.import.scm \
@@ -87,6 +87,8 @@ posixunix.c: posixunix.scm \
 		chicken.process-context.import.scm \
 		chicken.time.import.scm
 data-structures.c: data-structures.scm \
+		chicken.base.import.scm \
+		chicken.fixnum.import.scm \
 		chicken.condition.import.scm \
 		chicken.foreign.import.scm
 expand.c: expand.scm \
@@ -108,6 +110,9 @@ eval.c: eval.scm \
 		chicken.platform.import.scm \
 		chicken.time.import.scm
 repl.c: repl.scm \
+		chicken.base.import.scm \
+		chicken.load.import.scm \
+		chicken.foreign.import.scm \
 		chicken.eval.import.scm
 file.c: file.scm \
 		chicken.condition.import.scm \
@@ -117,20 +122,29 @@ file.c: file.scm \
 		chicken.pathname.import.scm \
 		chicken.process-context.import.scm
 lolevel.c: lolevel.scm \
+		chicken.base.import.scm \
+		chicken.fixnum.import.scm \
 		chicken.foreign.import.scm
 pathname.c: pathname.scm \
-		chicken.irregex.import.scm \
+		chicken.base.import.scm \
+		chicken.fixnum.import.scm \
+		chicken.irregex.import.scm\
 		chicken.platform.import.scm \
 		chicken.string.import.scm
 port.c: port.scm \
+		chicken.base.import.scm \
+		chicken.fixnum.import.scm \
+		chicken.foreign.import.scm \
 		chicken.io.import.scm
 read-syntax.c: read-syntax.scm \
+		chicken.base.import.scm \
 		chicken.internal.import.scm \
 		chicken.platform.import.scm
 #eval-modules.c: eval-modules.scm $(DYNAMIC_IMPORT_LIBRARIES:=.import.scm) \
 #	$(foreach lib,$(DYNAMIC_CHICKEN_IMPORT_LIBRARIES),chicken.$(lib).import.scm) \
 #	$(foreach lib,$(DYNAMIC_CHICKEN_UNIT_IMPORT_LIBRARIES),$(lib).c)
-library.c: library.scm
+library.c: library.scm chicken.base.import.scm \
+		chicken.foreign.import.scm
 	$(bootstrap-lib) \
 	-no-module-registration \
 	-emit-import-library chicken.bitwise \
@@ -142,7 +156,8 @@ library.c: library.scm
 	-emit-import-library chicken.platform \
 	-emit-import-library chicken.plist \
 	-emit-import-library chicken.process-context
-internal.c: internal.scm mini-srfi-1.scm
+internal.c: internal.scm mini-srfi-1.scm \
+		chicken.fixnum.import.scm
 	$(bootstrap-lib) -emit-import-library chicken.internal
 eval.c: eval.scm common-declarations.scm mini-srfi-1.scm
 	$(bootstrap-lib) \
@@ -172,13 +187,17 @@ posixunix.c: posix.scm posixunix.scm posix-common.scm common-declarations.scm
 	-emit-import-library chicken.process.signal \
 	-emit-import-library chicken.process-context.posix \
 	-no-module-registration
-irregex.c: irregex.scm irregex-core.scm irregex-utils.scm common-declarations.scm
+irregex.c: irregex.scm irregex-core.scm irregex-utils.scm common-declarations.scm \
+		chicken.fixnum.import.scm
 	$(bootstrap-lib) -emit-import-library chicken.irregex
-chicken-syntax.c: chicken-syntax.scm common-declarations.scm mini-srfi-1.scm
+chicken-syntax.c: chicken-syntax.scm common-declarations.scm mini-srfi-1.scm \
+		chicken.fixnum.import.scm
 	$(bootstrap-lib)
-chicken-ffi-syntax.c: chicken-ffi-syntax.scm common-declarations.scm mini-srfi-1.scm
+chicken-ffi-syntax.c: chicken-ffi-syntax.scm common-declarations.scm mini-srfi-1.scm \
+			chicken.format.import.scm
 	$(bootstrap-lib)
-continuation.c: continuation.scm common-declarations.scm
+continuation.c: continuation.scm common-declarations.scm \
+		chicken.fixnum.import.scm
 	$(bootstrap-lib) -emit-import-library chicken.continuation
 data-structures.c: data-structures.scm common-declarations.scm
 	$(bootstrap-lib) \
@@ -190,24 +209,46 @@ port.c: port.scm common-declarations.scm
 	$(bootstrap-lib) -emit-import-library chicken.port
 file.c: file.scm common-declarations.scm
 	$(bootstrap-lib) -emit-import-library chicken.file
-lolevel.c: lolevel.scm common-declarations.scm
+lolevel.c: lolevel.scm common-declarations.scm \
+		chicken.base.import.scm chicken.fixnum.import.scm \
+		chicken.foreign.import.scm
 	$(bootstrap-lib) \
 	-emit-import-library chicken.locative \
 	-emit-import-library chicken.memory \
 	-emit-import-library chicken.memory.representation
-srfi-4.c: srfi-4.scm common-declarations.scm
+srfi-4.c: srfi-4.scm common-declarations.scm \
+		chicken.base.import.scm chicken.bitwise.import.scm \
+		chicken.fixnum.import.scm chicken.foreign.import.scm \
+		chicken.gc.import.scm chicken.platform.import.scm \
+		chicken.syntax.import.scm
 	$(bootstrap-lib) -emit-import-library srfi-4
-scheduler.c: scheduler.scm common-declarations.scm
-	$(bootstrap-lib) 
-profiler.c: profiler.scm common-declarations.scm
-	$(bootstrap-lib) 
-stub.c: stub.scm common-declarations.scm
-	$(bootstrap-lib) 
+stub.c: stub.scm common-declarations.scm chicken.platform.import.scm
+	$(bootstrap-lib)
 build-version.c: build-version.scm buildversion buildbranch buildid
 	$(bootstrap-lib)
-eval-modules.c: eval-modules.scm common-declarations.scm
+eval-modules.c: eval-modules.scm common-declarations.scm \
+		chicken.bitwise.import.scm chicken.blob.import.scm \
+		chicken.foreign.import.scm chicken.fixnum.import.scm \
+		chicken.keyword.import.scm chicken.internal.import.scm \
+		chicken.platform.import.scm chicken.errno.import.scm \
+		chicken.condition.import.scm chicken.string.import.scm \
+		chicken.irregex.import.scm chicken.pathname.import.scm \
+		chicken.io.import.scm chicken.port.import.scm \
+		chicken.time.import.scm chicken.memory.import.scm \
+		chicken.file.posix.import.scm chicken.flonum.import.scm \
+		chicken.format.import.scm chicken.gc.import.scm \
+		chicken.eval.import.scm chicken.load.import.scm \
+		chicken.locative.import.scm chicken.memory.representation.import.scm \
+		chicken.plist.import.scm chicken.pretty-print.import.scm \
+		chicken.process.import.scm chicken.process.signal.import.scm \
+		chicken.process-context.import.scm \
+		chicken.process-context.posix.import.scm chicken.random.import.scm \
+		chicken.sort.import.scm chicken.time.posix.import.scm \
+		chicken.continuation.import.scm chicken.file.import.scm \
+		chicken.read-syntax.import.scm chicken.repl.import.scm \
+		srfi-4.import.scm
 	$(bootstrap-lib)
 
 .PHONY: clean
 clean:
-	$(RM) $(UNITS:%=%.o) $(generated-imports) $(filter-out runtime.c,$(wildcard *.c))
+	$(RM) libchicken.a $(UNITS:%=%.o) $(filter-out runtime.c,$(wildcard *.c))
