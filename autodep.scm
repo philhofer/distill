@@ -5,7 +5,11 @@
   (chicken platform)
   (chicken pretty-print))
 
-(define mod-to-import '())
+(define mod-to-import
+  ;; mutable, but these ones we know
+  ;; in advance:
+  '((matchable . "matchable.import.scm")
+    ((srfi 69) . "srfi-69.import.scm")))
 
 (define (lib-name form)
   (let ((n (cadr form)))
