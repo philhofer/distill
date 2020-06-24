@@ -1,11 +1,11 @@
 (import
-  (srfi 69)
+  scheme
   (chicken file)
   (chicken string)
   (chicken platform)
   (chicken pretty-print))
 
-(define mod-to-import (make-hash-table))
+(define mod-to-import '())
 
 (define (lib-name form)
   (let ((n (cadr form)))
@@ -79,8 +79,8 @@
   ;; files and anything that is (include)'d
   (foldl
     (lambda (lst im)
-      (let ((v (hash-table-ref/default mod-to-import im #f)))
-	(if v (cons v lst) lst)))
+      (let ((v (assoc im mod-to-import)))
+	(if v (cons (cdr v) lst) lst)))
     (lib-includes form)
     (lib-imports form)))
 
@@ -137,7 +137,10 @@
       (let ((form (call-with-input-file f (cut read <>))))
 	(unless (eq? (car form) 'define-library)
 	  (error "expected define-library form in" f))
-	(hash-table-set! mod-to-import (cadr form) (lib-import form))
+	(set! mod-to-import
+	  (cons
+	   (cons (cadr form) (lib-import form))
+	   mod-to-import))
         (let ((modfile (modfile-name f)))
           (write-mod form modfile)
           (cons (cons f modfile) form))))
