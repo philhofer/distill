@@ -11,7 +11,7 @@ CHICKEN_OPTIONS:=-optimize-level 2 -explicit-use -no-trace -include-path . \
 
 .SUFFIXES:
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(NEEDED_CFLAGS) $(CFLAGS) -c $< -o $@
 
 libchicken.a: ${UNITS:%=%.o}
 	$(AR) cr $@ $^
@@ -19,7 +19,7 @@ libchicken.a: ${UNITS:%=%.o}
 # The rest of this Makefile is just cut+paste
 # from the rules.make file in chicken-core.git
 
-bootstrap-lib = $(CHICKEN) $< $(CHICKEN_OPTIONS) -output-file $@
+bootstrap-lib = $(CHICKEN) $< $(CHICKEN_FEATURES) $(CHICKEN_OPTIONS) -output-file $@
 
 define declare-emitted-import-lib-dependency
 .SECONDARY: $(1).import.scm
