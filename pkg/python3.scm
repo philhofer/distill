@@ -21,9 +21,9 @@
 
 (define python3
   (cmmi-package
-   "Python" "3.8.2"
+   "Python" "3.8.3"
    "https://www.python.org/ftp/python/$version/$name-$version.tar.xz"
-   "Fz7sjZlaw3LqjDO4K3IViMKGscHMEH2_7UTIvSmKxfM="
+   "Z_6zP2Ej86aY2CuQVgOnHVgpEQlT1QHPuncBzk39ScY="
    extra-src: (list (bind "patches/python/py-setup" "/src/py-setup"))
    libs: (list ncurses libexpat libressl zlib libbz2 liblzma libffi
 	       linux-headers gdbm libreadline)

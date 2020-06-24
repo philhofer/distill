@@ -13,9 +13,9 @@
 ;; of git may not be available for a cross-compiled target...
 (define git
   (cmmi-package
-   "git" "2.26.2"
+   "git" "2.27.0"
    "https://www.kernel.org/pub/software/scm/$name/$name-$version.tar.gz"
-   "TaxphU3yFB1DWv5wzBTBXYZKGNN-Ij2fpXh0DVyuKtU="
+   "Gn0ijcbRn9bIcpOYASfwQPTPzxpuqM5a42aG---ZJEI="
    tools: (list tar)
    libs:  (list pcre2 zlib libexpat libressl)
    ;; necessary for cross-compilation:

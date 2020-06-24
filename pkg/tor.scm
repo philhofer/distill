@@ -8,9 +8,9 @@
 
 (define tor
   (cmmi-package
-   "tor" "0.4.2.7"
+   "tor" "0.4.3.5"
    "https://dist.torproject.org/$name-$version.tar.gz"
-   "JftNScwww-HwiTXndd_Ir_CDlvrENg_ryiG9SIbzSEw="
+   "aIUYlUZ_ycTsRBWpUf87v54FzokyJFFt3TxePhVa3iA="
    env: '((ZSTD_CFLAGS . "")
 	  (ZSTD_LIBS . "-lzstd")
 	  ;; the configure script makes some assumptions

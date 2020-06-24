@@ -4,11 +4,13 @@
   (distill package)
 
   (pkg cmake)
-  (pkg libsodium))
+  (pkg libsodium)
+  (pkg pkgconf))
 
 (define minisign
   (cmake-package
-   "minisign" "0.8"
+   "minisign" "0.9"
    "https://github.com/jedisct1/$name/releases/download/$version/$name-$version.tar.gz"
-   "pDmq_F-yzKdaXC25o-o7QtrWRlDtJVl0TnHNI3GcgQ4="
+   "zC79CR55UEG6GqNshy85flENdK6BfxDdYCdZ6glrBhc="
+   tools: (list pkgconf)
    libs: (list libsodium)))
