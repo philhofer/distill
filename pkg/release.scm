@@ -14,7 +14,7 @@
 	    (cons head (without syms (cdr lst)))))))
 
 (define release
-  (let ((hash    "ahVPTUGm1dD5GFuK-hdPIjBH2pqJtculpto5HrG72gs=")
+  (let ((hash    "0lJoG9e0WHdBM1xxaCjQkoelX6Kw_1P9X37h8iAZhO4=")
 	($cflags (lambda (conf)
 		   ;; due to chicken's compilation model, essentially every
 		   ;; continuation is noreturn, so the stack protector does
@@ -22,7 +22,7 @@
 		   (without '(-fstack-protector -fstack-protector-strong -fstack-protector-all)
 			    ($CFLAGS conf)))))
     (cc-package
-     "distill" "7f62fce"
+     "distill" "c5f3143"
      (string-append
       "https://b2cdn.sunfi.sh/files/pub-cdn/" hash)
      hash
