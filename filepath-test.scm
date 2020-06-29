@@ -47,3 +47,11 @@
         (""        "/")
         (""        "/foo/bar/")))
 
+(let ((rdir (folddir cons '() (current-directory))))
+  (test eq? #t
+	(let loop ((head (car rdir))
+		   (rest (cdr rdir)))
+	  (or (null? rest)
+	      (and
+	       (string<? (car rest) head)
+	       (loop (car rest) (cdr rest)))))))
