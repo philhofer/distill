@@ -5,7 +5,10 @@
 *.o
 *.types
 *.link
+distill.*.c
+distill.c
 distill
+vendor/*.c
 Makefile.dep
 artifacts/
 plans/
