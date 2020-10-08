@@ -580,11 +580,11 @@
 ;; linux headers
 (define busybox-core
   (busybox/config
-   "patches/busybox/config-core" ; OE8osvZRzHk6NO3aMhnF6uyZUwlpYZtOz8LF8bR2V6k=
+   "patches/busybox/config-core"
    '()))
 
-(define *linux-version* "5.4.48")
-(define *linux-hash* "91YnLvmAd-Jane6ZKw9huZVRz5yeEORW8bkw4mX9LCA=")
+(define *linux-version* "5.4.70")
+(define *linux-hash* "ljOmep0hj_mVF7DFcmOZtFHGbGreHvWCJAVRcgpkNJ0=")
 
 (define (linux-source version hash)
   (remote-archive
@@ -814,9 +814,9 @@ EOF
                       '(echo "Fri Apr 3 20:09:47 UTC 2020")
                       shebang: "#!/bin/execlineb -s0")))))
     (cc-package
-     "perl" "5.30.2"
+     "perl" "5.30.3"
      "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
-     "1LHYN7a4aIRWLowcJRJWNNTMSLl5btVOydsEyFCL2Yo="
+     "-8eZLXMHd98cQoBwuo6uSbZm7uNsmj-Q2lV-uOPxjqA="
      tools: (list samedate)
      libs:  (list libbz2 zlib)
      env:   `((BUILD_ZLIB . 0)
@@ -868,9 +868,9 @@ EOF
         (dotconf (remote-file
                   #f hash "/src/uboot-config" #o644)))
     (cc-package
-     "u-boot" "2020.04"
+     "u-boot" "2020.10"
      "https://ftp.denx.de/pub/$name/$name-$version.tar.bz2"
-     "lDUHMuGJodiUbDG80Pq2uKUbMclFpohyWPjIwSKddtE="
+     "pz0pQDEdfHbuQ9ZBllOqIxVYQGCIY4P0ZW5pLtwZkvA="
      no-libc:   #t
      use-native-cc: #t
      patches:   (patchfiles* "patches/dtc/lexer.patch")
@@ -963,9 +963,9 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.2.0"
+   "libressl" "3.2.1"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "tekDV77_P7E1zG9efeE2gENaGd6nDZd4Q9lk_lkLuCg="
+   "_Fi446gVx0ILV7viYzPBewcC8FlVnT1M_LgTlysDmjc="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
@@ -988,18 +988,18 @@ EOF
 
 (define libnftnl
   (cmmi-package
-   "libnftnl" "1.1.6"
+   "libnftnl" "1.1.7"
    "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-   "I_fTUHv8QpyNI5OlM_INMUDXHWsI6V-WzHKhCcfEenA="
+   "G0C2QOZexE0Kc8P6YJGHh_kK2eyjInsQYPECqOuxSg4="
    libs: (list linux-headers libmnl)
    extra-configure: '(LIBMNL_CFLAGS=-lmnl
                       LIBMNL_LIBS=-lmnl)))
 
 (define iptables
   (cmmi-package
-   "iptables" "1.8.4"
+   "iptables" "1.8.5"
    "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-   "hBWYiIU2PYebYoMF6_n_anAFXGfruGBmAXU94ge9DQo="
+   "3o9fJ6KJfo_9K9CoYaHrJBIm9kDItejamfQDKljpdZM="
    libs: (list linux-headers libnftnl libmnl)
    extra-cflags: '(-D_GNU_SOURCE)
    extra-configure: '(libmnl_CFLAGS=-lmnl
@@ -1059,8 +1059,8 @@ EOF
 
 (define libs6rc+tools
   (ska-cmmi-package
-   "s6-rc" "0.5.1.2"
-   "y8awbxd6B7btH4qmlyx2FWwhdlysT4n19Twc-x0lotc="
+   "s6-rc" "0.5.2.0"
+   "UL_1XcPT-C6P75sfxovYnDvgDrZ6R_dcm0wp1SOUaJY="
    libs: (list libs6 skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-static-libc)))
@@ -1081,7 +1081,7 @@ EOF
 
 (define busybox-full
   (busybox/config
-   "patches/busybox/config-full" ; kHCLlhEuZrIcR3vjYENuNyI1a0eGB1B6APiyWjvkvok=
+   "patches/busybox/config-full"
    (list linux-headers)))
 
 ;; keep everything down here at the bottom of the file;
