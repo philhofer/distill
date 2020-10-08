@@ -5,18 +5,18 @@
 
 (define curl
   (cmmi-package
-   "curl" "7.71.0"
+   "curl" "7.72.0"
    "https://curl.haxx.se/download/$name-$version.tar.xz"
-   "IEzcN01pG47UmNoDbt_D-VZk3z2-aQUzzInvQ6ny6ow="
+   "lD1m909FQHLUJ676BCg9c8mpX2d2zGy39e-UoNFJ-2I="
    tools: (list perl)
    libs:  (list libressl zlib)
    extra-configure: '(--with-ca-bundle=/etc/ssl/cert.pem
-		      --without-libidn
-		      --without-libidn2
-		      --without-nghttp2
-		      --disable-ldap
-		      --without-libssh2
-		      --enable-ipv6
-		      --enable-unix-sockets)))
+		                  --without-libidn
+		                  --without-libidn2
+		                  --without-nghttp2
+		                  --disable-ldap
+		                  --without-libssh2
+		                  --enable-ipv6
+		                  --enable-unix-sockets)))
 
 (define libcurl (libs curl))
