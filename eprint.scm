@@ -14,7 +14,7 @@
                (rest rest))
       (display head stderr)
       (if (null? rest)
-        (newline stderr)
+          (newline stderr)
           (begin
             (display " " stderr)
             (loop (car rest) (cdr rest)))))))

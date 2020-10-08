@@ -3,8 +3,8 @@
   (syntax-rules ()
     ((_ contract value)
      (if (contract value)
-       value
-       (error "value doesn't conform to contract:" value (quote contract))))))
+         value
+         (error "value doesn't conform to contract:" value (quote contract))))))
 
 (define false/c (lambda (arg) (not arg)))
 (define true/c  (lambda (arg) arg))
@@ -91,7 +91,7 @@
          (let loop ((in arg)
                     (ok args))
            (if (null? in)
-             (null? ok)
-             (and (not (null? ok))
-                  ((car ok) (car in))
-                  (loop (cdr in) (cdr ok))))))))
+               (null? ok)
+               (and (not (null? ok))
+                    ((car ok) (car in))
+                    (loop (cdr in) (cdr ok))))))))

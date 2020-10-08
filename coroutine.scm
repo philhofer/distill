@@ -298,35 +298,35 @@ EOF
 ;; child processes outstanding
 (define (%pid-poll fd)
   (let ((getcount (foreign-lambda* int ((int fd) (s64vector buf))
-		    "C_return(read(fd,(int64_t *)buf,8)==8 ? 0 : errno);"))
-	(buf      (make-s64vector 1 0)))
+        "C_return(read(fd,(int64_t *)buf,8)==8 ? 0 : errno);"))
+  (buf      (make-s64vector 1 0)))
     (let loop ((err (getcount fd buf)))
       (cond
        ((= err 0) ;; happy case (note that we're ignoring the counter ...)
-	(let-values (((pid ok status) (wait-any-nohang)))
-	  (cond
-	   ((= pid 0) (loop (getcount fd buf)))
-	   ((hash-table-ref/default *wait-tab* pid #f)
-	    => (lambda (cont)
-		 (hash-table-delete! *wait-tab* pid)
-		 (pushcont! (lambda () (cont pid ok status)))
-		 (loop 0)))
-	   (else
-	    (info "warning: pid not registered?" pid)
-	    (loop 0)))))
+  (let-values (((pid ok status) (wait-any-nohang)))
+    (cond
+     ((= pid 0) (loop (getcount fd buf)))
+     ((hash-table-ref/default *wait-tab* pid #f)
+      => (lambda (cont)
+     (hash-table-delete! *wait-tab* pid)
+     (pushcont! (lambda () (cont pid ok status)))
+     (loop 0)))
+     (else
+      (info "warning: pid not registered?" pid)
+      (loop 0)))))
        ((= err eintr)
-	(loop (getcount fd buf)))
+  (loop (getcount fd buf)))
        ((= err eagain)
-	(begin
-	  (queue-wait!
-	   (hash-table-update!/default
-	    *readfd-tab*
-	    fd
-	    identity
-	    (cons '() '())))
-	  (loop (getcount fd buf))))
+  (begin
+    (queue-wait!
+     (hash-table-update!/default
+      *readfd-tab*
+      fd
+      identity
+      (cons '() '())))
+    (loop (getcount fd buf))))
        (else
-	(error "fatal errno from read(eventfd)" fd err (s64vector-ref buf 0)))))))
+  (error "fatal errno from read(eventfd)" fd err (s64vector-ref buf 0)))))))
 
 (: %poll (-> undefined))
 (define (%poll)

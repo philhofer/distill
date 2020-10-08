@@ -19,7 +19,7 @@
       (import
         (only (chicken syntax) er-macro-transformer)
         (only (chicken port) with-output-to-string)
-        (only (chicken base) include error flatten foldl unless delay-force o)
+        (only (chicken base) include error flatten foldl when unless delay-force o)
         (only (chicken string) conc))
       (import-for-syntax
         (only (chicken io) read-string))))

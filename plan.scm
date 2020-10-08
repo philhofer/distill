@@ -5,9 +5,8 @@
 ;; and can optimizes some copies into a rename(2)
 (: copy-file (string string boolean -> true))
 (define (copy-file src dst rename?)
-  (let* ((raw (foreign-lambda
-               int "copy_file_sparse"
-               nonnull-c-string nonnull-c-string bool))
+  (let* ((raw (foreign-lambda int "copy_file_sparse"
+                nonnull-c-string nonnull-c-string bool))
          (e   (raw src dst rename?)))
     (or (= e 0)
         (error "copy_file_sparse: errno" src dst rename? e))))
@@ -418,33 +417,33 @@
 (define (fatal-plan-failure exn)
   ;; if this function throws for some reason, don't get caught in a loop
   (parameterize ((current-exception-handler
-                   (lambda (exn)
-                     (display "exception in exception handler!\n" (current-error-port))
-                     (display exn (current-error-port))
-                     (exit 1))))
+                  (lambda (exn)
+                    (display "exception in exception handler!\n" (current-error-port))
+                    (display exn (current-error-port))
+                    (exit 1))))
     (let* ((sys?   (condition-predicate 'exn))
            (eplan? (condition-predicate 'plan-failure)))
       (cond
-        ((sys? exn)
-         (let ((chain (condition-property-accessor 'exn 'call-chain))
-               (eport (current-error-port)))
-           (print-error-message exn)
-           (let ((lst (chain exn)))
-             (for-each
-               (lambda (v)
-                 (display (vector-ref v 0) eport)
-                 (newline eport))
-               lst))
-           (fatal "exited due to uncaught exception.")))
-        ((eplan? exn)
-         (let* ((prop  (lambda (sym) (condition-property-accessor 'plan-failure sym)))
-                (plan  ((prop 'plan) exn))
-                (child ((prop 'child) exn)))
-           (info "plan" (plan-name plan) "encountered a fatal error:")
-           (fatal-plan-failure child)))
-        (else (begin
-		(print-error-message exn)
-		(fatal "fatal error; exited")))))))
+       ((sys? exn)
+        (let ((chain (condition-property-accessor 'exn 'call-chain))
+              (eport (current-error-port)))
+          (print-error-message exn)
+          (let ((lst (chain exn)))
+            (for-each
+             (lambda (v)
+               (display (vector-ref v 0) eport)
+               (newline eport))
+             lst))
+          (fatal "exited due to uncaught exception.")))
+       ((eplan? exn)
+        (let* ((prop  (lambda (sym) (condition-property-accessor 'plan-failure sym)))
+               (plan  ((prop 'plan) exn))
+               (child ((prop 'child) exn)))
+          (info "plan" (plan-name plan) "encountered a fatal error:")
+          (fatal-plan-failure child)))
+       (else (begin
+		           (print-error-message exn)
+		           (fatal "fatal error; exited")))))))
 
 ;; fork+exec, wait for the process to exit and check
 ;; that it exited successfully
@@ -463,12 +462,12 @@
 (define (with-new-jobserver thunk)
   (let ((js (fdpipe)))
     (with-cleanup
-      (lambda ()
-        (fdclose (car js))
-        (fdclose (cadr js)))
-      (lambda ()
-        (parameterize ((current-jobserver js))
-          (thunk))))))
+     (lambda ()
+       (fdclose (car js))
+       (fdclose (cadr js)))
+     (lambda ()
+       (parameterize ((current-jobserver js))
+         (thunk))))))
 
 (: jobserver+ (fixnum -> *))
 (define (jobserver+ n)
@@ -484,16 +483,16 @@
              (buf   (make-string n))
              (ret   (fdread rfd buf)))
         (cond
-          ((fx= ret 0) (error "pipe: EOF"))
-          ((fx< ret 0) (error "errno:" (- ret)))
-          (else        (jobserver- (fx- n ret)))))))
+         ((fx= ret 0) (error "pipe: EOF"))
+         ((fx< ret 0) (error "errno:" (- ret)))
+         (else        (jobserver- (fx- n ret)))))))
 
 (: call-with-job ((-> 'a) -> 'a))
 (define (call-with-job proc)
   (jobserver- 1)
   (with-cleanup
-    (lambda () (jobserver+ 1))
-    proc))
+   (lambda () (jobserver+ 1))
+   proc))
 
 ;; perform an elaborate chroot into 'root'
 ;; and then run '/build' inside that new
@@ -504,21 +503,21 @@
   (let ((bwrap "/usr/bin/bwrap") ;; FIXME
         (js    (current-jobserver))
         (args  (list
-                 "--unshare-ipc"
-                 "--unshare-pid"
-                 "--unshare-uts"
-                 "--unshare-cgroup-try"
-                 "--unshare-net"
-                 "--hostname" "builder"
-                 "--bind" root "/"  ; rootfs containing host tools
-                 "--dir" "/dev"
-                 "--dir" "/proc"
-                 "--dir" "/tmp"
-                 "--dev" "/dev"
-                 "--proc" "/proc"
-                 "--tmpfs" "/tmp"
-                 "--"
-                 "/build"))
+                "--unshare-ipc"
+                "--unshare-pid"
+                "--unshare-uts"
+                "--unshare-cgroup-try"
+                "--unshare-net"
+                "--hostname" "builder"
+                "--bind" root "/"       ; rootfs containing host tools
+                "--dir" "/dev"
+                "--dir" "/proc"
+                "--dir" "/tmp"
+                "--dev" "/dev"
+                "--proc" "/proc"
+                "--tmpfs" "/tmp"
+                "--"
+                "/build"))
         ;; DO NOT CHANGE THIS LIGHTLY:
         ;; it may cause builds to fail
         ;; to reproduce!
@@ -533,31 +532,31 @@
                         (file-close fromfd))))))
     (let-values (((pid ok status)
                   (process-wait/yield
-                    (process-fork
-                      (lambda ()
-                        ;; any exceptions in here should immediately exit
-                        (current-exception-handler (lambda (exn)
-						     (print-error-message exn)
-                                                     (fatal "(execing bwrap):" exn)))
-                        (setfd! 6 (cadr js))
-                        (setfd! 5 (car js))
-                        (setfd! fileno/stdin (file-open "/dev/null" open/rdonly))
-                        ;; can't use fdpipe here because we need a *blocking* pipe;
-                        (let-values (((rd wr) (create-pipe)))
-                          (process-fork
-			   (lambda ()
-			     (current-exception-handler
-			      (lambda (exn)
-				(print-error-message exn)
-				(fatal "(execing zstd):" exn)))
-			     (for-each file-close '(5 6))
-			     (file-close wr)
-			     (setfd! fileno/stdin rd)
-			     (process-execute "zstd" (list "-q" "-" "-o" logfile))))
-                          (file-close rd)
-                          (setfd! fileno/stdout wr))
-                        (duplicate-fileno fileno/stdout fileno/stderr)
-                        (process-execute bwrap args env))))))
+                   (process-fork
+                    (lambda ()
+                      ;; any exceptions in here should immediately exit
+                      (current-exception-handler (lambda (exn)
+						                                       (print-error-message exn)
+                                                   (fatal "(execing bwrap):" exn)))
+                      (setfd! 6 (cadr js))
+                      (setfd! 5 (car js))
+                      (setfd! fileno/stdin (file-open "/dev/null" open/rdonly))
+                      ;; can't use fdpipe here because we need a *blocking* pipe;
+                      (let-values (((rd wr) (create-pipe)))
+                        (process-fork
+			                   (lambda ()
+			                     (current-exception-handler
+			                      (lambda (exn)
+				                      (print-error-message exn)
+				                      (fatal "(execing zstd):" exn)))
+			                     (for-each file-close '(5 6))
+			                     (file-close wr)
+			                     (setfd! fileno/stdin rd)
+			                     (process-execute "zstd" (list "-q" "-" "-o" logfile))))
+                        (file-close rd)
+                        (setfd! fileno/stdout wr))
+                      (duplicate-fileno fileno/stdout fileno/stderr)
+                      (process-execute bwrap args env))))))
       (or (and ok (= status 0))
           (error "sandbox build failed")))))
 
@@ -773,42 +772,42 @@
 (: plan->outputs! (vector -> artifact))
 (define (plan->outputs! p)
   (with-tmpdir
-    (lambda (root)
-      (define outdir (filepath-join root "out"))
-      (create-directory outdir #t)
-      (for-each
-       (lambda (in)
-	 (let ((art (input-resolve! in))
-	       (dir (input-basedir in)))
-	   (unpack! art (filepath-join root dir))))
-       (plan-inputs p))
+   (lambda (root)
+     (define outdir (filepath-join root "out"))
+     (create-directory outdir #t)
+     (for-each
+      (lambda (in)
+	      (let ((art (input-resolve! in))
+	            (dir (input-basedir in)))
+	        (unpack! art (filepath-join root dir))))
+      (plan-inputs p))
 
-      (infoln "building")
-      (let ((outfile (filepath-join
-                       (plan-dir) (plan-hash p)
-                       (string-append "build@" (tai64n->string (tai64n-now)) ".log.zst"))))
-        ;; if /build fails, put the build log
-        ;; into the current directory with a friendly name
-        (push-exception-wrapper
-          (lambda (exn)
-            (let ((linkname (filepath-join
-                              (current-directory)
-                              (string-append (plan-name p)
-					     "-" (short-hash (plan-hash p))
-					     ".log.zst"))))
-	      (delete-file* linkname) ;; delete old link if it exists
-              (create-symbolic-link outfile linkname)
-              (infoln "build failed; please see" linkname)))
-          (lambda ()
-            (or
-	     (plan-null-build? p)
-	     (sandbox-run root outfile)))))
+     (infoln "building")
+     (let ((outfile (filepath-join
+                     (plan-dir) (plan-hash p)
+                     (string-append "build@" (tai64n->string (tai64n-now)) ".log.zst"))))
+       ;; if /build fails, put the build log
+       ;; into the current directory with a friendly name
+       (push-exception-wrapper
+        (lambda (exn)
+          (let ((linkname (filepath-join
+                           (current-directory)
+                           (string-append (plan-name p)
+					                                "-" (short-hash (plan-hash p))
+					                                ".log.zst"))))
+	          (delete-file* linkname) ;; delete old link if it exists
+            (create-symbolic-link outfile linkname)
+            (infoln "build failed; please see" linkname)))
+        (lambda ()
+          (or
+	         (plan-null-build? p)
+	         (sandbox-run root outfile)))))
 
-      ;; now save the actual build outputs
-      (let ((raw (plan-raw-output p)))
-        (if raw
-          (file->artifact (filepath-join outdir raw) raw)
-          (dir->artifact outdir))))))
+     ;; now save the actual build outputs
+     (let ((raw (plan-raw-output p)))
+       (if raw
+           (file->artifact (filepath-join outdir raw) raw)
+           (dir->artifact outdir))))))
 
 ;; for-each-anchor traverses a list of plans and artifacts
 ;; and recursively applies (proc artifact) to each artifact
@@ -817,100 +816,100 @@
   (define ht (make-hash-table hash: string-hash test: string=?))
   (define pl (make-hash-table hash: eq?-hash test: eq?))
   (letrec ((walk (lambda (item)
-		   (if (artifact? item)
-		       (or (hash-table-ref/default ht (artifact-hash item) #f)
-			   (begin
-			     (hash-table-set! ht (artifact-hash item) #t)
-			     (proc item)))
-		       (or (hash-table-ref/default pl item #f)
-			   (begin
-			     (hash-table-set! pl item #t)
-			     (for-each (o walk input-link) (plan-inputs item))))))))
+		               (if (artifact? item)
+		                   (or (hash-table-ref/default ht (artifact-hash item) #f)
+			                     (begin
+			                       (hash-table-set! ht (artifact-hash item) #t)
+			                       (proc item)))
+		                   (or (hash-table-ref/default pl item #f)
+			                     (begin
+			                       (hash-table-set! pl item #t)
+			                       (for-each (o walk input-link) (plan-inputs item))))))))
     (for-each walk plst)))
 
 (: build-graph! ((list-of vector) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
   (let* ((duration       (lambda (from to)
-			   (string-append
-			    (number->string (exact->inexact (/ (- to from) 1000))) "s")))
-	 (plan->proc     (make-hash-table test: eq? hash: eq?-hash))
+			                     (string-append
+			                      (number->string (exact->inexact (/ (- to from) 1000))) "s")))
+	       (plan->proc     (make-hash-table test: eq? hash: eq?-hash))
          (hash->plan     (make-hash-table test: string=? hash: string-hash))
          (err            #f)
-	 (built?         (lambda (plan)
-			   (and-let* ((out (plan-outputs plan)))
-			     (file-exists? (artifact-path out)))))
-	 (done+ok?       (lambda (proc)
-			   (let* ((ret (join/value proc))
-				  (st  (proc-status proc)))
-			     (and (not (eq? st 'exn)) ret))))
-	 ;; for a given plan hash, we should only issue one build;
-	 ;; we use hash->plan to deduplicate equivalent builds
+	       (built?         (lambda (plan)
+			                     (and-let* ((out (plan-outputs plan)))
+			                       (file-exists? (artifact-path out)))))
+	       (done+ok?       (lambda (proc)
+			                     (let* ((ret (join/value proc))
+				                          (st  (proc-status proc)))
+			                       (and (not (eq? st 'exn)) ret))))
+	       ;; for a given plan hash, we should only issue one build;
+	       ;; we use hash->plan to deduplicate equivalent builds
          (sibling?        (lambda (p)
-			    (let* ((hash   (plan-hash p))
-				   (winner (hash-table-update!/default hash->plan hash identity p)))
-                             (if (eq? p winner) #f winner)))))
+			                      (let* ((hash   (plan-hash p))
+				                           (winner (hash-table-update!/default hash->plan hash identity p)))
+                              (if (eq? p winner) #f winner)))))
     (define (build-proc p)
       (or (hash-table-ref/default plan->proc p #f)
-	  ;; even though this yields to the child,
-	  ;; it guarantees that this plan->proc entry
-	  ;; is visible before other procs are scheduled
-	  (with-spawn
-	   build-one!
-	   (list p)
-	   (lambda (box)
-	     (hash-table-set! plan->proc p box)))))
+	        ;; even though this yields to the child,
+	        ;; it guarantees that this plan->proc entry
+	        ;; is visible before other procs are scheduled
+	        (with-spawn
+	         build-one!
+	         (list p)
+	         (lambda (box)
+	           (hash-table-set! plan->proc p box)))))
     (define (build-one! p)
       (push-exception-wrapper
-        (lambda (exn)
-          (plan-exn p exn))
-        (lambda ()
-          (and
-	   ;; start all dependencies and ensure they complete ok
-	   (andmap1 done+ok? (map-unresolved p build-proc))
-	   (not err)
-	   (cond
-	    ;; if we've built this before, we're done
-	    ((built? p) #t)
-	    ;; if this plan isn't unique, its exit status
-	    ;; should be equivalent to that of its identical twin
-	    ((sibling? p) => done+ok?)
-	    (else
-	     (parameterize ((info-prefix (string-append (plan-name p) "-" (short-hash (plan-hash p)) " |")))
-	       (infoln "queued")
-	       (let ((qtime (current-milliseconds)))
-		 (call-with-job
-		  (lambda ()
-		    (let ((stime (current-milliseconds)))
-		      (infoln "starting; queued" (duration qtime stime))
-		      (save-plan-outputs! p (plan->outputs! p))
-		      (infoln "completed; ran" (duration stime (current-milliseconds))))
-		    #t))))))))))
+       (lambda (exn)
+         (plan-exn p exn))
+       (lambda ()
+         (and
+	        ;; start all dependencies and ensure they complete ok
+	        (andmap1 done+ok? (map-unresolved p build-proc))
+	        (not err)
+	        (cond
+	         ;; if we've built this before, we're done
+	         ((built? p) #t)
+	         ;; if this plan isn't unique, its exit status
+	         ;; should be equivalent to that of its identical twin
+	         ((sibling? p) => done+ok?)
+	         (else
+	          (parameterize ((info-prefix (string-append (plan-name p) "-" (short-hash (plan-hash p)) " |")))
+	            (infoln "queued")
+	            (let ((qtime (current-milliseconds)))
+		            (call-with-job
+		             (lambda ()
+		               (let ((stime (current-milliseconds)))
+		                 (infoln "starting; queued" (duration qtime stime))
+		                 (save-plan-outputs! p (plan->outputs! p))
+		                 (infoln "completed; ran" (duration stime (current-milliseconds))))
+		               #t))))))))))
     (with-new-jobserver
      (lambda ()
        (jobserver+ maxprocs)
        ;; for each (unbuilt) explicit package, spawn
        ;; a build coroutine, and then wait for all of them
        (for-each
-	join/value
-	(foldl1
-	 (lambda (in lst)
-	   (if (and (plan? in) (not (built? in)))
-	       (cons (build-proc in) lst)
+	      join/value
+	      (foldl1
+	       (lambda (in lst)
+	         (if (and (plan? in) (not (built? in)))
+	             (cons (build-proc in) lst)
+	             lst))
+	       '()
 	       lst))
-	 '()
-	 lst))
        ;; now ensure that every plan has exited,
        ;; and determine if we encountered any errors
        (let loop ((err #f)
-		  (lst (hash-table-values plan->proc)))
-	 (if (null? lst)
-	     (if err (fatal-plan-failure err) #t)
-	     (let ((head (car lst)))
-	       (let* ((ret    (join/value head))
-		      (threw? (eq? (proc-status head) 'exn)))
-		 (loop
-		  (or err (and threw? ret))
-		  (cdr lst))))))))))
+		              (lst (hash-table-values plan->proc)))
+	       (if (null? lst)
+	           (if err (fatal-plan-failure err) #t)
+	           (let ((head (car lst)))
+	             (let* ((ret    (join/value head))
+		                  (threw? (eq? (proc-status head) 'exn)))
+		             (loop
+		              (or err (and threw? ret))
+		              (cdr lst))))))))))
 
 ;; build-plan! unconditionally builds a plan
 ;; and produces its output artifact
@@ -921,11 +920,11 @@
     (error "called build-plan! on unresolved plan"))
   (infoln "building" (plan-name top) "-" (short-hash (plan-hash top)))
   (with-new-jobserver
-    (lambda ()
-      (let ((np (nproc)))
-        (when (> np 1)
-          (jobserver+ (- np 1)))
-        (plan->outputs! top)))))
+   (lambda ()
+     (let ((np (nproc)))
+       (when (> np 1)
+         (jobserver+ (- np 1)))
+       (plan->outputs! top)))))
 
 ;; load-plan loads an old plan from the plan directory
 ;;
@@ -936,31 +935,31 @@
 (: load-plan (string -> vector))
 (define (load-plan hash)
   (let* ((label   (with-input-from-file
-                    (filepath-join (plan-dir) hash "label")
+                      (filepath-join (plan-dir) hash "label")
                     read-string))
          (vinput  (with-input-from-file
-                    (filepath-join (artifact-dir) hash)
+                      (filepath-join (artifact-dir) hash)
                     read))
          (voutput (let ((fp (filepath-join (plan-dir) hash "outputs.scm")))
                     (if (file-exists? fp)
-                      (with-input-from-file fp read)
-                      #f)))
+                        (with-input-from-file fp read)
+                        #f)))
          (vec->in (lambda (v)
-		    (make-input
-		     basedir: (vector-ref v 0)
-		     link: (vector
-			    (vector-ref v 1) (vector-ref v 2) #f))))
+		                (make-input
+		                 basedir: (vector-ref v 0)
+		                 link: (vector
+			                      (vector-ref v 1) (vector-ref v 2) #f))))
          (inputs  (map vec->in vinput))
          (plan    (make-plan
-                    name:   label
-                    inputs: inputs
-                    saved-output: voutput
-                    ;; if the original build had a raw output, then
-                    ;; use the same output file name
-                    ;; to retain reproducibility
-                    raw-output: (and voutput
-                                  (let ((format (artifact-format voutput)))
-                                    (and (eq? (vector-ref format 0) 'file) (vector-ref format 1))))))
+                   name:   label
+                   inputs: inputs
+                   saved-output: voutput
+                   ;; if the original build had a raw output, then
+                   ;; use the same output file name
+                   ;; to retain reproducibility
+                   raw-output: (and voutput
+                                    (let ((format (artifact-format voutput)))
+                                      (and (eq? (vector-ref format 0) 'file) (vector-ref format 1))))))
          (newhash (plan-hash plan)))
     (unless (string=? newhash hash)
       (error "loaded plan has different hash:" newhash))
