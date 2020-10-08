@@ -178,8 +178,8 @@
 
 (define *musl-url*
   "https://www.musl-libc.org/releases/musl-$version.tar.gz")
-(define *musl-version* "1.2.0")
-(define *musl-hash* "-DtKaw1hxYkV_hURoMR-00bA9TPByU0RITAnt9ELLls=")
+(define *musl-version* "1.2.1")
+(define *musl-hash* "sw1MSXLr0ImjAIyeZvc3FLJiB0yFLh80eu8BGuQ12WM=")
 
 (define (musl-arch-name triple)
   (let ((arch (triple->arch triple)))
@@ -276,16 +276,16 @@
 
 (define libmpfr
   (cmmi-package
-   "mpfr" "4.0.2"
+   "mpfr" "4.1.0"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.bz2"
-   "wKuAJV_JEeh560Jgqo8Iub6opUuqOKFfQATGEJ2F3ek="
+   "72Rb7WvnPA9a0c4r-UdkHoHqzubqlKae8x40RrGulfM="
    libs: (list libgmp)))
 
 (define libmpc
   (cmmi-package
-   "mpc" "1.1.0"
+   "mpc" "1.2.0"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "2lH9nuHFlFtOyT_jc5k4x2CHCtir_YwwX9mg6xoGuTc="
+   "3MXNkST2WkPuntknubd9CJdkEuuWsVXJITtFP4MBHYs="
    libs: (list libgmp libmpfr)))
 
 (define %bzip2
@@ -330,8 +330,8 @@
 
 (define libexecline+tools
   (ska-cmmi-package
-   "execline" "2.6.1.0"
-   "NX42vfXT0Fuh7CeNeED4Uq49S7qgdebywTOWvO2xC8s="
+   "execline" "2.6.1.1"
+   "uT3m68KBynOnxZHVGfu3ZjXV1ODRVSNNNfF7HrJEqEI="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
 		                  --enable-pedantic-posix
@@ -342,16 +342,16 @@
 
 (define byacc
   (cmmi-package
-   "byacc" "20200330"
+   "byacc" "20200910"
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-   "FTAMi_kKoQy3LVJS7qBVMo-rrgG5IlzUK10JGTUaq7c="
+   "W8Cw05mawBuSJTA0VGhVlFW0dmI0pR6dcOUxqeUnZLI="
    extra-configure: '(--enable-btyacc)))
 
 (define reflex
   (cmmi-package
-   "reflex" "20191123"
+   "reflex" "20200715"
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-   "SsgYKYUlYwedhJWxTvBAO2hdfrAMJ8mNpFjuIveGpSo="
+   "xopKaaL7wprugSHJBnTvdmfSwb7qZfG-0_5KhtYnx1Q="
    tools: (list byacc)
    ;; install flex(1) and lex(1) symlinks
    cleanup: (elif*
@@ -391,9 +391,9 @@
   (memoize-eq
    (lambda (target-triple)
      (cmmi-package
-      "binutils" "2.34"
+      "binutils" "2.35"
       "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-      "laZMIwGW3GAXUFMyvWCaHwBwgnojWVXGE94gWH164A4="
+      "T4QnOCw-pixGZ40MF5PY_yQuLVmiUB_PX065is3HXgM="
       tools: (list byacc reflex)
       libs:  (list zlib)
       native-cc: $cc-env/for-build
@@ -550,10 +550,9 @@
 
 (define (busybox/config config-path extra-inputs)
   (cc-package
-   "busybox" "1.31.1"
+   "busybox" "1.32.0"
    "https://busybox.net/downloads/$name-$version.tar.bz2"
-   "JqkfZAknGWBuXj1sPLwftVaH05I5Hb2WusYrYuO-sJk="
-   patches:   (patchfiles* "patches/busybox/busybox-bc.patch")
+   "huLCgRsdLYg2mHLwb9_ogCACO_d0SuJXKKeqSk15XII="
    extra-src: (list (bind config-path "/src/config.head"))
    libs:      extra-inputs
    tools:     (list bzip2)
