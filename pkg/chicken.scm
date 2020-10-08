@@ -44,50 +44,50 @@
    "https://code.call-cc.org/releases/$version/$name-$version.tar.gz"
    "M4edTDnvYOsgcWLxIoMpBTE0bXpG3wS3BmfiHiJ9_uA="
    build: (let* ((native  (lambda (kw)
-			    (lambda (conf)
-			      (kref (cc-toolchain-env ($native-toolchain conf)) kw))))
-		 ($nat-cc      (native CC:))
-		 ($nat-cflags  (native CFLAGS:))
-		 ($nat-ldflags (native LDFLAGS:))
-		 ($nat-cxx     (native CXX:))
-		 ($nat-ar      (native AR:))
-		 ($cflags (lambda (conf)
-			    (append (without '(-fstack-protector
-					       -fstack-protector-strong
-					       -fstack-protector-all
-					       -Os -Og -O0 -O1 -O2 -O3)
-					     ($CFLAGS conf))
-				    '(-fno-strict-aliasing -fwrapv -DHAVE_CHICKEN_CONFIG_H))))
-		 (makeflags `(PREFIX=/usr
-			      STATICBUILD=1
-			      PLATFORM=linux
-			      DESTDIR=/out
-			      OPTIMIZE_FOR_SPEED=1
-			      ;; by default, chicken is built to be a 'native'
-			      ;; chicken, so it builds binaries for the host architecture
-			      ;; using the 'native' C toolchain
-			      ,(el= 'TARGET_C_COMPILER= $nat-cc)
-			      ,(el= 'TARGET_CXX_COMPILER= $nat-cxx)
-			      ,(el= 'TARGET_LIBRARIAN= $nat-ar)
-			      ,(el= 'TARGET_LINKER_OPTIONS= $nat-ldflags)
-			      ;; TODO: these command-line arguments
-			      ;; will only work with GCC and clang;
-			      ;; I don't think chicken will build with anything else anyhow...
-			      ,(el= 'TARGET_C_COMPILER_OPTIONS= $nat-cflags '-fno-strict-aliasing '-fwrapv '-DHAVE_CHICKEN_CONFIG_H)
-			      "LINKER_EXECUTABLE_OPTIONS=-static-pie -L."))
-		 (overrides (list
-			     (el= 'ARCH= $chicken-arch)
-			     (el= 'C_COMPILER= $CC)
-			     (el= 'CXX_COMPILER= $CXX)
-			     (el= 'LIBRARIAN= $AR)
-			     (el= 'LIBRARIAN_OPTIONS= $ARFLAGS)
-			     (el= 'C_COMPILER_OPTIONS= $cflags)
-			     (el= 'LINKER_OPTIONS= $LDFLAGS))))
-	    (elif*
-	     `(make ,@makeflags ,@overrides chicken-config.h)
-	     `(make ,@makeflags ,@overrides ,@targets)
-	     `(make ,@makeflags ,@overrides ,@install)
-	     '(rm -rf /out/usr/share)))))
+			                      (lambda (conf)
+			                        (kref (cc-toolchain-env ($native-toolchain conf)) kw))))
+		             ($nat-cc      (native CC:))
+		             ($nat-cflags  (native CFLAGS:))
+		             ($nat-ldflags (native LDFLAGS:))
+		             ($nat-cxx     (native CXX:))
+		             ($nat-ar      (native AR:))
+		             ($cflags (lambda (conf)
+			                      (append (without '(-fstack-protector
+					                                     -fstack-protector-strong
+					                                     -fstack-protector-all
+					                                     -Os -Og -O0 -O1 -O2 -O3)
+					                                   ($CFLAGS conf))
+				                            '(-fno-strict-aliasing -fwrapv -DHAVE_CHICKEN_CONFIG_H))))
+		             (makeflags `(PREFIX=/usr
+			                        STATICBUILD=1
+			                        PLATFORM=linux
+			                        DESTDIR=/out
+			                        OPTIMIZE_FOR_SPEED=1
+			                        ;; by default, chicken is built to be a 'native'
+			                        ;; chicken, so it builds binaries for the host architecture
+			                        ;; using the 'native' C toolchain
+			                        ,(el= 'TARGET_C_COMPILER= $nat-cc)
+			                        ,(el= 'TARGET_CXX_COMPILER= $nat-cxx)
+			                        ,(el= 'TARGET_LIBRARIAN= $nat-ar)
+			                        ,(el= 'TARGET_LINKER_OPTIONS= $nat-ldflags)
+			                        ;; TODO: these command-line arguments
+			                        ;; will only work with GCC and clang;
+			                        ;; I don't think chicken will build with anything else anyhow...
+			                        ,(el= 'TARGET_C_COMPILER_OPTIONS= $nat-cflags '-fno-strict-aliasing '-fwrapv '-DHAVE_CHICKEN_CONFIG_H)
+			                        "LINKER_EXECUTABLE_OPTIONS=-static-pie -L."))
+		             (overrides (list
+			                       (el= 'ARCH= $chicken-arch)
+			                       (el= 'C_COMPILER= $CC)
+			                       (el= 'CXX_COMPILER= $CXX)
+			                       (el= 'LIBRARIAN= $AR)
+			                       (el= 'LIBRARIAN_OPTIONS= $ARFLAGS)
+			                       (el= 'C_COMPILER_OPTIONS= $cflags)
+			                       (el= 'LINKER_OPTIONS= $LDFLAGS))))
+	          (elif*
+	           `(make ,@makeflags ,@overrides chicken-config.h)
+	           `(make ,@makeflags ,@overrides ,@targets)
+	           `(make ,@makeflags ,@overrides ,@install)
+	           '(rm -rf /out/usr/share)))))
 
 (define chicken
   (%chicken-src "chicken" '(all) '(install)))
@@ -97,13 +97,13 @@
 
 (define ($chicken-features conf)
   (let ((real-features (case ($arch conf)
-			 ((x86_64)  '(64bit little-endian x86-64))
-			 ((aarch64) '(64bit little-endian arm64 aarch64))
-			 ((armv7 armv6) '(32bit little-endian arm))
-			 ((ppc64)   '(64bit big-endian ppc64))
-			 ((ppc64le) '(64bit little-endian ppc64le))))
-	(clear-features '(64bit 32bit big-endian little-endian
-				x86-64 aarch64 x32 i386 arm ppc64)))
+			                   ((x86_64)  '(64bit little-endian x86-64))
+			                   ((aarch64) '(64bit little-endian arm64 aarch64))
+			                   ((armv7 armv6) '(32bit little-endian arm))
+			                   ((ppc64)   '(64bit big-endian ppc64))
+			                   ((ppc64le) '(64bit little-endian ppc64))))
+	      (clear-features '(64bit 32bit big-endian little-endian
+				                        x86-64 aarch64 x32 i386 arm ppc64)))
     (list
      "-no-feature" (join-with "," (without real-features clear-features))
      "-feature" (join-with "," real-features))))
@@ -114,53 +114,53 @@
 ;; be cross-compiled correctly
 (define (chicken-wrappers conf)
   (let* ((real-features (case ($arch conf)
-			    ((x86_64)
-			     '(64bit little-endian x86-64))
-			    ((aarch64)
-			     '(64bit little-endian arm64 aarch64))
-			    ((armv7)
-			     '(32bit litte-endian arm))
-			    ((ppc64)
-			     '(64bit big-endian ppc64))
-			    ((ppc64le)
-			     '(64bit little-endian ppc64le))))
-	 (clear-features '(64bit 32bit big-endian little-endian x86-64 aarch64 x32 i386 arm ppc64))
-	 (fscript        (interned
-			  (conc "/usr/lib/chicken/" ($triple conf) "-features.scm")
-			  #o644
-			  (with-output-to-string
-			    (lambda ()
-			      (write `((import (chicken platform))
-				       (unregister-feature! ,@clear-features)
-				       (register-feature! ,@real-features)))))))
-	 (splat*         (lambda (flag lst)
-			   (let loop ((lst lst))
-			     (if (null? lst)
-				 lst
-				 (cons flag (cons (car lst)
-						  (loop (cdr lst))))))))
-	 (csc-opts       `(-cc ,($CC conf)
-			       ,@(splat* '-C ($CFLAGS conf))
-			       -ld ,($CC conf) ;; chicken wants LD=CC
-			       ,@(splat* '-L ($LDFLAGS conf))
-			       ,@(splat* '-no-feature (without real-features clear-features))
-			       ,@(splat* '-feature real-features)))
-	 (csc-script     (interned
-			  (conc "/usr/bin/" ($triple conf) "-csc")
-			  #o755
-			  (lambda ()
-			    (write-exexpr
-			     `(export CSC_OPTIONS ,(join-with " " csc-opts)
-				      csc "$@")
-			     shebang: "#!/bin/execlineb -s0"))))
-	 (ckn-install    (interned
-			  (conc "/usr/bin/" ($triple conf) "-chicken-install")
-			  #o755
-			  (lambda ()
-			    (write-exexpr
-			     `(export CSC_OPTIONS ,(join-with " " csc-opts)
-				      chicken-install "$@")
-			     shebang: "#!/bin/execlineb -s0")))))
+			                    ((x86_64)
+			                     '(64bit little-endian x86-64))
+			                    ((aarch64)
+			                     '(64bit little-endian arm64 aarch64))
+			                    ((armv7 armv6)
+			                     '(32bit litte-endian arm))
+			                    ((ppc64)
+			                     '(64bit big-endian ppc64))
+			                    ((ppc64le)
+			                     '(64bit little-endian ppc64))))
+	       (clear-features '(64bit 32bit big-endian little-endian x86-64 aarch64 x32 i386 arm ppc64))
+	       (fscript        (interned
+			                    (conc "/usr/lib/chicken/" ($triple conf) "-features.scm")
+			                    #o644
+			                    (with-output-to-string
+			                      (lambda ()
+			                        (write `((import (chicken platform))
+				                               (unregister-feature! ,@clear-features)
+				                               (register-feature! ,@real-features)))))))
+	       (splat*         (lambda (flag lst)
+			                     (let loop ((lst lst))
+			                       (if (null? lst)
+				                         lst
+				                         (cons flag (cons (car lst)
+						                                      (loop (cdr lst))))))))
+	       (csc-opts       `(-cc ,($CC conf)
+			                         ,@(splat* '-C ($CFLAGS conf))
+			                         -ld ,($CC conf) ;; chicken wants LD=CC
+			                         ,@(splat* '-L ($LDFLAGS conf))
+			                         ,@(splat* '-no-feature (without real-features clear-features))
+			                         ,@(splat* '-feature real-features)))
+	       (csc-script     (interned
+			                    (conc "/usr/bin/" ($triple conf) "-csc")
+			                    #o755
+			                    (lambda ()
+			                      (write-exexpr
+			                       `(export CSC_OPTIONS ,(join-with " " csc-opts)
+				                              csc "$@")
+			                       shebang: "#!/bin/execlineb -s0"))))
+	       (ckn-install    (interned
+			                    (conc "/usr/bin/" ($triple conf) "-chicken-install")
+			                    #o755
+			                    (lambda ()
+			                      (write-exexpr
+			                       `(export CSC_OPTIONS ,(join-with " " csc-opts)
+				                              chicken-install "$@")
+			                       shebang: "#!/bin/execlineb -s0")))))
     (list csc-script ckn-install)))
 
 ;; egg defines a package for an egg

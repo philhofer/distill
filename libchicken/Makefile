@@ -191,7 +191,7 @@ irregex.c: irregex.scm irregex-core.scm irregex-utils.scm common-declarations.sc
 		chicken.fixnum.import.scm
 	$(bootstrap-lib) -emit-import-library chicken.irregex
 chicken-syntax.c: chicken-syntax.scm common-declarations.scm mini-srfi-1.scm \
-		chicken.fixnum.import.scm
+		chicken.fixnum.import.scm chicken.internal.import.scm
 	$(bootstrap-lib)
 chicken-ffi-syntax.c: chicken-ffi-syntax.scm common-declarations.scm mini-srfi-1.scm \
 			chicken.format.import.scm
