@@ -9,13 +9,13 @@
 
 (define nftables
   (cmmi-package
-   "nftables" "0.9.4"
+   "nftables" "0.9.6"
    "http://netfilter.org/projects/nftables/files/$name-$version.tar.bz2"
-   "lsLTZSFOMyPnKc_lFJALQ6dW26uU4IPRfk6yksPQZY8="
+   "B3H8OBCu8vsvw6KQYoJtS4tExCPfUhodndQDWlbW8KI="
    env:  '((LIBMNL_LIBS . -lmnl)
-	   (LIBMNL_CFLAGS . -lmnl)
-	   (LIBNFTNL_LIBS . -lnftnl)
-	   (LIBNFTNL_CFLAGS . -lnftnl))
+	         (LIBMNL_CFLAGS . -lmnl)
+	         (LIBNFTNL_LIBS . -lnftnl)
+	         (LIBNFTNL_CFLAGS . -lnftnl))
    libs: (list ncurses jansson libgmp libmnl libnftnl linux-headers)
    tools: (list reflex byacc (interned-symlink "/usr/bin/byacc" "/usr/bin/yacc"))
    extra-configure: '(--disable-man-doc --without-cli --with-json)))
