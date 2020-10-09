@@ -21,30 +21,30 @@
 
 (define python3
   (cmmi-package
-   "Python" "3.8.3"
+   "Python" "3.8.6"
    "https://www.python.org/ftp/python/$version/$name-$version.tar.xz"
-   "Z_6zP2Ej86aY2CuQVgOnHVgpEQlT1QHPuncBzk39ScY="
+   "Qj9Hu3o28YQu7GGxnGI0FDUV8Xeq9v1zSonXFyFNqpw="
    extra-src: (list (bind "patches/python/py-setup" "/src/py-setup"))
    libs: (list ncurses libexpat libressl zlib libbz2 liblzma libffi
-	       linux-headers gdbm libreadline)
+	             linux-headers gdbm libreadline)
    cross: (list
-	   (lambda (conf)
-	     ;; TODO: figure out precisely the conditions under which
-	     ;; the build script requires an external python3 program;
-	     ;; right now we're approximating it as 'build-triple != host-triple'
-	     (if (eq? ($triple conf) ($build-triple conf)) '() (list python3))))
+	         (lambda (conf)
+	           ;; TODO: figure out precisely the conditions under which
+	           ;; the build script requires an external python3 program;
+	           ;; right now we're approximating it as 'build-triple != host-triple'
+	           (if (eq? ($triple conf) ($build-triple conf)) '() (list python3))))
    env:   '((ac_cv_file__dev_ptmx . yes)
-	    (ac_cv_file__dev_ptc . no))
+	          (ac_cv_file__dev_ptc . no))
    prepare: '(cp /src/py-setup Modules/Setup)
    cleanup: '(pipeline (find /out -type d -name __pycache__ -print0)
-		       xargs "-0" rm -rf)
+		                   xargs "-0" rm -rf)
    extra-configure: `(,(elconc '--with-openssl= $sysroot '/usr)
-		       --enable-ipv6
-		       --enable-optimizations=no
-		       --with-computed-gotos
-		       --with-dbmliborder=gdbm
-		       --with-system-expat
-		       --without-ensurepip)
+		                  --enable-ipv6
+		                  --enable-optimizations=no
+		                  --with-computed-gotos
+		                  --with-dbmliborder=gdbm
+		                  --with-system-expat
+		                  --without-ensurepip)
    override-make: (let (($py-cflags (lambda (conf)
-				      (cons '-DTHREAD_STACK_SIZE=0x100000 ($CFLAGS conf)))))
-		    `(,(el= 'EXTRA_CFLAGS= $py-cflags) ,$make-overrides))))
+				                              (cons '-DTHREAD_STACK_SIZE=0x100000 ($CFLAGS conf)))))
+		                `(,(el= 'EXTRA_CFLAGS= $py-cflags) ,$make-overrides))))
