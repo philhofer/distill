@@ -1,8 +1,8 @@
 (import
-  scheme
-  (only (distill base)
-	byacc reflex linux-headers)
-  (distill package))
+ scheme
+ (only (distill base)
+       byacc reflex linux-headers)
+ (distill package))
 
 (define radvd
   (cmmi-package
@@ -13,6 +13,6 @@
    libs: (list linux-headers)
    ;; fix compat issues with byacc:
    prepare: '(sed |-i| -e "/YYERROR_VERBOSE/aextern FILE *yyin;"
-		  -e "s/yyset_in(in);/yyin=in;/"
-		  -e "s/yylex_destroy();/yyin=NULL;/" gram.y)
+                  -e "s/yyset_in(in);/yyin=in;/"
+                  -e "s/yylex_destroy();/yyin=NULL;/" gram.y)
    extra-configure: '(--with-pidfile=/run/radvd.pid)))

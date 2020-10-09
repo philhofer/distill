@@ -1,7 +1,7 @@
 (import
-  scheme
-  (distill package)
-  (distill base))
+ scheme
+ (distill package)
+ (distill base))
 
 (define wget
   (cmmi-package
@@ -11,9 +11,9 @@
    tools: (list perl)
    libs:  (list libressl)
    env:   '((OPENSSL_LIBS . "-lssl -lcrypto")
-	    (OPENSSL_CFLAGS . -lssl))
+            (OPENSSL_CFLAGS . -lssl))
    extra-configure: '(--disable-dependency-tracking
-		      --with-ssl=openssl
-		      --with-openssl
-		      --without-libidn)))
+                      --with-ssl=openssl
+                      --with-openssl
+                      --without-libidn)))
 

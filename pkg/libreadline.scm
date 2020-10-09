@@ -1,8 +1,8 @@
 (import
-  scheme
-  (distill package)
-  (distill base)
-  (pkg ncurses))
+ scheme
+ (distill package)
+ (distill base)
+ (pkg ncurses))
 
 (define libreadline
   (cmmi-package

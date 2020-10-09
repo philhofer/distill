@@ -1,7 +1,7 @@
 (import
-  scheme
-  (chicken time)
-  (distill tai64))
+ scheme
+ (chicken time)
+ (distill tai64))
 
 (include "test-helpers.scm")
 

@@ -1,9 +1,9 @@
 (import
-  scheme
-  (distill hash)
-  (chicken base)
-  (chicken port)
-  (chicken io))
+ scheme
+ (distill hash)
+ (chicken base)
+ (chicken port)
+ (chicken io))
 
 (include "test-helpers.scm")
 
@@ -27,18 +27,18 @@
 (let ((slow (list slow-hash-string slow-hash-string-2 slow-hash-string-3))
       (strs '("" "xyz" "   " "a longer string")))
   (for-each
-    (lambda (str)
-      (for-each
-        (lambda (slow)
-          (test string=? (hash-of str) (slow str)))
-        slow)
-      (test string=? str (with-output-to-string
-			   (lambda ()
-			     (test string=? (hash-of str)
-				   (copy-port+hash
-				    (open-input-string str)
-				    (current-output-port)))))))
-    strs))
+   (lambda (str)
+     (for-each
+      (lambda (slow)
+        (test string=? (hash-of str) (slow str)))
+      slow)
+     (test string=? str (with-output-to-string
+                          (lambda ()
+                            (test string=? (hash-of str)
+                                  (copy-port+hash
+                                   (open-input-string str)
+                                   (current-output-port)))))))
+   strs))
 
 (test-same-file-hashes "hash.scm")
 (display "hash test OK.\n")

@@ -1,11 +1,11 @@
 (define (for-each/intersperse proc lst item)
   (let loop ((lst lst))
     (and (pair? lst)
-	 (let ((head (car lst))
-	       (rest (cdr lst)))
-	   (proc head)
-	   (unless (null? rest) (proc item))
-	   (loop rest)))))
+         (let ((head (car lst))
+               (rest (cdr lst)))
+           (proc head)
+           (unless (null? rest) (proc item))
+           (loop rest)))))
 
 ;; join-with produces a string
 ;; by concatenating each element
@@ -25,13 +25,13 @@
     (lambda ()
       (for-each
        (lambda (rw)
-	 (let ((row (op rw)))
-	   (if (list? row)
-	       (for-each/intersperse
-		display
-		row wsep)
-	       (display row)))
-	 (display lsep))
+         (let ((row (op rw)))
+           (if (list? row)
+               (for-each/intersperse
+                display
+                row wsep)
+               (display row)))
+         (display lsep))
        lst))))
 
 ;; (lines lst) produces a string with each

@@ -1,17 +1,17 @@
 (include "kvector.mod.scm")
 
 (import
-  (chicken condition)
-  (distill kvector))
+ (chicken condition)
+ (distill kvector))
 
 (include "test-helpers.scm")
 
 (define ktd (make-kvector-type
-	     first:
-	     second:
-	     third:
-	     fourth:
-	     fifth:))
+             first:
+             second:
+             third:
+             fourth:
+             fifth:))
 
 (define my-kv? (kvector-predicate ktd))
 (define make-kv (kvector-constructor ktd))
@@ -21,14 +21,14 @@
 
 (define ->odd
   (subvector-constructor
-    ktd
-    first: third: fifth:))
+   ktd
+   first: third: fifth:))
 
 (let* ((args '(first:  0
-               second: 1
-               third:  "hello"
-               fourth: "world"
-               fifth:  #f))
+                       second: 1
+                       third:  "hello"
+                       fourth: "world"
+                       fifth:  #f))
        (kv   (apply make-kv args))
        (kv2  (list->kvector args)))
   (test eq? #t  ((keys/c first: third: fifth:) kv))
@@ -53,25 +53,25 @@
   (test equal?
         (->odd kv)
         (list->kvector
-          (list first: (kref kv first:)
-                third: (kref kv third:)
-                fifth: (kref kv fifth:))))
+         (list first: (kref kv first:)
+               third: (kref kv third:)
+               fifth: (kref kv fifth:))))
   (test equal?
         (kvector* first: 0 third: "HELLO" fifth: #f)
         (->odd kv)))
 
 (define ktd2 (make-kvector-type
-               string:
-               symbol:
-               list:))
+              string:
+              symbol:
+              list:))
 
 (define (throws? thunk)
   (call/cc
-    (lambda (ret)
-      (parameterize ((current-exception-handler (lambda (exn)
-                                                  (ret #t))))
-        (thunk)
-        #f))))
+   (lambda (ret)
+     (parameterize ((current-exception-handler (lambda (exn)
+                                                 (ret #t))))
+       (thunk)
+       #f))))
 
 (define-kvector-type
   ktd2
@@ -83,55 +83,55 @@
 
 (test eq? #t ((kvector-predicate ktd2)
               (make-kv2
-                string: "yes"
-                symbol: 'yes
-                list:   '(x y))))
+               string: "yes"
+               symbol: 'yes
+               list:   '(x y))))
 
 (test equal?
       (make-kv2
-        string: "yes"
-        symbol: 'yes)
+       string: "yes"
+       symbol: 'yes)
       (make-kv2
-        string: "yes"
-        symbol: 'yes
-        list:   '()))
+       string: "yes"
+       symbol: 'yes
+       list:   '()))
 
 (test eq? #t (throws?
-               (lambda ()
-                 (make-kv2
-                   string: #f
-                   symbol: 'yes
-                   list:   '(x y z)))))
+              (lambda ()
+                (make-kv2
+                 string: #f
+                 symbol: 'yes
+                 list:   '(x y z)))))
 (test eq? #t (throws?
-               (lambda ()
-                 (make-kv2
-                   string: "yes"
-                   symbol: "no"
-                   list:   '()))))
+              (lambda ()
+                (make-kv2
+                 string: "yes"
+                 symbol: "no"
+                 list:   '()))))
 
 (let ((similar (kvector*
-                 string: "yes"
-                 symbol: 'foo
-                 list:   '(x y z)
-                 extra:  'bar)))
+                string: "yes"
+                symbol: 'foo
+                list:   '(x y z)
+                extra:  'bar)))
   (test equal?
         (make-kv2
-          string: "yes"
-          symbol: 'foo
-          list:   '(x y z))
+         string: "yes"
+         symbol: 'foo
+         list:   '(x y z))
         (recast ktd2 similar)))
 
 (let ((default (make-kv2
-                 string: "default"
-                 symbol: 'foo
-                 list:   '()))
+                string: "default"
+                symbol: 'foo
+                list:   '()))
       (value   ((kvector-constructor ktd2)
-                 string: "value")))
+                string: "value")))
   (test equal?
         (make-kv2
-          string: "value"
-          symbol: 'foo
-          list:   '())
+         string: "value"
+         symbol: 'foo
+         list:   '())
         (kvector-union! value default)))
 
 (let* ((first  (make-kv2
@@ -139,13 +139,13 @@
                 symbol: 'foo
                 list:   '(a b c)))
        (second (kwith
-                 first
-                 string: (:= "bar")
-                 symbol: (?= 'no)
-                 list:   (+= '(d)))))
+                first
+                string: (:= "bar")
+                symbol: (?= 'no)
+                list:   (+= '(d)))))
   (test equal?
         (make-kv2
-          string: "bar"
-          symbol: 'foo
-          list:   '(a b c d))
+         string: "bar"
+         symbol: 'foo
+         list:   '(a b c d))
         second))

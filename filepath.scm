@@ -125,33 +125,33 @@ static int dsort(const struct dirent **a, const struct dirent **b) {
 (: folddir ((string 'a -> 'a) 'a string -> 'a))
 (define (folddir proc seed path)
   (let-location ((namelist (c-pointer (c-pointer (struct dirent)))))
-    (let* ((scandir (foreign-lambda* int ((nonnull-c-string dirp) (nonnull-c-pointer nl))
-                      "C_return(scandir(dirp,nl,NULL,dsort));"))
-           (entname (foreign-lambda* c-string ((nonnull-c-pointer dirents) (int i))
-                      "C_return(((struct dirent **)dirents)[i]->d_name);"))
-           (freeidx (foreign-lambda* void ((nonnull-c-pointer dirent) (int i))
-                      "free(((struct dirent **)dirent)[i]); ((struct dirent **)dirent)[i]=NULL;"))
-           (free    (foreign-lambda* void ((nonnull-c-pointer dirents))
-                      "free(dirents);"))
-           (entries (scandir path (location namelist))))
-      (if (fx< entries 0)
-          (error "cannot scandir(3) directory" path)
-          (let loop ((i 0)
-                     (out seed))
-            (if (fx>= i entries)
-                (begin
-                  (free namelist)
-                  out)
-                ;; chicken will automatically copy out
-                ;; the c-string contents here, so we
-                ;; are safe to free the dirent as soon
-                ;; as we pull its name out into a
-                ;; scheme string
-                (let* ((str (entname namelist i))
-                       (_   (freeidx namelist i)))
-                  (loop
-                   (fx+ i 1)
-                   (if (or (string=? str ".")
-                           (string=? str ".."))
-                       out
-                       (proc str out))))))))))
+                (let* ((scandir (foreign-lambda* int ((nonnull-c-string dirp) (nonnull-c-pointer nl))
+                                                 "C_return(scandir(dirp,nl,NULL,dsort));"))
+                       (entname (foreign-lambda* c-string ((nonnull-c-pointer dirents) (int i))
+                                                 "C_return(((struct dirent **)dirents)[i]->d_name);"))
+                       (freeidx (foreign-lambda* void ((nonnull-c-pointer dirent) (int i))
+                                                 "free(((struct dirent **)dirent)[i]); ((struct dirent **)dirent)[i]=NULL;"))
+                       (free    (foreign-lambda* void ((nonnull-c-pointer dirents))
+                                                 "free(dirents);"))
+                       (entries (scandir path (location namelist))))
+                  (if (fx< entries 0)
+                      (error "cannot scandir(3) directory" path)
+                      (let loop ((i 0)
+                                 (out seed))
+                        (if (fx>= i entries)
+                            (begin
+                              (free namelist)
+                              out)
+                            ;; chicken will automatically copy out
+                            ;; the c-string contents here, so we
+                            ;; are safe to free the dirent as soon
+                            ;; as we pull its name out into a
+                            ;; scheme string
+                            (let* ((str (entname namelist i))
+                                   (_   (freeidx namelist i)))
+                              (loop
+                               (fx+ i 1)
+                               (if (or (string=? str ".")
+                                       (string=? str ".."))
+                                   out
+                                   (proc str out))))))))))

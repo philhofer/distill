@@ -35,18 +35,18 @@
 
 (define (platform+system->plan plat sys)
   (letrec ((union/eq?  (lambda (a b)
-			 (cond
-			  ((null? a) b)
-			  ((null? b) a)
-			  (else
-			   (let ((fb (car b)))
-			     (union/eq?
-			      (if (memq fb a) a (cons fb a))
-			      (cdr b))))))))
+                         (cond
+                          ((null? a) b)
+                          ((null? b) a)
+                          (else
+                           (let ((fb (car b)))
+                             (union/eq?
+                              (if (memq fb a) a (cons fb a))
+                              (cdr b))))))))
     (let ((pkgs (union/eq? (platform-packages plat)
-			   (system-packages sys)))
-	  (svcs (union/eq? (platform-services plat)
-			   (system-services sys)))
-	  (newimg (platform-mkimage plat))
-	  (expand (expander (platform-config plat))))
+                           (system-packages sys)))
+          (svcs (union/eq? (platform-services plat)
+                           (system-services sys)))
+          (newimg (platform-mkimage plat))
+          (expand (expander (platform-config plat))))
       (expand (newimg plat (union/eq? (services->packages svcs) pkgs))))))

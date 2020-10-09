@@ -127,7 +127,7 @@
               (display "{ }")
               (cont rest indent)))
            ((list? head)
-            (begin	; display a block
+            (begin      ; display a block
               (when nl
                 ;; TODO: this isn't strictly illegal,
                 ;; but I'm not aware of any tools that
@@ -135,19 +135,19 @@
                 (error "unexpected list in head position" head))
               ;; if someone writes '(a b ,c) accidentally,
               ;; bail rather than producing a really strange
-	            ;; execline script
-	            (when (memq (car head) '(quote unquote unquote-splicing quasiquote))
-		            (error "not a deliberate execline form" head))
-	            (display "{\n")
-	            (display (tabs (+ indent 1)))
-	            (loop head (+ indent 1) #t)
-	            (display (tabs indent))
-	            (display "}")
-	            (cont rest indent)))
-	         (else
-	          (begin
-	            (execl-dsp head)
-	            (cont rest indent))))))))
+              ;; execline script
+              (when (memq (car head) '(quote unquote unquote-splicing quasiquote))
+                (error "not a deliberate execline form" head))
+              (display "{\n")
+              (display (tabs (+ indent 1)))
+              (loop head (+ indent 1) #t)
+              (display (tabs indent))
+              (display "}")
+              (cont rest indent)))
+           (else
+            (begin
+              (execl-dsp head)
+              (cont rest indent))))))))
 
 ;; write-exexpr writes an execline expression
 ;; as a script to current-output-port
@@ -265,9 +265,9 @@
          ((pair? head)
           (let ((h (elexpand conf head)))
             (if (and (eq? h head) (eq? rest tail))
-		            lst
-		            (cons h tail))))
-	       (else (error "unexpected form in execline template" head))))))
+                lst
+                (cons h tail))))
+         (else (error "unexpected form in execline template" head))))))
 
 (: eltemplate (list -> procedure))
 (define (eltemplate form)

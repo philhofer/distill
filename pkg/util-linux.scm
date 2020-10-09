@@ -1,10 +1,10 @@
 (import
-  scheme
-  (distill base)
-  (distill package)
-  (only (chicken module) export)
+ scheme
+ (distill base)
+ (distill package)
+ (only (chicken module) export)
 
-  (pkg pkgconf))
+ (pkg pkgconf))
 
 ;; NOTE: many of the binaries produced by util-linux
 ;; will conflict with a busybox install, so you should
@@ -17,11 +17,11 @@
    tools: (list pkgconf)
    libs: (list linux-headers)
    extra-configure: '(--without-python
-		      --without-udev
-		      --disable-nologin
-		      --disable-sulogin
-		      --disable-makeinstall-chown
-		      --disable-makeinstall-setuid)))
+                      --without-udev
+                      --disable-nologin
+                      --disable-sulogin
+                      --disable-makeinstall-chown
+                      --disable-makeinstall-setuid)))
 
 (export sfdisk)
 (define sfdisk

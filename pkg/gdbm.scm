@@ -1,7 +1,7 @@
 (import
-  scheme
-  (distill package)
-  (distill base))
+ scheme
+ (distill package)
+ (distill base))
 
 (define gdbm
   (cmmi-package

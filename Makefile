@@ -46,6 +46,8 @@ include Makefile.dep
 
 distill.plan.c: copy-sparse.c
 distill.hash.c: blake2b-ref.c blake2.h blake2-impl.h
+distill.tai64.c: tai64.inc.h
+distill.coroutine.c: coroutine.inc.h 
 
 %.c %.import.scm: vendor/%.scm
 	$(CHICKEN) $< -unit $* -static $(CHICKEN_FEATURES) $(CHICKEN_FLAGS) \

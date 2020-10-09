@@ -1,9 +1,9 @@
 (import
-  scheme
-  (chicken file)
-  (chicken string)
-  (chicken platform)
-  (chicken pretty-print))
+ scheme
+ (chicken file)
+ (chicken string)
+ (chicken platform)
+ (chicken pretty-print))
 
 (define mod-to-import
   ;; mutable, but these ones we know

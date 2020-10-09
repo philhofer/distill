@@ -1,7 +1,7 @@
 (import
-  scheme
-  (chicken module)
-  (distill package))
+ scheme
+ (chicken module)
+ (distill package))
 
 (export libjq)
 

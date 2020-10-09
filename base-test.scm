@@ -1,16 +1,16 @@
 (import
-  scheme
-  (distill plan)
-  (distill base)
-  (distill package))
+ scheme
+ (distill plan)
+ (distill base)
+ (distill package))
 
 (include "test-helpers.scm")
 
 (define bc (force default-build-config))
 (define tc (default-config
-	     (case *this-machine*
-	       ((x86_64) 'aarch64)
-	       (else 'x86_64))))
+             (case *this-machine*
+               ((x86_64) 'aarch64)
+               (else 'x86_64))))
 (define exb (expander bc))
 (define ext (expander tc))
 

@@ -1,8 +1,8 @@
 (include "test-helpers.scm")
 
 (import
-  scheme
-  (distill memo))
+ scheme
+ (distill memo))
 
 (define-memoized (foo x y) (cons x y))
 

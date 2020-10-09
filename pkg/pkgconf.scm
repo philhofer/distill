@@ -1,6 +1,6 @@
 (import
-  scheme
-  (distill package))
+ scheme
+ (distill package))
 
 (define pkgconf
   (cmmi-package

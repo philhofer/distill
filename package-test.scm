@@ -1,20 +1,20 @@
 (import
-  scheme
-  (distill package))
+ scheme
+ (distill package))
 
 (include "test-helpers.scm")
 
 (let* (($cc     identity)
        ($cflags (lambda (cc)
-		  '(-O2 -fwrapv)))
+                  '(-O2 -fwrapv)))
        (expr    (list
-		 `(CC . ,$cc)
-		 `(CFLAGS . ,$cflags)
-		 `(cmdline ,$cc ,$cflags))))
+                 `(CC . ,$cc)
+                 `(CFLAGS . ,$cflags)
+                 `(cmdline ,$cc ,$cflags))))
   (test equal?
-	'(exportall
-	  (cmdline "gcc -O2 -fwrapv"
-		   CFLAGS "-O2 -fwrapv"
-		   CC "gcc")
-	  echo done)
-	(exports->script "gcc" expr '(echo done))))
+        '(exportall
+          (cmdline "gcc -O2 -fwrapv"
+                   CFLAGS "-O2 -fwrapv"
+                   CC "gcc")
+          echo done)
+        (exports->script "gcc" expr '(echo done))))

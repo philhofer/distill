@@ -1,7 +1,7 @@
 (import
-  scheme
-  (distill execline)
-  (distill plan))
+ scheme
+ (distill execline)
+ (distill plan))
 
 ;; ip-wait is a script for waiting
 ;; until a particular networking-related
@@ -34,20 +34,20 @@
       ;; work around between calling 'ip monitor'
       ;; and 'ip ... show' where the event could happen
       '(piperw
-	3 4
-	background (redirfd
-		    -r 0 /dev/null
-		    fdclose 3
-		    fdmove 1 4
-		    ip monitor "$1")
-	importas |-i| -u mon !
-	fdclose 4
-	pipeline (foreground (ip "$1" show)
-			     fdmove 0 3
-			     cat)
-	importas |-i| -u bg !
-	if (grep -m1 -E "$2")
-	if (kill "$bg")
-	if (kill "$mon")
-	wait |-i| ("$bg" "$mon"))
+        3 4
+        background (redirfd
+                    -r 0 /dev/null
+                    fdclose 3
+                    fdmove 1 4
+                    ip monitor "$1")
+        importas |-i| -u mon !
+        fdclose 4
+        pipeline (foreground (ip "$1" show)
+                             fdmove 0 3
+                             cat)
+        importas |-i| -u bg !
+        if (grep -m1 -E "$2")
+        if (kill "$bg")
+        if (kill "$mon")
+        wait |-i| ("$bg" "$mon"))
       shebang: "#!/bin/execlineb -s2"))))

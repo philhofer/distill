@@ -1,11 +1,11 @@
 (import
-  scheme
-  (distill base)
-  (distill package)
+ scheme
+ (distill base)
+ (distill package)
 
-  (pkg cmake)
-  (pkg libsodium)
-  (pkg pkgconf))
+ (pkg cmake)
+ (pkg libsodium)
+ (pkg pkgconf))
 
 (define minisign
   (cmake-package

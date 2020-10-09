@@ -10,10 +10,10 @@
          (out (make-vector len)))
     (let loop ((i 0))
       (if (fx>= i len)
-        out
-        (begin
-          (vector-set! out i (proc (vector-ref vec i)))
-          (loop (fx+ i 1)))))))
+          out
+          (begin
+            (vector-set! out i (proc (vector-ref vec i)))
+            (loop (fx+ i 1)))))))
 
 (: vector-copy (vector -> vector))
 (define (vector-copy vec)
@@ -28,27 +28,27 @@
   (let loop ((lo 0)
              (hi (vector-length vec)))
     (if (fx>= lo hi)
-      #f
-      (let* ((mid  (fx+ lo (fxshr (fx- hi lo) 1)))
-             (mval (vector-ref vec mid)))
-        (cond
-          ((eq? mval kw)  (fx+ mid 1))
-          ((kw<? mval kw) (loop (fx+ mid 1) hi))
-          (else           (loop lo mid)))))))
+        #f
+        (let* ((mid  (fx+ lo (fxshr (fx- hi lo) 1)))
+               (mval (vector-ref vec mid)))
+          (cond
+           ((eq? mval kw)  (fx+ mid 1))
+           ((kw<? mval kw) (loop (fx+ mid 1) hi))
+           (else           (loop lo mid)))))))
 
 (: kref (vector keyword --> *))
 (define (kref vec kw)
   (let ((idx (kidx (vector-ref vec 0) kw)))
     (if idx
-      (vector-ref vec idx)
-      (error "kref: kvector doesn't use keyword" kw))))
+        (vector-ref vec idx)
+        (error "kref: kvector doesn't use keyword" kw))))
 
 (: kref/default (vector keyword * --> *))
 (define (kref/default vec kw val)
   (let ((idx (kidx (vector-ref vec 0) kw)))
     (if idx
-      (vector-ref vec idx)
-      val)))
+        (vector-ref vec idx)
+        val)))
 
 (: kref* (vector keyword --> *))
 (define (kref* vec kw) (kref/default vec kw #f))
@@ -57,8 +57,8 @@
 (define (kset! vec kw arg)
   (let ((idx (kidx (vector-ref vec 0) kw)))
     (if idx
-      (begin (vector-set! vec idx arg) vec)
-      (error "kset!: kvector doesn't use keyword" kw))))
+        (begin (vector-set! vec idx arg) vec)
+        (error "kset!: kvector doesn't use keyword" kw))))
 
 ;; kupdate performs a functional update of 'vec'
 ;; by producing a copy with the arguments in
@@ -68,23 +68,23 @@
   (let ((cp (vector-copy vec)))
     (let loop ((args args))
       (if (null? args)
-        cp
-        (let ((idx (kidx (vector-ref vec 0) (car args))))
-          (if idx
-            (begin
-              (vector-set! cp idx (cadr args))
-              (loop (cddr args)))
-            (error "kupdate: kvector doesn't use keyword" (car args))))))))
+          cp
+          (let ((idx (kidx (vector-ref vec 0) (car args))))
+            (if idx
+                (begin
+                  (vector-set! cp idx (cadr args))
+                  (loop (cddr args)))
+                (error "kupdate: kvector doesn't use keyword" (car args))))))))
 
 (define (+= . args)
   (lambda (prev)
     (cond
-      ((list? prev)
-       (apply append prev args))
-      ((not prev)
-       (apply append args))
-      (else
-        (cons prev (apply append args))))))
+     ((list? prev)
+      (apply append prev args))
+     ((not prev)
+      (apply append args))
+     (else
+      (cons prev (apply append args))))))
 
 (define (:= x)
   (lambda (arg) x))
@@ -97,13 +97,13 @@
         (kt (vector-ref vec 0)))
     (let loop ((args args))
       (if (null? args)
-        cp
-        (let ((idx (kidx kt (car args))))
-          (if idx
-            (begin
-              (vector-set! cp idx ((cadr args) (vector-ref vec idx)))
-              (loop (cddr args)))
-            (error "kwith: kvector doesn't use keyword" (car args) kt)))))))
+          cp
+          (let ((idx (kidx kt (car args))))
+            (if idx
+                (begin
+                  (vector-set! cp idx ((cadr args) (vector-ref vec idx)))
+                  (loop (cddr args)))
+                (error "kwith: kvector doesn't use keyword" (car args) kt)))))))
 
 ;; kvector-foldl folds (proc key value seed)
 ;; over each field in the kvector
@@ -114,20 +114,20 @@
     (let loop ((j 0)
                (val seed))
       (if (fx>= j len)
-        val
-        (let ((kw (vector-ref kl j))
-              (j  (fx+ j 1)))
-          (loop j (proc kw (vector-ref kv j) val)))))))
+          val
+          (let ((kw (vector-ref kl j))
+                (j  (fx+ j 1)))
+            (loop j (proc kw (vector-ref kv j) val)))))))
 
 ;; kvector-map creates a list from a kvector
 ;; by applying (proc key value) to each kvector key-value pair
 (: kvector-map (vector (keyword * -> 'a) -> (list-of 'a)))
 (define (kvector-map kv proc)
   (kvector-foldl
-    kv
-    (lambda (kw val lst)
-      (cons (proc kw val) lst))
-    '()))
+   kv
+   (lambda (kw val lst)
+     (cons (proc kw val) lst))
+   '()))
 
 ;; kvector->list converts a kvector into a list
 ;; in which the even elements are keywords and
@@ -169,12 +169,12 @@
   (let ((kws (let loop ((out '())
                         (lst lst))
                (if (null? lst)
-                 out
-                 (loop (cons (car lst) out) (cddr lst))))))
+                   out
+                   (loop (cons (car lst) out) (cddr lst))))))
     (let ((typ (apply make-kvector-type kws)))
       (apply
-        (kvector-constructor typ)
-        lst))))
+       (kvector-constructor typ)
+       lst))))
 
 ;; kvector* takes parameters of the form (key: value ...)
 ;; and produces a new kvector
@@ -194,9 +194,9 @@
 (: make-kvector-type (#!rest keyword -> vector))
 (define (make-kvector-type . kws)
   (%canon-vec
-    (let ((vec (list->vector kws)))
-      (sort! vec kw<?)
-      vec)))
+   (let ((vec (list->vector kws)))
+     (sort! vec kw<?)
+     vec)))
 
 ;; kvector-union! takes all of the false fields
 ;; in 'kv' and replaces them with the corresponding
@@ -209,11 +209,11 @@
   (let ((len (vector-length kv)))
     (let loop ((i 1))
       (if (fx>= i len)
-        kv
-        (let ((cell (vector-ref kv i)))
-          (unless cell
-            (vector-set! kv i (vector-ref default i)))
-          (loop (fx+ i 1)))))))
+          kv
+          (let ((cell (vector-ref kv i)))
+            (unless cell
+              (vector-set! kv i (vector-ref default i)))
+            (loop (fx+ i 1)))))))
 
 ;; recast takes a kvector type descriptor and an
 ;; arbitrary kvector and returns a new kvector
@@ -223,17 +223,17 @@
 (: recast (vector vector -> vector))
 (define (recast rtd kv)
   (if (eq? (ktype kv) rtd)
-    kv
-    (let* ((len (vector-length rtd))
-           (new (make-vector (fx+ len 1) #f)))
-      (vector-set! new 0 rtd)
-      (let loop ((i 0))
-        (if (fx>= i len)
-          new
-          (let ((kw (vector-ref rtd i))
-                (i  (fx+ i 1)))
-            (vector-set! new i (kref* kv kw))
-            (loop i)))))))
+      kv
+      (let* ((len (vector-length rtd))
+             (new (make-vector (fx+ len 1) #f)))
+        (vector-set! new 0 rtd)
+        (let loop ((i 0))
+          (if (fx>= i len)
+              new
+              (let ((kw (vector-ref rtd i))
+                    (i  (fx+ i 1)))
+                (vector-set! new i (kref* kv kw))
+                (loop i)))))))
 
 ;; kvector-predicate takes a kvector type
 ;; (from make-kvector-type) and returns
@@ -257,33 +257,33 @@
                        (or (fx>= i ktlen)
                            (let ((c (vector-ref contract i))
                                  (i (fx+ i 1)))
-			     (and (or (not c)
-				      (c (vector-ref out i)))
-				  (loop i))))))))
+                             (and (or (not c)
+                                      (c (vector-ref out i)))
+                                  (loop i))))))))
     (vector-set! template 0 kt)
     (let loop ((args spec))
       (or (null? args)
           (let ((idx (kidx kt (car args)))
                 (val (cadr args))
                 (ok? (caddr args)))
-	    (unless (procedure? ok?)
-	      (error "kvector-constructor: not a contract" ok?))
+            (unless (procedure? ok?)
+              (error "kvector-constructor: not a contract" ok?))
             (vector-set! template idx val)
             (vector-set! contract (fx- idx 1) ok?)
             (loop (cdddr args)))))
     (lambda args
       (let ((vec (vector-copy template)))
-	(let loop ((args args))
-	  (if (null? args)
-	      (if (conform? vec contract)
-		  vec
-		  (error "kvector doesn't conform to spec" spec))
-	      (let ((idx (kidx kt (car args))))
-		(if idx
-		    (begin
-		      (vector-set! vec idx (cadr args))
-		      (loop (cddr args)))
-		    (error "kvector-constructor: keyword not part of kvector:" (car args))))))))))
+        (let loop ((args args))
+          (if (null? args)
+              (if (conform? vec contract)
+                  vec
+                  (error "kvector doesn't conform to spec" spec))
+              (let ((idx (kidx kt (car args))))
+                (if idx
+                    (begin
+                      (vector-set! vec idx (cadr args))
+                      (loop (cddr args)))
+                    (error "kvector-constructor: keyword not part of kvector:" (car args))))))))))
 
 ;; subvector-constructor takes a kvector type
 ;; and a list of keywords and produces a function
@@ -292,9 +292,9 @@
 (define (subvector-constructor kt . kws)
   (let* ((subv (apply make-kvector-type kws))
          (lidx (vector-map
-                 (lambda (kw)
-                   (kidx kt kw))
-                 subv))
+                (lambda (kw)
+                  (kidx kt kw))
+                subv))
          (len  (vector-length subv)))
     (lambda (kv)
       (let* ((len+1 (fx+ len 1))
@@ -302,11 +302,11 @@
         (vector-set! vec 0 subv)
         (let loop ((i 0))
           (if (fx>= i len)
-            vec
-            (let ((e (vector-ref lidx i))
-                  (i (fx+ i 1)))
-              (vector-set! vec i (vector-ref kv e))
-              (loop i))))))))
+              vec
+              (let ((e (vector-ref lidx i))
+                    (i (fx+ i 1)))
+                (vector-set! vec i (vector-ref kv e))
+                (loop i))))))))
 
 ;; kvector/c produces a contract for a kvector
 ;; of the form (kvector/c <type> <key:> <contract> ... )
@@ -342,13 +342,13 @@
                        (let ((kw (vector-ref ktd i))
                              (nx (vector-ref ind j)))
                          (cond
-                           ((not (keyword? nx))
-                            (error "expected a keyword; found:" nx))
-                           ((eq? kw nx)
-                            (loop (fx+ i 1) (fx+ j 1)))
-                           ((kw<? nx kw)
-                            (loop i (fx+ j 1)))
-                           (else #f)))))))))))
+                          ((not (keyword? nx))
+                           (error "expected a keyword; found:" nx))
+                          ((eq? kw nx)
+                           (loop (fx+ i 1) (fx+ j 1)))
+                          ((kw<? nx kw)
+                           (loop i (fx+ j 1)))
+                          (else #f)))))))))))
 
 ;; kvector-getter takes a kvector type (from make-kvector-type)
 ;; and a keyword and returns a function that takes a kvector of
@@ -357,11 +357,11 @@
 (define (kvector-getter kt kw)
   (let ((idx (kidx kt kw)))
     (if idx
-      (lambda (v)
-        (if (eq? (vector-ref v 0) kt)
-          (vector-ref v idx)
-          (error "kvector-getter: bad input type" v)))
-      (error "kvector type does not respond to keyword:" kw))))
+        (lambda (v)
+          (if (eq? (vector-ref v 0) kt)
+              (vector-ref v idx)
+              (error "kvector-getter: bad input type" v)))
+        (error "kvector type does not respond to keyword:" kw))))
 
 ;; kvector-setter takes a kvector type (from make-kvector-type)
 ;; and a keyword and returns a function that takes a kvector
@@ -371,11 +371,11 @@
 (define (kvector-setter kt kw)
   (let ((idx (kidx kt kw)))
     (if idx
-      (lambda (v e)
-        (if (eq? (vector-ref v 0) kt)
-          (vector-set! v idx e)
-          (error "kvector-setter: bad input type" v)))
-      (error "kvector type does not respond to keyword:" kw))))
+        (lambda (v e)
+          (if (eq? (vector-ref v 0) kt)
+              (vector-set! v idx e)
+              (error "kvector-setter: bad input type" v)))
+        (error "kvector type does not respond to keyword:" kw))))
 
 ;; syntactic sugar for defining a kvector type
 (define-syntax define-kvector-type

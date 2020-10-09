@@ -13,13 +13,13 @@
    "ew471MNQaYBYac1Nck9Vzb6hcnWbhLhOu7-MPPPc62A="
    libs: (list libressl libexpat libevent)
    extra-configure: `(--with-username=unbound
-		      --with-run-dir=/etc/unbound
-		      --with-chroot-dir=/etc/unbound
-		      --with-pidfile=
-		      --with-pthreads
-		      ,(elconc '--with-ssl= $sysroot '/usr)
-		      ,(elconc '--with-libexpat= $sysroot '/usr)
-		      --without-pythonmodule
-		      --without-pyunbound)
+                      --with-run-dir=/etc/unbound
+                      --with-chroot-dir=/etc/unbound
+                      --with-pidfile=
+                      --with-pthreads
+                      ,(elconc '--with-ssl= $sysroot '/usr)
+                      ,(elconc '--with-libexpat= $sysroot '/usr)
+                      --without-pythonmodule
+                      --without-pyunbound)
    ;; config comes from service definition
    cleanup: '(rm -rf /out/etc)))

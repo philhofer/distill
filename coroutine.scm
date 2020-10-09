@@ -1,74 +1,6 @@
-(foreign-declare #<<EOF
-#include <stdbool.h>
-#include <stdint.h>
-#include <signal.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <sys/eventfd.h>
-#include <err.h>
-static int chldfd;
-static void handle_sigchld(int sig)
-{
-    int64_t val;
-    int rc;
-
-    val = 1;
-    do {
-        rc = write(chldfd, &val, sizeof(val));
-    } while (rc < 0 && errno == EINTR);
-    /* terribly bad ... */
-    if (rc != sizeof(val)) err(1, "write(eventfd)");
-}
-static int sigchld_handler(void)
-{
-    struct sigaction act;
-    if ((chldfd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK)) < 0)
-        return -errno;
-
-    act = (struct sigaction){
-        .sa_handler = handle_sigchld,
-        .sa_flags = SA_NOCLDSTOP,
-    };
-    if (sigaction(SIGCHLD, &act, NULL) < 0) return -errno;
-    return chldfd;
-}
-static int do_poll(int32_t *rfd, int nrfd, int32_t *wfd, int nwfd, bool block)
-{
-    struct pollfd *pfd;
-    int ret, i;
-
-    pfd = calloc(nrfd+nwfd, sizeof(struct pollfd));
-    if (!pfd) err(1, "out of memory");
-
-    for (i=0; i<nrfd; i++) {
-        pfd[i].fd = rfd[i];
-        pfd[i].events = POLLIN|POLLERR|POLLHUP;
-    }
-    for (i=nrfd; i<nrfd+nwfd; i++) {
-        pfd[i].fd = wfd[i-nrfd];
-        pfd[i].events = POLLOUT|POLLERR|POLLHUP;
-    }
-again:
-    ret = poll(pfd, nrfd+nwfd, block ? -1 : 0);
-    if (!ret) goto done;
-    if (ret < 0) {
-        if ((errno == EAGAIN || errno == EINTR) && block) goto again;
-        ret = block ? -errno : 0;
-        goto done;
-    }
-    for (i=0; i<nrfd; i++) {
-        if (!pfd[i].revents) rfd[i]=-1;
-    }
-    for (i=nrfd; i<nrfd+nwfd; i++) {
-        if (!pfd[i].revents) wfd[i]=-1;
-    }
-done:
-    free(pfd);
-    return ret;
-}
-EOF
-)
+;; some helpers for receiving SIGCHLD
+;; and managing poll() descriptors
+(foreign-declare "#include \"coroutine.inc.h\"")
 
 ;; push 'val' to the end of the queue represented by 'p'
 ;; (where 'p' is a pair and (car p) is the head of a
@@ -78,8 +10,8 @@ EOF
   (let ((tail (cdr p))
         (end  (cons val '())))
     (if (null? tail)
-      (set-car! p end)
-      (set-cdr! tail end))
+        (set-car! p end)
+        (set-cdr! tail end))
     (set-cdr! p end)))
 
 (: queue-pop ((pair (list-of procedure) (list-of procedure)) -> (or procedure false)))
@@ -116,58 +48,58 @@ EOF
                   "C_return(pipe2(pfd, O_NONBLOCK));")
                 vect)))
     (if (fx= ret 0)
-      (list (s32vector-ref vect 0) (s32vector-ref vect 1))
-      (error "pipe2() failed"))))
+        (list (s32vector-ref vect 0) (s32vector-ref vect 1))
+        (error "pipe2() failed"))))
 
 (: fdwrite (fixnum (or string u8vector) #!rest * -> integer))
 (define (fdwrite fd buf #!optional size)
   (let* ((%raw-write (foreign-lambda* long ((int fd) (scheme-pointer mem) (size_t sz))
                        "long out; out=write(fd,mem,sz); C_return(out>0?out:-errno);"))
          (buflen (cond
-                   ((string? buf) (string-length buf))
-                   ((u8vector? buf) (u8vector-length buf))
-                   (else (error "bad buf argument to fdwrite:" buf))))
+                  ((string? buf) (string-length buf))
+                  ((u8vector? buf) (u8vector-length buf))
+                  (else (error "bad buf argument to fdwrite:" buf))))
          (size   (or size buflen)))
     (let loop ((ret (%raw-write fd buf size)))
       (cond
-        ((>= ret 0) ret)
-        ((= ret (- eintr))
-         (loop (%raw-write fd buf size)))
-        ((= ret (- eagain))
-         (begin
-           (queue-wait!
-             (hash-table-update!/default
-               *writefd-tab*
-               fd
-               identity
-               (cons '() '())))
-           (loop (%raw-write fd buf size))))
-        (else (error "fdwrite: errno:" (- ret)))))))
+       ((>= ret 0) ret)
+       ((= ret (- eintr))
+        (loop (%raw-write fd buf size)))
+       ((= ret (- eagain))
+        (begin
+          (queue-wait!
+           (hash-table-update!/default
+            *writefd-tab*
+            fd
+            identity
+            (cons '() '())))
+          (loop (%raw-write fd buf size))))
+       (else (error "fdwrite: errno:" (- ret)))))))
 
 (: fdread (fixnum (or string u8vector) #!rest * -> integer))
 (define (fdread fd buf #!optional size)
   (let* ((%raw-read  (foreign-lambda* long ((int fd) (scheme-pointer mem) (size_t sz))
                        "long out; out=read(fd,mem,sz); C_return(out>=0?out:-errno);"))
          (buflen (cond
-                   ((string? buf) (string-length buf))
-                   ((u8vector? buf) (u8vector-length buf))
-                   (else (error "bad buf argument to fdread:" buf))))
+                  ((string? buf) (string-length buf))
+                  ((u8vector? buf) (u8vector-length buf))
+                  (else (error "bad buf argument to fdread:" buf))))
          (size   (or size buflen)))
     (let loop ((ret (%raw-read fd buf size)))
       (cond
-        ((>= ret 0) ret)
-        ((= ret (- eintr))
-         (loop (%raw-read fd buf size)))
-        ((= ret (- eagain))
-         (begin
-           (queue-wait!
-             (hash-table-update!/default
-               *readfd-tab*
-               fd
-               identity
-               (cons '() '())))
-           (loop (%raw-read fd buf size))))
-        (else (error "fdread: errno:" (- ret)))))))
+       ((>= ret 0) ret)
+       ((= ret (- eintr))
+        (loop (%raw-read fd buf size)))
+       ((= ret (- eagain))
+        (begin
+          (queue-wait!
+           (hash-table-update!/default
+            *readfd-tab*
+            fd
+            identity
+            (cons '() '())))
+          (loop (%raw-read fd buf size))))
+       (else (error "fdread: errno:" (- ret)))))))
 
 (define (%poll-fds)
   (let ((%raw-poll (foreign-lambda int do_poll s32vector int s32vector int bool))
@@ -179,12 +111,12 @@ EOF
                          (or (fx>= i len)
                              (let ((fd (s32vector-ref vec i)))
                                (if (fx= fd -1)
-                                 (loop (fx+ i 1))
-                                 (let ((q  (hash-table-ref ht fd)))
-                                   (hash-table-delete! ht fd)
-                                   (let inner ((cont (queue-pop! q)))
-                                     (and cont (begin (pushcont! cont) (inner (queue-pop! q)))))
-                                   (loop (fx+ i 1)))))))))))
+                                   (loop (fx+ i 1))
+                                   (let ((q  (hash-table-ref ht fd)))
+                                     (hash-table-delete! ht fd)
+                                     (let inner ((cont (queue-pop! q)))
+                                       (and cont (begin (pushcont! cont) (inner (queue-pop! q)))))
+                                     (loop (fx+ i 1)))))))))))
     (when (= 0 (+ (s32vector-length rfds) (s32vector-length wfds)))
       (fatal "deadlock"))
     ;; first, do a non-blocking poll; if nothing is immediately ready,
@@ -196,12 +128,12 @@ EOF
                             wfds (s32vector-length wfds)
                             block)))
         (cond
-          ((fx= 0 ret) (begin (gc #f) (again #t)))
-          ((fx> 0 ret) (error "poll error:" (- ret)))
-          (else
-            (begin
-              (flush rfds *readfd-tab*)
-              (flush wfds *writefd-tab*))))))))
+         ((fx= 0 ret) (begin (gc #f) (again #t)))
+         ((fx> 0 ret) (error "poll error:" (- ret)))
+         (else
+          (begin
+            (flush rfds *readfd-tab*)
+            (flush wfds *writefd-tab*))))))))
 
 ;; push a continuation onto the tail of the cont-queue
 (: pushcont! (procedure -> undefined))
@@ -217,15 +149,15 @@ EOF
 (define (%yield)
   (let ((cont (popcont!)))
     (if cont
-      (begin (cont) (error "longjmp returned?"))
-      (begin (%poll) (%yield)))))
+        (begin (cont) (error "longjmp returned?"))
+        (begin (%poll) (%yield)))))
 
 (: queue-wait! (pair -> undefined))
 (define (queue-wait! p)
   (call/cc
-    (lambda (ret)
-      (queue-push! p (lambda () (ret #t)))
-      (%yield))))
+   (lambda (ret)
+     (queue-push! p (lambda () (ret #t)))
+     (%yield))))
 
 ;; process-wait/yield is the semantically the same
 ;; as chicken.process#process-wait, except that it
@@ -253,9 +185,9 @@ EOF
   (vector-set! box 0 status)
   (vector-set! box 1 value)
   (for-each
-    (lambda (ret)
-      (pushcont! (lambda () (ret value))))
-    (vector-ref box 2))
+   (lambda (ret)
+     (pushcont! (lambda () (ret value))))
+   (vector-ref box 2))
   (vector-set! box 2 #f)
   (%yield))
 
@@ -266,26 +198,26 @@ EOF
 (define (spawn proc . args)
   (let ((box (vector 'started #f '())))
     (call/cc
-      (lambda (ret)
-        (pushcont! (lambda () (ret box)))
-        (%procexit box 'done
-                   (parameterize ((current-exception-handler
-                                    (lambda (exn)
-                                      (%procexit box 'exn exn))))
-                     (apply proc args)))))))
+     (lambda (ret)
+       (pushcont! (lambda () (ret box)))
+       (%procexit box 'done
+                  (parameterize ((current-exception-handler
+                                  (lambda (exn)
+                                    (%procexit box 'exn exn))))
+                    (apply proc args)))))))
 
 (: with-spawn (procedure list procedure ->  (vector symbol * list)))
 (define (with-spawn proc args handle)
   (let* ((box (vector 'started #f '()))
-	 (_   (handle box)))
+         (_   (handle box)))
     (call/cc
      (lambda (ret)
        (pushcont! (lambda () (ret box)))
        (%procexit box 'done
-		  (parameterize ((current-exception-handler
-				  (lambda (exn)
-				    (%procexit box 'exn exn))))
-		    (apply proc args)))))))
+                  (parameterize ((current-exception-handler
+                                  (lambda (exn)
+                                    (%procexit box 'exn exn))))
+                    (apply proc args)))))))
 
 (define (wait-any-nohang)
   (call/cc
@@ -298,43 +230,43 @@ EOF
 ;; child processes outstanding
 (define (%pid-poll fd)
   (let ((getcount (foreign-lambda* int ((int fd) (s64vector buf))
-        "C_return(read(fd,(int64_t *)buf,8)==8 ? 0 : errno);"))
-  (buf      (make-s64vector 1 0)))
+                    "C_return(read(fd,(int64_t *)buf,8)==8 ? 0 : errno);"))
+        (buf      (make-s64vector 1 0)))
     (let loop ((err (getcount fd buf)))
       (cond
        ((= err 0) ;; happy case (note that we're ignoring the counter ...)
-  (let-values (((pid ok status) (wait-any-nohang)))
-    (cond
-     ((= pid 0) (loop (getcount fd buf)))
-     ((hash-table-ref/default *wait-tab* pid #f)
-      => (lambda (cont)
-     (hash-table-delete! *wait-tab* pid)
-     (pushcont! (lambda () (cont pid ok status)))
-     (loop 0)))
-     (else
-      (info "warning: pid not registered?" pid)
-      (loop 0)))))
+        (let-values (((pid ok status) (wait-any-nohang)))
+          (cond
+           ((= pid 0) (loop (getcount fd buf)))
+           ((hash-table-ref/default *wait-tab* pid #f)
+            => (lambda (cont)
+                 (hash-table-delete! *wait-tab* pid)
+                 (pushcont! (lambda () (cont pid ok status)))
+                 (loop 0)))
+           (else
+            (info "warning: pid not registered?" pid)
+            (loop 0)))))
        ((= err eintr)
-  (loop (getcount fd buf)))
+        (loop (getcount fd buf)))
        ((= err eagain)
-  (begin
-    (queue-wait!
-     (hash-table-update!/default
-      *readfd-tab*
-      fd
-      identity
-      (cons '() '())))
-    (loop (getcount fd buf))))
+        (begin
+          (queue-wait!
+           (hash-table-update!/default
+            *readfd-tab*
+            fd
+            identity
+            (cons '() '())))
+          (loop (getcount fd buf))))
        (else
-  (error "fatal errno from read(eventfd)" fd err (s64vector-ref buf 0)))))))
+        (error "fatal errno from read(eventfd)" fd err (s64vector-ref buf 0)))))))
 
 (: %poll (-> undefined))
 (define (%poll)
   (if (eq? (proc-status pid-poller-proc) 'exn)
-    (begin
-      (print-error-message (proc-return pid-poller-proc))
-      (fatal "pid poller exited!"))
-    (%poll-fds)))
+      (begin
+        (print-error-message (proc-return pid-poller-proc))
+        (fatal "pid poller exited!"))
+      (%poll-fds)))
 
 ;; join/value waits for a coroutine to exit,
 ;; then yields its return value
@@ -344,19 +276,19 @@ EOF
 (: join/value ((vector fixnum * list) -> *))
 (define (join/value proc)
   (if (eq? (proc-status proc) 'started)
-    (call/cc
-      (lambda (ret)
-        (vector-set! proc 2 (cons ret (vector-ref proc 2)))
-        (%yield)))
-    (proc-return proc)))
+      (call/cc
+       (lambda (ret)
+         (vector-set! proc 2 (cons ret (vector-ref proc 2)))
+         (%yield)))
+      (proc-return proc)))
 
 ;; XXX maybe we should be doing this lazily?
 (define pid-poller-proc
   (let* ((handle (foreign-lambda int sigchld_handler))
          (err    (handle)))
     (if (<= err 0)
-      (error "error registering SIGCHLD handler:" (- err))
-      (spawn %pid-poll err))))
+        (error "error registering SIGCHLD handler:" (- err))
+        (spawn %pid-poll err))))
 
 ;; push-exception-wrapper installs ((current-exception-handler) (wrap exn))
 ;; as the current exception handler for the dynamic extent
@@ -371,8 +303,8 @@ EOF
 
 (define (with-cleanup done thunk)
   (push-exception-wrapper
-    (lambda (exn) (done) exn)
-    (lambda ()
-      (let ((res (thunk)))
-        (done)
-        res))))
+   (lambda (exn) (done) exn)
+   (lambda ()
+     (let ((res (thunk)))
+       (done)
+       res))))

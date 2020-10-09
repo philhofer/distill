@@ -1,25 +1,25 @@
 (include "test-helpers.scm")
 
 (import
-  scheme
-  (srfi 12)
-  (srfi 69)
-  (chicken process)
-  (distill eprint)
-  (distill coroutine))
+ scheme
+ (srfi 12)
+ (srfi 69)
+ (chicken process)
+ (distill eprint)
+ (distill coroutine))
 
 (define (bin/true arg)
   (let-values (((pid ok status) (process-wait/yield (process-run "/bin/true" '()))))
     (if ok
-      arg
-      (error "/bin/true exited with" status))))
+        arg
+        (error "/bin/true exited with" status))))
 
 ;; for testing exceptions
 (define (bin/true/abort exn)
   (let-values (((pid ok status) (process-wait/yield (process-run "/bin/true" '()))))
     (if ok
-      (abort exn)
-      (error "/bin/true exited with" status))))
+        (abort exn)
+        (error "/bin/true exited with" status))))
 
 (define (read-exact fd n)
   (let ((buf (make-string n)))
@@ -27,8 +27,8 @@
       (or (= rd n)
           (let ((ret (fdread fd buf (- n rd))))
             (if (= ret 0)
-              (error "unexpected EOF")
-              (loop (+ rd ret))))))))
+                (error "unexpected EOF")
+                (loop (+ rd ret))))))))
 
 (define (write-full fd str)
   (let ((ret (fdwrite fd str)))
@@ -44,8 +44,8 @@
 
 (let* ((seen #f)
        (box  (with-spawn bin/true (list 1)
-			 (lambda (box)
-			   (set! seen box)))))
+                         (lambda (box)
+                           (set! seen box)))))
   (test eq? seen box)
   (test 1 (join/value box)))
 
@@ -95,13 +95,13 @@
   (test eq? #t (join/value reader)))
 
 (test string=? "foobar" (call/cc
-                          (lambda (ret)
-                            (parameterize ((current-exception-handler ret))
-                              (push-exception-wrapper
-                                (lambda (exn)
-                                  (string-append "foo" exn))
-                                (lambda ()
-                                  (abort "bar")
-                                  #f))))))
+                         (lambda (ret)
+                           (parameterize ((current-exception-handler ret))
+                             (push-exception-wrapper
+                              (lambda (exn)
+                                (string-append "foo" exn))
+                              (lambda ()
+                                (abort "bar")
+                                #f))))))
 
 (display "test OK.\n")

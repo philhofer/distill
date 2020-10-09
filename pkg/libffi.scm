@@ -1,7 +1,7 @@
 (import
-  scheme
-  (distill base)
-  (distill package))
+ scheme
+ (distill base)
+ (distill package))
 
 (define libffi
   (cmmi-package

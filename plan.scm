@@ -6,7 +6,7 @@
 (: copy-file (string string boolean -> true))
 (define (copy-file src dst rename?)
   (let* ((raw (foreign-lambda int "copy_file_sparse"
-                nonnull-c-string nonnull-c-string bool))
+                              nonnull-c-string nonnull-c-string bool))
          (e   (raw src dst rename?)))
     (or (= e 0)
         (error "copy_file_sparse: errno" src dst rename? e))))
@@ -31,8 +31,8 @@
      ((string? h) h)
      ((procedure? h)
       (let ((res (h)))
-	(vector-set! v 1 res)
-	res))
+        (vector-set! v 1 res)
+        res))
      (else (error "unexpected value in artifact-hash slot" v)))))
 
 (: artifact-extra (artifact -> *))
@@ -49,8 +49,8 @@
 (define (short-hash h)
   (let ((n (string-length h)))
     (if (> n 6)
-	(##sys#substring h 0 6)
-	(error "bad argument to short-hash" h))))
+        (##sys#substring h 0 6)
+        (error "bad argument to short-hash" h))))
 
 (define info-prefix (make-parameter ""))
 
@@ -66,7 +66,7 @@
 ;; guess the format of a remote source bundle
 (define (impute-format src)
   (let loop ((suff '((".tar.xz" . tar.xz)
-		     (".txz"    . tar.xz)
+                     (".txz"    . tar.xz)
                      (".tar.gz" . tar.gz)
                      (".tgz"    . tar.gz)
                      (".tar.bz" . tar.bz)
@@ -78,8 +78,8 @@
       ;; hack because some package sources are stored in the CDN,
       ;; thus the url does not contain an extension
       (if (string-prefix? "https://b2cdn.sunfi.sh" src)
-	  'tar.zst
-	  (error "bad archive suffix" src)))
+          'tar.zst
+          (error "bad archive suffix" src)))
      ((string-suffix? (caar suff) src)
       (cdar suff))
      (else (loop (cdr suff))))))
@@ -89,9 +89,9 @@
 (: remote-archive (string string #!rest * --> artifact))
 (define (remote-archive src hash #!key (kind #f))
   (%artifact
-    `#(archive ,(or kind (impute-format src)))
-    hash
-    src))
+   `#(archive ,(or kind (impute-format src)))
+   hash
+   src))
 
 (: sub-archive (artifact list --> artifact))
 (define (sub-archive art args)
@@ -108,78 +108,78 @@
   (unless (file-exists? file)
     (error "archive-match: file doesn't exist" file))
   (let* ((fnmatch (foreign-lambda* int ((nonnull-c-string pat) (nonnull-c-string str))
-		    "C_return(fnmatch(pat, str, FNM_PATHNAME));"))
-	 (matches? (lambda (item)
-		     (let loop ((exprs matches))
-		       (if (null? exprs)
-			   #f
-			   (or (= 0 (fnmatch (car exprs) item))
-			       (loop (cdr exprs))))))))
+                                   "C_return(fnmatch(pat, str, FNM_PATHNAME));"))
+         (matches? (lambda (item)
+                     (let loop ((exprs matches))
+                       (if (null? exprs)
+                           #f
+                           (or (= 0 (fnmatch (car exprs) item))
+                               (loop (cdr exprs))))))))
     (let-values (((rfd wfd) (create-pipe)))
       (let* ((child (process-fork
-		     (lambda ()
-		       (fdclose rfd)
-		       (duplicate-fileno wfd 1)
-		       (fdclose wfd)
-		       (process-execute
-			"env"
-			(list "LC_ALL=C.UTF-8" "tar" "-tf" file)))))
-	     (end   (spawn process-wait/yield child))
-	     (inp   (open-input-file* rfd)))
-	(fdclose wfd)
-	(with-cleanup
-	 (lambda ()
-	   (begin
-	     (fdclose rfd)
-	     (join/value end)))
-	 (lambda ()
-	   (let loop ((out  '())
-		      (line  (read-line inp)))
-	     (if (eof-object? line)
-		 out
-		 (loop
-		  (if (matches? line) (cons line out) out)
-		  (read-line inp))))))))))
+                     (lambda ()
+                       (fdclose rfd)
+                       (duplicate-fileno wfd 1)
+                       (fdclose wfd)
+                       (process-execute
+                        "env"
+                        (list "LC_ALL=C.UTF-8" "tar" "-tf" file)))))
+             (end   (spawn process-wait/yield child))
+             (inp   (open-input-file* rfd)))
+        (fdclose wfd)
+        (with-cleanup
+         (lambda ()
+           (begin
+             (fdclose rfd)
+             (join/value end)))
+         (lambda ()
+           (let loop ((out  '())
+                      (line  (read-line inp)))
+             (if (eof-object? line)
+                 out
+                 (loop
+                  (if (matches? line) (cons line out) out)
+                  (read-line inp))))))))))
 
 (: remote-file ((or false string) string string fixnum --> artifact))
 (define (remote-file src hash abspath mode)
   (%artifact
-    `#(file ,abspath ,mode)
-    hash
-    (cons 'remote src)))
+   `#(file ,abspath ,mode)
+   hash
+   (cons 'remote src)))
 
 (: local-archive (symbol string --> artifact))
 (define (local-archive kind hash)
   (%artifact
-    `#(archive ,kind)
-    hash
-    #f))
+   `#(archive ,kind)
+   hash
+   #f))
 
 (: interned (string integer (or string procedure) -> artifact))
 (define (interned abspath mode contents)
   (let ((kind `#(file ,abspath ,mode)))
     (cond
-      ((string? contents)
-       (%artifact kind (lambda () (hash-of contents)) (cons 'inline contents)))
-      ((procedure? contents)
-       (%artifact kind (lambda () (with-interned-output contents)) #f))
-      (else (error "bad argument to plan#interned")))))
+     ((string? contents)
+      (%artifact kind (lambda () (hash-of contents)) (cons 'inline contents)))
+     ((procedure? contents)
+      (%artifact kind (lambda () (with-interned-output contents)) #f))
+     (else (error "bad argument to plan#interned")))))
 
 ;; interned-symlink creates a link at 'abspath'
 ;; that points to 'lnk'
 (: interned-symlink (string string --> vector))
 (define (interned-symlink abspath lnk)
   (%artifact
-    `#(symlink ,abspath ,lnk)
-    (hash-of lnk)
-    #f))
+   `#(symlink ,abspath ,lnk)
+   (hash-of lnk)
+   #f))
 
 (: interned-dir (string integer -> vector))
 (define (interned-dir abspath mode)
   (%artifact
-    `#(dir ,abspath ,mode)
-    (hash-of abspath)
-    #f))
+   `#(dir ,abspath ,mode)
+   (hash-of abspath)
+   #f))
 
 (: overlay (string string -> vector))
 (define (overlay herepath therepath)
@@ -189,9 +189,9 @@
      (let ((h (hash-file herepath)))
        (unless h (error "overlay file doesn't exist" herepath))
        (let ((dst (filepath-join (artifact-dir) h)))
-	 (or (file-exists? dst)
-	     (copy-file herepath dst #f))
-	 h)))
+         (or (file-exists? dst)
+             (copy-file herepath dst #f))
+         h)))
    (cons 'local herepath)))
 
 ;; by default, dump stuff into these directories
@@ -239,26 +239,26 @@
       link)
      ((plan? link)
       (let ((art (plan-outputs link)))
-	(and art
-	     (let* ((wr  (or (input-wrap in) identity))
-		    (val (wr art)))
-	       (input-set-link! in val)
-	       (input-set-wrap! in #f)
-	       val))))
+        (and art
+             (let* ((wr  (or (input-wrap in) identity))
+                    (val (wr art)))
+               (input-set-link! in val)
+               (input-set-wrap! in #f)
+               val))))
      (else (error "unexpected <input> link value" link)))))
 
 (: fold-unresolved (vector procedure * -> *))
 (define (fold-unresolved plan proc seed)
   (let loop ((out seed)
-	     (lst (plan-inputs plan)))
+             (lst (plan-inputs plan)))
     (if (null? lst)
-	out
-	(let ((head (car lst)))
-	  (loop
-	   (if (input-resolve! head)
-	       out
-	       (proc (input-link head) out))
-	   (cdr lst))))))
+        out
+        (let ((head (car lst)))
+          (loop
+           (if (input-resolve! head)
+               out
+               (proc (input-link head) out))
+           (cdr lst))))))
 
 (: map-unresolved (vector (vector -> *) -> *))
 (define (map-unresolved plan proc)
@@ -271,20 +271,20 @@
 (: foldl1 (procedure * list -> *))
 (define (foldl1 proc init lst)
   (let loop ((out init)
-	     (lst lst))
+             (lst lst))
     (if (null? lst)
-	out
-	(loop (proc (car lst) out) (cdr lst)))))
+        out
+        (loop (proc (car lst) out) (cdr lst)))))
 
 (define (fold-graph proc init headlst)
   (foldl1
    (lambda (item val)
      (proc item (if (plan? item)
-		    (foldl1
-		     (lambda (in val)
-		       (proc (input-link in) val))
-		     val (plan-inputs item))
-		    val)))
+                    (foldl1
+                     (lambda (in val)
+                       (proc (input-link in) val))
+                     val (plan-inputs item))
+                    val)))
    init
    headlst))
 
@@ -292,8 +292,8 @@
 (define (andmap1 pred? lst)
   (let loop ((lst lst))
     (or (null? lst)
-	(and (pred? (car lst))
-	     (loop (cdr lst))))))
+        (and (pred? (car lst))
+             (loop (cdr lst))))))
 
 ;; not defined in R7RS, but trivial enough to implement
 (: call-with-output-string ((output-port -> *) -> string))
@@ -311,7 +311,7 @@
 (: with-interned-output ((-> *) -> string))
 (define (with-interned-output thunk)
   (let* ((_  (check-tmp-perms))
-	 (h  (new-hasher))
+         (h  (new-hasher))
          (f  (create-temporary-file ".to-intern"))
          (fp (open-output-file f))
          (bp (make-broadcast-port (hasher->output-port h) fp)))
@@ -347,7 +347,7 @@
   (define (->repr in)
     (let ((art (input-resolve! in)))
       (unless (artifact? art)
-	(error "expected an artifact; got" art (plan-name (input-link in))))
+        (error "expected an artifact; got" art (plan-name (input-link in))))
       (artifact-repr (input-basedir in) art)))
 
   ;; sort input artifacts by extraction directory,
@@ -373,15 +373,15 @@
 ;; in a world-writable directory
 (define check-tmp-perms
   (let ((self
-	 (delay
-	   (let* ((f    (create-temporary-file ".check"))
-		  (dir  (dirname f))
-		  (perm (file-permissions dir)))
-	     (unless (or (not (= (bitwise-and perm perm/isvtx) 0))
-			 (= (bitwise-and perm perm/iwoth) 0))
-	       (fatal "please set $TMP to a directory that is sticky or not world-writable"))
-	     (delete-file* f)
-	     #t))))
+         (delay
+           (let* ((f    (create-temporary-file ".check"))
+                  (dir  (dirname f))
+                  (perm (file-permissions dir)))
+             (unless (or (not (= (bitwise-and perm perm/isvtx) 0))
+                         (= (bitwise-and perm perm/iwoth) 0))
+               (fatal "please set $TMP to a directory that is sticky or not world-writable"))
+             (delete-file* f)
+             #t))))
     (lambda () (force self))))
 
 ;; plan-hash returns the canonical hash of a plan,
@@ -391,14 +391,14 @@
   (or (plan-saved-hash p)
       (and (plan-resolved? p)
            (let* ((h   (with-interned-output
-                         (lambda ()
-                           (write (canonicalize! (plan-inputs p))))))
+                        (lambda ()
+                          (write (canonicalize! (plan-inputs p))))))
                   (dir (filepath-join (plan-dir) h))
                   (lfd (string-append dir "/label")))
              (unless (file-exists? lfd)
                (create-directory dir #t)
                (call-with-output-file
-                 lfd
+                   lfd
                  (cute display (string-append (plan-name p) "-" (short-hash h)) <>)))
              (plan-saved-hash-set! p h)
              h))))
@@ -408,9 +408,9 @@
 ;; with 'plan
 (define (plan-exn plan suberr)
   (make-property-condition
-    'plan-failure
-    'plan  plan
-    'child suberr))
+   'plan-failure
+   'plan  plan
+   'child suberr))
 
 ;; handle a fatal plan failure by printing diagnostics
 ;; and exiting with a non-zero status
@@ -442,8 +442,8 @@
           (info "plan" (plan-name plan) "encountered a fatal error:")
           (fatal-plan-failure child)))
        (else (begin
-		           (print-error-message exn)
-		           (fatal "fatal error; exited")))))))
+               (print-error-message exn)
+               (fatal "fatal error; exited")))))))
 
 ;; fork+exec, wait for the process to exit and check
 ;; that it exited successfully
@@ -536,7 +536,7 @@
                     (lambda ()
                       ;; any exceptions in here should immediately exit
                       (current-exception-handler (lambda (exn)
-						                                       (print-error-message exn)
+                                                   (print-error-message exn)
                                                    (fatal "(execing bwrap):" exn)))
                       (setfd! 6 (cadr js))
                       (setfd! 5 (car js))
@@ -544,15 +544,15 @@
                       ;; can't use fdpipe here because we need a *blocking* pipe;
                       (let-values (((rd wr) (create-pipe)))
                         (process-fork
-			                   (lambda ()
-			                     (current-exception-handler
-			                      (lambda (exn)
-				                      (print-error-message exn)
-				                      (fatal "(execing zstd):" exn)))
-			                     (for-each file-close '(5 6))
-			                     (file-close wr)
-			                     (setfd! fileno/stdin rd)
-			                     (process-execute "zstd" (list "-q" "-" "-o" logfile))))
+                         (lambda ()
+                           (current-exception-handler
+                            (lambda (exn)
+                              (print-error-message exn)
+                              (fatal "(execing zstd):" exn)))
+                           (for-each file-close '(5 6))
+                           (file-close wr)
+                           (setfd! fileno/stdin rd)
+                           (process-execute "zstd" (list "-q" "-" "-o" logfile))))
                         (file-close rd)
                         (setfd! fileno/stdout wr))
                       (duplicate-fileno fileno/stdout fileno/stderr)
@@ -570,21 +570,21 @@
     (infoln "fetching" url)
     (let ((h (fetch+hash url tmp)))
       (cond
-        ((not h)
-         (error "fetching url failed" url))
-        ((string=? h hash)
-         (rename-file tmp dst #t))
-        (else
-          (begin
-            (delete-file tmp)
-            (error "fetched artifact has the wrong hash" h "not" hash)))))))
+       ((not h)
+        (error "fetching url failed" url))
+       ((string=? h hash)
+        (rename-file tmp dst #t))
+       (else
+        (begin
+          (delete-file tmp)
+          (error "fetched artifact has the wrong hash" h "not" hash)))))))
 
 ;; plan-outputs-file is the file that stores the serialized
 ;; interned file information for a plan
 (: plan-outputs-file (vector -> (or string false)))
 (define (plan-outputs-file p)
   (and-let* ((h (plan-hash p)))
-    (filepath-join (plan-dir) h "outputs.scm")))
+            (filepath-join (plan-dir) h "outputs.scm")))
 
 ;; write 'lst' as the set of plan outputs associated with 'p'
 (: save-plan-outputs! (vector artifact -> *))
@@ -593,23 +593,23 @@
     (unless outfile
       (error "can't save outputs for plan (unresolved inputs):" (plan-name p)))
     (let ((old    (plan-outputs p))
-	  (outdir (dirname outfile))
-	  (outlnk (filepath-join (plan-dir) (string-append "output:" (artifact-hash ar)))))
+          (outdir (dirname outfile))
+          (outlnk (filepath-join (plan-dir) (string-append "output:" (artifact-hash ar)))))
       (cond
-        ((not old)
-         (begin
-	   ;; only keep the 'most recent' plan that
-	   ;; produces a particular output
-	   (when (file-exists? outlnk)
-	     (delete-file outlnk))
-	   (create-symbolic-link (plan-hash p) outlnk)
-           (create-directory outdir)
-           (with-output-to-file outfile (lambda () (write ar)))
-           (plan-saved-output-set! p ar)))
-        ((equal? old ar)
-         (infoln "plan for" (plan-name p) "reproduced" (short-hash (plan-hash p))))
-        (else
-          (fatal "plan for" (plan-name p) "failed to reproduce:" old ar))))))
+       ((not old)
+        (begin
+          ;; only keep the 'most recent' plan that
+          ;; produces a particular output
+          (when (file-exists? outlnk)
+            (delete-file outlnk))
+          (create-symbolic-link (plan-hash p) outlnk)
+          (create-directory outdir)
+          (with-output-to-file outfile (lambda () (write ar)))
+          (plan-saved-output-set! p ar)))
+       ((equal? old ar)
+        (infoln "plan for" (plan-name p) "reproduced" (short-hash (plan-hash p))))
+       (else
+        (fatal "plan for" (plan-name p) "failed to reproduce:" old ar))))))
 
 ;; determine the outputs (leaf) of the given plan,
 ;; or #f if the plan has never been built with its inputs
@@ -638,25 +638,25 @@
       ;; before copying it into the destination
       (when (not (file-exists? artfile))
         (match content
-          (`(inline . ,content)
-           (with-output-to-file artfile (lambda () (write-string content))))
-          (`(remote . ,url)
-           (fetch! url hash))
-          (#f
-           (fetch! #f hash))
-          (else
-	   (error "unrecognized file content spec:" content))))
+               (`(inline . ,content)
+                (with-output-to-file artfile (lambda () (write-string content))))
+               (`(remote . ,url)
+                (fetch! url hash))
+               (#f
+                (fetch! #f hash))
+               (else
+                (error "unrecognized file content spec:" content))))
       (when (file-exists? dstfile)
-	(error "cannot unpack file (it already exists)" dstfile))
+        (error "cannot unpack file (it already exists)" dstfile))
       (create-directory (dirname dstfile) #t)
       (copy-file (filepath-join (artifact-dir) hash) dstfile #f)
       (set-file-permissions! dstfile mode)))
 
   (define (unpack-sub-archive dst kind hash src args)
     (unpack-archive dst kind hash src
-		    (archive-match
-		     (filepath-join (artifact-dir) hash)
-		     args)))
+                    (archive-match
+                     (filepath-join (artifact-dir) hash)
+                     args)))
 
   (define (unpack-archive dst kind hash src tail)
     (let ((comp (case kind
@@ -675,7 +675,7 @@
   (define (unpack-symlink dst abspath lnk)
     (let ((target (filepath-join dst abspath)))
       (when (file-exists? target)
-	    (error "conflicting symlink for" abspath))
+        (error "conflicting symlink for" abspath))
       (create-directory (dirname target) #t)
       (create-symbolic-link lnk target)))
 
@@ -691,21 +691,21 @@
         (hash   (artifact-hash i))
         (extra  (artifact-extra i)))
     (match format
-      (#('file abspath mode)   (unpack-file dst abspath mode hash extra))
-      (#('dir abspath mode)    (unpack-dir dst abspath mode))
-      (#('archive kind)        (unpack-archive dst kind hash extra '()))
-      (#('symlink abspath lnk) (unpack-symlink dst abspath lnk))
-      (#('sub-archive kind tail) (unpack-sub-archive dst kind hash extra tail))
-      (else (error "unrecognized artifact format" format)))))
+           (#('file abspath mode)   (unpack-file dst abspath mode hash extra))
+           (#('dir abspath mode)    (unpack-dir dst abspath mode))
+           (#('archive kind)        (unpack-archive dst kind hash extra '()))
+           (#('symlink abspath lnk) (unpack-symlink dst abspath lnk))
+           (#('sub-archive kind tail) (unpack-sub-archive dst kind hash extra tail))
+           (else (error "unrecognized artifact format" format)))))
 
 (: with-tmpdir (forall (a) ((string -> a) -> a)))
 (define (with-tmpdir proc)
   (let ((_   (check-tmp-perms))
-	(dir (create-temporary-directory)))
+        (dir (create-temporary-directory)))
     (set-file-permissions! dir #o700)
     (with-cleanup
-      (lambda () (delete-directory dir #t))
-      (lambda () (proc dir)))))
+     (lambda () (delete-directory dir #t))
+     (lambda () (proc dir)))))
 
 ;; intern! interns a file into the artifact directory
 ;; and returns its hash;
@@ -717,12 +717,12 @@
     (unless h (error "couldn't find file" fp))
     (let ((dst (filepath-join (artifact-dir) h)))
       (if (and (file-exists? dst) (equal? (hash-file dst) h))
-        (infoln "artifact reproduced:" (short-hash h))
-        (begin
-          (copy-file fp dst #t)
-          ;; regardless of source file permissions,
-          ;; artifacts should have 644 perms
-          (set-file-permissions! dst #o644)))
+          (infoln "artifact reproduced:" (short-hash h))
+          (begin
+            (copy-file fp dst #t)
+            ;; regardless of source file permissions,
+            ;; artifacts should have 644 perms
+            (set-file-permissions! dst #o644)))
       (delete-file* fp))
     h))
 
@@ -731,9 +731,9 @@
   (let ((perm (file-permissions f))
         (h    (intern! f)))
     (vector
-      `#(file ,abspath ,perm)
-      h
-      #f)))
+     `#(file ,abspath ,perm)
+     h
+     #f)))
 
 (: dir->artifact (string -> artifact))
 (define (dir->artifact dir)
@@ -743,23 +743,23 @@
     ;; producing a fully-reproducible tar archive
     ;; is, unfortunately, a minefield
     (run
-      "env"
-      (list
-       "LC_ALL=C.UTF-8" ;; necessary for --sort=name to be stable
-       "tar"
-       ;; TODO: make sure zstd is invoked with explicit
-       ;; compression-level and threading arguments to keep
-       ;; that from being a possible source of reproducibility issues,
-       ;; _or_ calculate the checksum on the uncompressed archive
-       "--zstd"
-       "-cf" (abspath tmp)
-       "--format=ustar"
-       "--sort=name"
-       "--owner=0"
-       "--group=0"
-       "--mtime=@0"
-       "--numeric-owner"
-       "-C" dir "."))
+     "env"
+     (list
+      "LC_ALL=C.UTF-8" ;; necessary for --sort=name to be stable
+      "tar"
+      ;; TODO: make sure zstd is invoked with explicit
+      ;; compression-level and threading arguments to keep
+      ;; that from being a possible source of reproducibility issues,
+      ;; _or_ calculate the checksum on the uncompressed archive
+      "--zstd"
+      "-cf" (abspath tmp)
+      "--format=ustar"
+      "--sort=name"
+      "--owner=0"
+      "--group=0"
+      "--mtime=@0"
+      "--numeric-owner"
+      "-C" dir "."))
     (local-archive format (intern! tmp))))
 
 ;; plan->outputs! builds a plan and yields
@@ -777,9 +777,9 @@
      (create-directory outdir #t)
      (for-each
       (lambda (in)
-	      (let ((art (input-resolve! in))
-	            (dir (input-basedir in)))
-	        (unpack! art (filepath-join root dir))))
+        (let ((art (input-resolve! in))
+              (dir (input-basedir in)))
+          (unpack! art (filepath-join root dir))))
       (plan-inputs p))
 
      (infoln "building")
@@ -793,15 +793,15 @@
           (let ((linkname (filepath-join
                            (current-directory)
                            (string-append (plan-name p)
-					                                "-" (short-hash (plan-hash p))
-					                                ".log.zst"))))
-	          (delete-file* linkname) ;; delete old link if it exists
+                                          "-" (short-hash (plan-hash p))
+                                          ".log.zst"))))
+            (delete-file* linkname) ;; delete old link if it exists
             (create-symbolic-link outfile linkname)
             (infoln "build failed; please see" linkname)))
         (lambda ()
           (or
-	         (plan-null-build? p)
-	         (sandbox-run root outfile)))))
+           (plan-null-build? p)
+           (sandbox-run root outfile)))))
 
      ;; now save the actual build outputs
      (let ((raw (plan-raw-output p)))
@@ -816,100 +816,100 @@
   (define ht (make-hash-table hash: string-hash test: string=?))
   (define pl (make-hash-table hash: eq?-hash test: eq?))
   (letrec ((walk (lambda (item)
-		               (if (artifact? item)
-		                   (or (hash-table-ref/default ht (artifact-hash item) #f)
-			                     (begin
-			                       (hash-table-set! ht (artifact-hash item) #t)
-			                       (proc item)))
-		                   (or (hash-table-ref/default pl item #f)
-			                     (begin
-			                       (hash-table-set! pl item #t)
-			                       (for-each (o walk input-link) (plan-inputs item))))))))
+                   (if (artifact? item)
+                       (or (hash-table-ref/default ht (artifact-hash item) #f)
+                           (begin
+                             (hash-table-set! ht (artifact-hash item) #t)
+                             (proc item)))
+                       (or (hash-table-ref/default pl item #f)
+                           (begin
+                             (hash-table-set! pl item #t)
+                             (for-each (o walk input-link) (plan-inputs item))))))))
     (for-each walk plst)))
 
 (: build-graph! ((list-of vector) #!rest * -> *))
 (define (build-graph! lst #!key (maxprocs (nproc)))
   (let* ((duration       (lambda (from to)
-			                     (string-append
-			                      (number->string (exact->inexact (/ (- to from) 1000))) "s")))
-	       (plan->proc     (make-hash-table test: eq? hash: eq?-hash))
+                           (string-append
+                            (number->string (exact->inexact (/ (- to from) 1000))) "s")))
+         (plan->proc     (make-hash-table test: eq? hash: eq?-hash))
          (hash->plan     (make-hash-table test: string=? hash: string-hash))
          (err            #f)
-	       (built?         (lambda (plan)
-			                     (and-let* ((out (plan-outputs plan)))
-			                       (file-exists? (artifact-path out)))))
-	       (done+ok?       (lambda (proc)
-			                     (let* ((ret (join/value proc))
-				                          (st  (proc-status proc)))
-			                       (and (not (eq? st 'exn)) ret))))
-	       ;; for a given plan hash, we should only issue one build;
-	       ;; we use hash->plan to deduplicate equivalent builds
+         (built?         (lambda (plan)
+                           (and-let* ((out (plan-outputs plan)))
+                                     (file-exists? (artifact-path out)))))
+         (done+ok?       (lambda (proc)
+                           (let* ((ret (join/value proc))
+                                  (st  (proc-status proc)))
+                             (and (not (eq? st 'exn)) ret))))
+         ;; for a given plan hash, we should only issue one build;
+         ;; we use hash->plan to deduplicate equivalent builds
          (sibling?        (lambda (p)
-			                      (let* ((hash   (plan-hash p))
-				                           (winner (hash-table-update!/default hash->plan hash identity p)))
+                            (let* ((hash   (plan-hash p))
+                                   (winner (hash-table-update!/default hash->plan hash identity p)))
                               (if (eq? p winner) #f winner)))))
     (define (build-proc p)
       (or (hash-table-ref/default plan->proc p #f)
-	        ;; even though this yields to the child,
-	        ;; it guarantees that this plan->proc entry
-	        ;; is visible before other procs are scheduled
-	        (with-spawn
-	         build-one!
-	         (list p)
-	         (lambda (box)
-	           (hash-table-set! plan->proc p box)))))
+          ;; even though this yields to the child,
+          ;; it guarantees that this plan->proc entry
+          ;; is visible before other procs are scheduled
+          (with-spawn
+           build-one!
+           (list p)
+           (lambda (box)
+             (hash-table-set! plan->proc p box)))))
     (define (build-one! p)
       (push-exception-wrapper
        (lambda (exn)
          (plan-exn p exn))
        (lambda ()
          (and
-	        ;; start all dependencies and ensure they complete ok
-	        (andmap1 done+ok? (map-unresolved p build-proc))
-	        (not err)
-	        (cond
-	         ;; if we've built this before, we're done
-	         ((built? p) #t)
-	         ;; if this plan isn't unique, its exit status
-	         ;; should be equivalent to that of its identical twin
-	         ((sibling? p) => done+ok?)
-	         (else
-	          (parameterize ((info-prefix (string-append (plan-name p) "-" (short-hash (plan-hash p)) " |")))
-	            (infoln "queued")
-	            (let ((qtime (current-milliseconds)))
-		            (call-with-job
-		             (lambda ()
-		               (let ((stime (current-milliseconds)))
-		                 (infoln "starting; queued" (duration qtime stime))
-		                 (save-plan-outputs! p (plan->outputs! p))
-		                 (infoln "completed; ran" (duration stime (current-milliseconds))))
-		               #t))))))))))
+          ;; start all dependencies and ensure they complete ok
+          (andmap1 done+ok? (map-unresolved p build-proc))
+          (not err)
+          (cond
+           ;; if we've built this before, we're done
+           ((built? p) #t)
+           ;; if this plan isn't unique, its exit status
+           ;; should be equivalent to that of its identical twin
+           ((sibling? p) => done+ok?)
+           (else
+            (parameterize ((info-prefix (string-append (plan-name p) "-" (short-hash (plan-hash p)) " |")))
+              (infoln "queued")
+              (let ((qtime (current-milliseconds)))
+                (call-with-job
+                 (lambda ()
+                   (let ((stime (current-milliseconds)))
+                     (infoln "starting; queued" (duration qtime stime))
+                     (save-plan-outputs! p (plan->outputs! p))
+                     (infoln "completed; ran" (duration stime (current-milliseconds))))
+                   #t))))))))))
     (with-new-jobserver
      (lambda ()
        (jobserver+ maxprocs)
        ;; for each (unbuilt) explicit package, spawn
        ;; a build coroutine, and then wait for all of them
        (for-each
-	      join/value
-	      (foldl1
-	       (lambda (in lst)
-	         (if (and (plan? in) (not (built? in)))
-	             (cons (build-proc in) lst)
-	             lst))
-	       '()
-	       lst))
+        join/value
+        (foldl1
+         (lambda (in lst)
+           (if (and (plan? in) (not (built? in)))
+               (cons (build-proc in) lst)
+               lst))
+         '()
+         lst))
        ;; now ensure that every plan has exited,
        ;; and determine if we encountered any errors
        (let loop ((err #f)
-		              (lst (hash-table-values plan->proc)))
-	       (if (null? lst)
-	           (if err (fatal-plan-failure err) #t)
-	           (let ((head (car lst)))
-	             (let* ((ret    (join/value head))
-		                  (threw? (eq? (proc-status head) 'exn)))
-		             (loop
-		              (or err (and threw? ret))
-		              (cdr lst))))))))))
+                  (lst (hash-table-values plan->proc)))
+         (if (null? lst)
+             (if err (fatal-plan-failure err) #t)
+             (let ((head (car lst)))
+               (let* ((ret    (join/value head))
+                      (threw? (eq? (proc-status head) 'exn)))
+                 (loop
+                  (or err (and threw? ret))
+                  (cdr lst))))))))))
 
 ;; build-plan! unconditionally builds a plan
 ;; and produces its output artifact
@@ -945,10 +945,10 @@
                         (with-input-from-file fp read)
                         #f)))
          (vec->in (lambda (v)
-		                (make-input
-		                 basedir: (vector-ref v 0)
-		                 link: (vector
-			                      (vector-ref v 1) (vector-ref v 2) #f))))
+                    (make-input
+                     basedir: (vector-ref v 0)
+                     link: (vector
+                            (vector-ref v 1) (vector-ref v 2) #f))))
          (inputs  (map vec->in vinput))
          (plan    (make-plan
                    name:   label

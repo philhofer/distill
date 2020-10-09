@@ -1,6 +1,6 @@
 (import
-  scheme
-  (distill base))
+ scheme
+ (distill base))
 
 (define linux-virt-x86_64
   (linux/config-static

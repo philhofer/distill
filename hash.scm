@@ -11,8 +11,8 @@
          (init! (foreign-lambda* int ((u8vector mem))
                   "C_return(blake2b_init((blake2b_state *)mem, 32));")))
     (if (fx= (init! blob) 0)
-      blob
-      (error "unexpected error in blake2b_init()"))))
+        blob
+        (error "unexpected error in blake2b_init()"))))
 
 ;; hasher->output-port takes a hashing object
 ;; and produces an output port that calls
@@ -54,43 +54,43 @@
   (let ((cwrite (foreign-lambda* int ((u8vector self) (scheme-pointer mem) (size_t len))
                   "C_return(blake2b_update((blake2b_state *)self, mem, len));")))
     (cond
-      ((string? obj)
-       (begin
-	 (or (fx= (cwrite h obj (string-length obj)) 0)
-	     (error "error in blake2b_update()"))
-	 (and oport (write-string obj #f oport))))
-      ((u8vector? obj)
-       (begin
-	 (or (fx= (cwrite h (u8vector->blob/shared obj) (u8vector-length obj)) 0)
-	     (error "error in blake2b_update()"))
-	 (and oport (write-string
-		     (blob->string
-		      (u8vector->blob/shared obj)) #f oport))))
-      ((input-port? obj)
-       (let* ((mem (make-string 1024))
-              (rd! (lambda ()
-                     (read-string! #f mem obj 0))))
-         (let loop ((n (rd!)))
-           (or (eof-object? n)
-               (fx= n 0)
-               (begin
-                 (or (cwrite h mem n)
-                     (error "error in blake2b_update()"))
-		 (and oport (write-string mem n oport))
-                 (loop (rd!)))))))
-      (else
-        (error "hash-write! can't hash object" obj)))))
+     ((string? obj)
+      (begin
+        (or (fx= (cwrite h obj (string-length obj)) 0)
+            (error "error in blake2b_update()"))
+        (and oport (write-string obj #f oport))))
+     ((u8vector? obj)
+      (begin
+        (or (fx= (cwrite h (u8vector->blob/shared obj) (u8vector-length obj)) 0)
+            (error "error in blake2b_update()"))
+        (and oport (write-string
+                    (blob->string
+                     (u8vector->blob/shared obj)) #f oport))))
+     ((input-port? obj)
+      (let* ((mem (make-string 1024))
+             (rd! (lambda ()
+                    (read-string! #f mem obj 0))))
+        (let loop ((n (rd!)))
+          (or (eof-object? n)
+              (fx= n 0)
+              (begin
+                (or (cwrite h mem n)
+                    (error "error in blake2b_update()"))
+                (and oport (write-string mem n oport))
+                (loop (rd!)))))))
+     (else
+      (error "hash-write! can't hash object" obj)))))
 
 (: hash-finalize (u8vector -> string))
 (define (hash-finalize h)
   (check-state h)
   (let* ((outstr (make-string 44))
-         (final! (foreign-lambda* int ((u8vector self) (scheme-pointer dst)) #<<EOF
+         (final! (foreign-lambda* int ((u8vector self) (scheme-pointer dst))
+                   "
 unsigned char buf[32];
 int err = blake2b_final((blake2b_state *)self, buf, 32);
 assert(err == 0); hash_to_base64(dst, buf); C_return(0);
-EOF
-)))
+" )))
     (final! h outstr)
     outstr))
 
@@ -99,8 +99,8 @@ EOF
   (let ((h (new-hasher)))
     (hash-write! h x)
     (for-each
-      (cut hash-write! h <>)
-      rest)
+     (cut hash-write! h <>)
+     rest)
     (hash-finalize h)))
 
 ;; hash-file returns the hash of a file
@@ -113,7 +113,7 @@ EOF
          (res ((foreign-lambda int "fast_hash_file" scheme-pointer nonnull-c-string)
                out fp)))
     (cond
-      ((= res 0) out)
-      ((= res 2) #f)
-      (else
-        (call-with-input-file fp hash-of)))))
+     ((= res 0) out)
+     ((= res 2) #f)
+     (else
+      (call-with-input-file fp hash-of)))))

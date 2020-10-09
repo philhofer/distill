@@ -37,11 +37,11 @@
   ;; is just wrappers for stuff provided by $cc-toolchain
   (lambda (host)
     (let ((htc ($cc-toolchain host))
-	        (ntc ($native-toolchain host)))
+          (ntc ($native-toolchain host)))
       (flatten (cc-toolchain-tools htc)
-	             (cc-toolchain-libc htc)
-	             (cc-toolchain-tools ntc)
-	             (cc-toolchain-libc ntc)))))
+               (cc-toolchain-libc htc)
+               (cc-toolchain-tools ntc)
+               (cc-toolchain-libc ntc)))))
 
 ;; gcc is a pseudo-package that provides
 ;; a gcc for build=host plus wrappers that
@@ -60,67 +60,67 @@
 ;; gcc+musl-toolchain is a toolchain that produces
 ;; statically-linked PIE binaries using gcc and musl libc
 (define (gcc+musl-toolchain triple #!key
-			                      (CFLAGS '())
-			                      (CXXFLAGS '())
-			                      (LDFLAGS '())
-			                      (prebuilt #f))
+                            (CFLAGS '())
+                            (CXXFLAGS '())
+                            (LDFLAGS '())
+                            (prebuilt #f))
   (let* ((plat   (lambda (bin)
-		               (conc triple "-" bin)))
-	       ;; n.b.: we configure our gcc toolchain --with-sysroot=<sysroot>
-	       ;; so it should automatically use the right one anyway
-	       (sysf   (conc "--sysroot=" (triple->sysroot triple)))
-	       (lflags (cons sysf '(-static-pie "-Wl,--gc-sections")))
-	       (cflags (append lflags '(-fPIE -ffunction-sections -fdata-sections -pipe))))
+                   (conc triple "-" bin)))
+         ;; n.b.: we configure our gcc toolchain --with-sysroot=<sysroot>
+         ;; so it should automatically use the right one anyway
+         (sysf   (conc "--sysroot=" (triple->sysroot triple)))
+         (lflags (cons sysf '(-static-pie "-Wl,--gc-sections")))
+         (cflags (append lflags '(-fPIE -ffunction-sections -fdata-sections -pipe))))
     (make-cc-toolchain
      tools: (or prebuilt
-		            (list
-		             (gcc-for-triple triple)
-		             (binutils-for-triple triple)
-		             exportall
-		             make
-		             execline-tools
-		             busybox-core))
+                (list
+                 (gcc-for-triple triple)
+                 (binutils-for-triple triple)
+                 exportall
+                 make
+                 execline-tools
+                 busybox-core))
      ;; it must be possible to build these with only 'tools:'
      libc: (list musl libssp-nonshared)
      env: (make-cc-env
-	         CBUILD:   *default-build-triple* ; FIXME
-	         CHOST:    triple
-	         CC:       (plat "gcc")
-	         CFLAGS:   (append cflags CFLAGS)
-	         CXX:      (plat "g++")
-	         CXXFLAGS: (append cflags CXXFLAGS)
-	         LD:       (plat "ld")
-	         LDFLAGS:  (append lflags LDFLAGS)
-	         AS:       (plat "as")
-	         AR:       (plat "ar")
-	         NM:       (plat "nm")
-	         ARFLAGS:  "-Dcr"
-	         RANLIB:   (plat "ranlib")
-	         STRIP:    (plat "strip")
-	         READELF:  (plat "readelf")
-	         OBJCOPY:  (plat "objcopy")))))
+           CBUILD:   *default-build-triple* ; FIXME
+           CHOST:    triple
+           CC:       (plat "gcc")
+           CFLAGS:   (append cflags CFLAGS)
+           CXX:      (plat "g++")
+           CXXFLAGS: (append cflags CXXFLAGS)
+           LD:       (plat "ld")
+           LDFLAGS:  (append lflags LDFLAGS)
+           AS:       (plat "as")
+           AR:       (plat "ar")
+           NM:       (plat "nm")
+           ARFLAGS:  "-Dcr"
+           RANLIB:   (plat "ranlib")
+           STRIP:    (plat "strip")
+           READELF:  (plat "readelf")
+           OBJCOPY:  (plat "objcopy")))))
 
 (define (gcc-native-toolchain triple)
   (make-cc-toolchain
    tools: (native-gcc-toolchain-wrappers triple)
    libc:  '()
    env: (make-cc-env
-	       CBUILD:   #f
-	       CHOST:    #f
-	       CC:       "gcc"
-	       CFLAGS:   '(-fPIE -static-pie -pipe -O2)
-	       CXX:      "g++"
-	       CXXFLAGS: '(-fPIE -static-pie -pipe -O2)
-	       LD:       "ld"
-	       LDFLAGS:  '(-static-pie)
-	       AS:       "as"
-	       AR:       "ar"
-	       NM:       "nm"
-	       ARFLAGS:  "-Dcr"
-	       RANLIB:   "ranlib"
-	       STRIP:    "strip"
-	       READELF:  "readelf"
-	       OBJCOPY:  "objcopy")))
+         CBUILD:   #f
+         CHOST:    #f
+         CC:       "gcc"
+         CFLAGS:   '(-fPIE -static-pie -pipe -O2)
+         CXX:      "g++"
+         CXXFLAGS: '(-fPIE -static-pie -pipe -O2)
+         LD:       "ld"
+         LDFLAGS:  '(-static-pie)
+         AS:       "as"
+         AR:       "ar"
+         NM:       "nm"
+         ARFLAGS:  "-Dcr"
+         RANLIB:   "ranlib"
+         STRIP:    "strip"
+         READELF:  "readelf"
+         OBJCOPY:  "objcopy")))
 
 ;; gcc+musl-static-config produces a config that uses
 ;; gcc and musl libc for static linking
@@ -131,26 +131,26 @@
 ;; presently, this is the only config/toolchain option,
 ;; but at some point a clang alternative may be introduced...
 (define (gcc+musl-static-config arch
-				                        #!key
-				                        (optflag '-O2)
-				                        (sspflag '-fstack-protector-strong)
-				                        (extra-cflags '())
-				                        (build #f)
-				                        (bootstrap #f)
-				                        (prebuilt #f))
+                                #!key
+                                (optflag '-O2)
+                                (sspflag '-fstack-protector-strong)
+                                (extra-cflags '())
+                                (build #f)
+                                (bootstrap #f)
+                                (prebuilt #f))
   (let ((badfl  '(-march=native -mtune=native -mcpu=native))
-	      (triple (string->symbol (conc arch "-linux-musl")))
-	      (cflags (cons*
-		             (or optflag '-Og)
-		             (or sspflag '-fno-stack-protector)
-		             extra-cflags)))
+        (triple (string->symbol (conc arch "-linux-musl")))
+        (cflags (cons*
+                 (or optflag '-Og)
+                 (or sspflag '-fno-stack-protector)
+                 extra-cflags)))
     ;; don't allow CFLAGS that we know will
     ;; break reproducibility (so far just -march=native and equivalents)
     (let loop ((fl badfl))
       (or (null? fl)
-	        (if (memq (car fl) extra-cflags)
-	            (error "CFLAGS breaks reproducibility" (car fl))
-	            (loop (cdr fl)))))
+          (if (memq (car fl) extra-cflags)
+              (error "CFLAGS breaks reproducibility" (car fl))
+              (loop (cdr fl)))))
     (make-config
      arch:         arch
      triple:       triple
@@ -171,10 +171,10 @@
 ;; that are run as part of the overall build process.)
 (define (cc-for-target conf #!optional (native #f))
   (let* ((tc    ($cc-toolchain conf))
-	       (tools (cc-toolchain-tools tc)))
+         (tools (cc-toolchain-tools tc)))
     (if native
-	      (cons native-toolchain tools)
-	      tools)))
+        (cons native-toolchain tools)
+        tools)))
 
 (define *musl-url*
   "https://www.musl-libc.org/releases/musl-$version.tar.gz")
@@ -198,16 +198,16 @@
    (lambda (target-triple)
      (package-template
       src:   (remote-archive
-	            (url-translate *musl-url* "musl" *musl-version*)
-	            *musl-hash*)
+              (url-translate *musl-url* "musl" *musl-version*)
+              *musl-hash*)
       dir:   (string-append "musl-" *musl-version*)
       env:   '()
       label: (conc "musl-headers-" (triple->arch target-triple))
       tools: (list make execline-tools busybox-core)
       inputs: '()
       build: `(make ,(conc "DESTDIR=/out/" (triple->sysroot target-triple))
-		            ,(conc "ARCH=" (musl-arch-name target-triple))
-		            "prefix=/usr" install-headers)))))
+                ,(conc "ARCH=" (musl-arch-name target-triple))
+                "prefix=/usr" install-headers)))))
 
 (define musl
   (cc-package
@@ -215,11 +215,11 @@
    *musl-url* *musl-hash*
    no-libc: #t ; compiled as -ffreestanding
    build: (elif*
-	         `(./configure --disable-shared --enable-static
-			                   --prefix=/usr ,(el= 'CC= $CC) ,(el= 'CFLAGS= $CFLAGS)
-			                   --target ,$arch)
-	         `(make ,$make-overrides)
-	         '(make DESTDIR=/out install))))
+           `(./configure --disable-shared --enable-static
+                         --prefix=/usr ,(el= 'CC= $CC) ,(el= 'CFLAGS= $CFLAGS)
+                         --target ,$arch)
+           `(make ,$make-overrides)
+           '(make DESTDIR=/out install))))
 
 (define libssp-nonshared
   (package-template
@@ -230,10 +230,10 @@
    dir:     "/src"
    src:     (bind "patches/ssp-nonshared/ssp-nonshared.c" "/src/ssp-nonshared.c")
    build: (elif*
-	         `(,$CC ,$CFLAGS -c ssp-nonshared.c -o __stack_chk_fail_local.o)
-	         `(,$AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)
-	         '(mkdir -p /out/usr/lib)
-	         '(cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))
+           `(,$CC ,$CFLAGS -c ssp-nonshared.c -o __stack_chk_fail_local.o)
+           `(,$AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)
+           '(mkdir -p /out/usr/lib)
+           '(cp libssp_nonshared.a /out/usr/lib/libssp_nonshared.a))))
 
 ;; exportall(1) is an execline tool for exporting a block of variables
 ;; (in execline syntax, it works like 'exportall { key val ... } prog ...'
@@ -245,8 +245,8 @@
      (cdn-url hash)
      hash
      build: (elif*
-	           `(make DESTDIR=/out ,(el= 'CC= $CC) ,(el= 'CFLAGS= $CFLAGS) install)
-	           (list $strip-cmd)))))
+             `(make DESTDIR=/out ,(el= 'CC= $CC) ,(el= 'CFLAGS= $CFLAGS) install)
+             (list $strip-cmd)))))
 
 (define m4
   (cmmi-package
@@ -294,8 +294,8 @@
    "https://sourceware.org/pub/$name/$name-$version.tar.gz"
    "pZGXjBOF4VYQnwdDp2UYObANElrjShQaRbMDj5yef1A="
    build: (elif*
-	         `(make PREFIX=/out/usr ,$cc-env ,$make-overrides install)
-	         (list $strip-cmd))))
+           `(make PREFIX=/out/usr ,$cc-env ,$make-overrides install)
+           (list $strip-cmd))))
 
 (define bzip2  (binaries %bzip2))
 (define libbz2 (libs %bzip2))
@@ -303,24 +303,24 @@
 ;; wrapper for cmmi-package for skaware,
 ;; since they all need similar treatment
 (define (ska-cmmi-package
-	       name version hash
-	       #!key
-	       (libs '())
-	       (extra-configure '()))
+         name version hash
+         #!key
+         (libs '())
+         (extra-configure '()))
   (cmmi-package
    name version
    "https://skarnet.org/software/$name/$name-$version.tar.gz" hash
    libs:     libs
    prepare:  '(sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)
    override-configure: `(--prefix=/
-			                   --libdir=/usr/lib
-			                   --disable-shared --enable-static
-			                   --target ,$triple
-			                   ,(elconc '--with-include= $sysroot '/include)
-			                   ,(elconc '--with-include= $sysroot '/usr/include)
-			                   ,(elconc '--with-lib= $sysroot '/lib)
-			                   ,(elconc '--with-lib= $sysroot '/usr/lib)
-			                   ,@extra-configure)))
+                         --libdir=/usr/lib
+                         --disable-shared --enable-static
+                         --target ,$triple
+                         ,(elconc '--with-include= $sysroot '/include)
+                         ,(elconc '--with-include= $sysroot '/usr/include)
+                         ,(elconc '--with-lib= $sysroot '/lib)
+                         ,(elconc '--with-lib= $sysroot '/usr/lib)
+                         ,@extra-configure)))
 
 (define skalibs
   (ska-cmmi-package
@@ -334,8 +334,8 @@
    "uT3m68KBynOnxZHVGfu3ZjXV1ODRVSNNNfF7HrJEqEI="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
-		                  --enable-pedantic-posix
-		                  --enable-static-libc)))
+                      --enable-pedantic-posix
+                      --enable-static-libc)))
 
 (define execline-tools (binaries libexecline+tools))
 (define libexecline (libs libexecline+tools))
@@ -355,10 +355,10 @@
    tools: (list byacc)
    ;; install flex(1) and lex(1) symlinks
    cleanup: (elif*
-	           '(ln -s reflex /out/usr/bin/lex)
-	           '(ln -s reflex++ /out/usr/bin/lex++)
-	           '(ln -s reflex /out/usr/bin/flex)
-	           '(ln -s reflex++ /out/usr/bin/flex++))))
+             '(ln -s reflex /out/usr/bin/lex)
+             '(ln -s reflex++ /out/usr/bin/lex++)
+             '(ln -s reflex /out/usr/bin/flex)
+             '(ln -s reflex++ /out/usr/bin/flex++))))
 
 (define zlib
   (cmmi-package
@@ -384,7 +384,7 @@
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
    "HaL2VGA5mzktijZa2L_IyOv2OTKTGkf8D-AVI_wvARc="
    ;; can't call exit(3) inside a procedure registered with atexit(3);
-    ;; just exit promptly
+   ;; just exit promptly
    prepare: '(sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c)))
 
 (define binutils-for-triple
@@ -399,63 +399,63 @@
       native-cc: $cc-env/for-build
       prepare: '(sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in)
       override-configure: `(--disable-nls
-			                      --disable-shared --enable-static
-			                      --disable-multilib --enable-gold=yes --with-ppl=no
-			                      --disable-install-libiberty --enable-relro
-			                      --disable-plugins --enable-deterministic-archives
-			                      --with-mmap --enable-ld=default
-			                      --with-system-zlib --enable-64-bit-bfd
-			                      --disable-install-libbfd
-			                      --prefix=/usr
-			                      ;; no libdir, etc. because we discard any
-			                      ;; libraries and headers produced
-			                      ,(elconc '--program-prefix= target-triple '-)
-			                      ,(elconc '--build= $build-triple)
-			                      ,(elconc '--target= target-triple)
-			                      ,(elconc '--host= $triple)
-			                      ,(elconc '--with-sysroot= (triple->sysroot target-triple)))
+                            --disable-shared --enable-static
+                            --disable-multilib --enable-gold=yes --with-ppl=no
+                            --disable-install-libiberty --enable-relro
+                            --disable-plugins --enable-deterministic-archives
+                            --with-mmap --enable-ld=default
+                            --with-system-zlib --enable-64-bit-bfd
+                            --disable-install-libbfd
+                            --prefix=/usr
+                            ;; no libdir, etc. because we discard any
+                            ;; libraries and headers produced
+                            ,(elconc '--program-prefix= target-triple '-)
+                            ,(elconc '--build= $build-triple)
+                            ,(elconc '--target= target-triple)
+                            ,(elconc '--host= $triple)
+                            ,(elconc '--with-sysroot= (triple->sysroot target-triple)))
       cleanup: (elif*
-	              '(rm -rf /out/usr/include)
-	              '(rm -rf /out/include)
-	              '(rm -rf /out/usr/lib)
-	              '(rm -rf /out/lib))))))
+                '(rm -rf /out/usr/include)
+                '(rm -rf /out/include)
+                '(rm -rf /out/usr/lib)
+                '(rm -rf /out/lib))))))
 
 ;; this is a hack that allows us to build a cross-gcc
 ;; without circular dependencies: install a fake set of
 ;; object files that define the same symbols that musl does
 (define fake-musl-for-triple
   (memoize-eq
-    (lambda (target-triple)
-      (lambda (host)
-	      (when (eq? target-triple ($triple host))
-	        (error "fake-musl for build machine will cause a bootstrap loop"))
-        (let* ((hash "GpFZDYJsPUIYcsfZe-22Qk90kJ9albSjYSf_qTfzuuA=")
-               (leaf (remote-archive (cdn-url hash) hash kind: 'tar.zst))
-               (version '0.1))
-          (package-template
-	         label: (conc "fakemusl-" version "-" (triple->arch target-triple))
-	         src:   leaf
-	         dir:   (conc "fakemusl-" version)
-	         ;; so, we're hard-coding binutils here rather than
-	         ;; getting the toolchain from the host <config>
-	         ;; because we actually need an assembler, and
-	         ;; clang doesn't come with one
-	         tools: (list (binutils-for-triple target-triple)
-			                  make
-			                  execline-tools
-			                  busybox-core)
-	         inputs: '()
-	         build: (let* ((outdir (filepath-join "/out" (triple->sysroot target-triple))))
-		                (elif*
-		                 `(make ,(conc "AS=" target-triple "-as")
-			                  ,(conc "AR=" target-triple "-ar") all)
-		                 `(make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
+   (lambda (target-triple)
+     (lambda (host)
+       (when (eq? target-triple ($triple host))
+         (error "fake-musl for build machine will cause a bootstrap loop"))
+       (let* ((hash "GpFZDYJsPUIYcsfZe-22Qk90kJ9albSjYSf_qTfzuuA=")
+              (leaf (remote-archive (cdn-url hash) hash kind: 'tar.zst))
+              (version '0.1))
+         (package-template
+          label: (conc "fakemusl-" version "-" (triple->arch target-triple))
+          src:   leaf
+          dir:   (conc "fakemusl-" version)
+          ;; so, we're hard-coding binutils here rather than
+          ;; getting the toolchain from the host <config>
+          ;; because we actually need an assembler, and
+          ;; clang doesn't come with one
+          tools: (list (binutils-for-triple target-triple)
+                       make
+                       execline-tools
+                       busybox-core)
+          inputs: '()
+          build: (let* ((outdir (filepath-join "/out" (triple->sysroot target-triple))))
+                   (elif*
+                    `(make ,(conc "AS=" target-triple "-as")
+                       ,(conc "AR=" target-triple "-ar") all)
+                    `(make PREFIX=/usr ,(conc "DESTDIR=" outdir) install)))))))))
 
 (define (if-native-target? tg yes no)
   (lambda (conf)
     (if (eq? tg ($triple conf))
-	      yes
-	      no)))
+        yes
+        no)))
 
 (define gcc-for-triple
   (memoize-eq
@@ -546,7 +546,7 @@
                    ;; only the native version of gcc should have
                    ;; the python gdb helpers
                    '(elglob dir "/out/usr/share/gcc-*/python"
-			                      rm -rf $dir))))))))
+                            rm -rf $dir))))))))
 
 (define (busybox/config config-path extra-inputs)
   (cc-package
@@ -727,8 +727,8 @@ EOF
                     ,@make-args
                     allnoconfig)
                `(make V=1 ,@make-args)
-	             (and dtb `(install -D -m "644" -t /out/boot ,dtb))
-	             `(make V=1 ,@make-args install))))))
+               (and dtb `(install -D -m "644" -t /out/boot ,dtb))
+               `(make V=1 ,@make-args install))))))
 
 ;; libelf is *just* libelf.a and headers;
 ;; it does not include the rest of elfutils
@@ -765,8 +765,8 @@ EOF
                   ,$AR ,$ARFLAGS libelf.a $objs)
              '(mkdir -p /out/usr/include /out/usr/lib)
              '(cp libelf/gelf.h /out/usr/include/gelf.h)
-	           '(cp libelf/libelf.h /out/usr/include/libelf.h)
-	           '(cp libelf/libelf.a /out/usr/lib/libelf.a)))))
+             '(cp libelf/libelf.h /out/usr/include/libelf.h)
+             '(cp libelf/libelf.a /out/usr/lib/libelf.a)))))
 
 (define %e2fsprogs
   ;; e2fsprogs is unusual and uses BUILD_CC, BUILD_CFLAGS, etc.
@@ -794,9 +794,9 @@ EOF
      extra-configure: `(--enable-symlink-install
                         --enable-libuuid
                         --enable-libblkid
-			                  --disable-uuidd
-			                  --disable-fsck
-			                  ,$buildcc-env)
+                        --disable-uuidd
+                        --disable-fsck
+                        ,$buildcc-env)
      override-install: '("MKDIR_P=install -d" DESTDIR=/out install install-libs))))
 
 (define e2fsprogs
@@ -845,13 +845,13 @@ EOF
                            -Dvendorlib=/usr/share/perl5/vendor_perl -Dvendorarch=/usr/lib/perl5/vendor_perl
                            -Duselargefiles -Dusethreads -Duseshrplib=false -Dd_semctl_semun
                            -Dman1dir=/usr/share/man/man1 -Dman3dir=/usr/share/man/man3
-			                     -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
-			                     -Dman1ext=1 -Dman3ext=3pm -Ud_csh -Uusedl -Dusenm
-			                     -Dusemallocwrap)
-	           `(make ,$make-overrides)
-	           '(make DESTDIR=/out install)
-	           '(rm -rf /out/usr/share/man)
-	           '(find /out -name ".*" -delete)))))
+                           -Dinstallman1dir=/usr/share/man/man1 -Dinstallman3dir=/usr/share/man/man3
+                           -Dman1ext=1 -Dman3ext=3pm -Ud_csh -Uusedl -Dusenm
+                           -Dusemallocwrap)
+             `(make ,$make-overrides)
+             '(make DESTDIR=/out install)
+             '(rm -rf /out/usr/share/man)
+             '(find /out -name ".*" -delete)))))
 
 ;; uboot/config accepts 4 arguments:
 ;;  - name: a suffix added to the package name
@@ -892,10 +892,10 @@ EOF
                      -e "s/xxd -i/hexdump -v -e '\\/1 \"0x%X, \"'/g"
                      -e "s/echo \", 0x00\"/echo \" 0x00\"/g" Makefile)
                ;; we're using yacc -d, so the zconf.tab.c needs to #include the generated definitions
-	             '(sed "-i"
-		                 -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)
-	             `(make V=1 ,@make-args)
-	             '(install -D -m 644 -t /out/boot u-boot.bin))))))
+               '(sed "-i"
+                     -e "/^#include \"/a #include \"zconf.tab.h\"" scripts/kconfig/zconf.y)
+               `(make V=1 ,@make-args)
+               '(install -D -m 644 -t /out/boot u-boot.bin))))))
 
 (define xz-utils
   (cmmi-package
@@ -937,8 +937,8 @@ EOF
              `(cd lib/
                   make PREFIX=/usr DESTDIR=/out ,$cc-env ,$make-overrides ,@makeflags install-static install-includes)
              `(cd programs/
-		              make ,$cc-env ,$make-overrides ,@makeflags zstd)
-	           '(install -D -m "755" programs/zstd /out/usr/bin/zstd)))))
+                  make ,$cc-env ,$make-overrides ,@makeflags zstd)
+             '(install -D -m "755" programs/zstd /out/usr/bin/zstd)))))
 
 (define zstd (binaries %zstd))
 (define libzstd (libs %zstd))
@@ -1044,7 +1044,7 @@ EOF
              '(rm -rf /out/usr/share/bash-completion)
              '(rm -rf /out/var)
              '(rm -rf /out/usr/share/man)
-		         (list $strip-cmd)))))
+             (list $strip-cmd)))))
 
 (define libs6+tools
   (ska-cmmi-package
@@ -1116,9 +1116,9 @@ EOF
                      prebuilt: (cdr (assq *this-machine* *prebuilts*))
                      bootstrap: #f
                      build: #f))
-	         (stage1  (config*
-		                 bootstrap: stage0
-		                 build: #f)))
+           (stage1  (config*
+                     bootstrap: stage0
+                     build: #f)))
       (config* build: #f bootstrap: stage1))))
 
 (define dosfstools

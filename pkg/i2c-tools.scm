@@ -1,7 +1,7 @@
 (import
-  scheme
-  (distill base)
-  (distill package))
+ scheme
+ (distill base)
+ (distill package))
 
 (define i2c-tools
   (cc-package
@@ -11,5 +11,5 @@
    env: (list $cc-env)
    libs: (list linux-headers)
    build: '(if
-	    (make DESTDIR=/out PREFIX=/usr BUILD_STATIC_LIB=1 BUILD_DYNAMIC_LIB=0 install)
-	    rm -rf /out/usr/share)))
+            (make DESTDIR=/out PREFIX=/usr BUILD_STATIC_LIB=1 BUILD_DYNAMIC_LIB=0 install)
+            rm -rf /out/usr/share)))

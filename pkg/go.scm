@@ -1,13 +1,13 @@
 (import
-  scheme
-  (only (chicken base) error)
-  (only (chicken string) conc)
-  (only (chicken module) export)
-  (distill memo)
-  (distill base)
-  (distill plan)
-  (distill package)
-  (distill execline))
+ scheme
+ (only (chicken base) error)
+ (only (chicken string) conc)
+ (only (chicken module) export)
+ (distill memo)
+ (distill base)
+ (distill plan)
+ (distill package)
+ (distill execline))
 
 ;; prebuilt go bootstrap binaries
 ;; (easier than doing the go1.4 C bootstrap,
@@ -21,10 +21,10 @@
   (lambda (conf)
     (let ((c (assq ($arch conf) go-bootstrap-hashes)))
       (if c
-	        (remote-archive
-	         (string-append "https://b2cdn.sunfi.sh/file/pub-cdn/" (cdr c))
-	         (cdr c) kind: 'tar.zst)
-	        (error "no go-bootstrap for arch" ($arch conf))))))
+          (remote-archive
+           (string-append "https://b2cdn.sunfi.sh/file/pub-cdn/" (cdr c))
+           (cdr c) kind: 'tar.zst)
+          (error "no go-bootstrap for arch" ($arch conf))))))
 
 (export $GOARCH $GOEXTRA)
 
@@ -44,9 +44,9 @@
     ((armv5) '(GOARM . 5))
     ((ppc64le)
      (cons 'GOPPC64
-		       (if (memq '-mcpu=power9 ($CFLAGS conf))
-			         'power9
-			         'power8)))
+           (if (memq '-mcpu=power9 ($CFLAGS conf))
+               'power9
+               'power8)))
     (else #f)))
 
 ;; $go-env produces an environment suitable
@@ -102,5 +102,5 @@
            '(ln -s /usr/lib/go/bin/go /out/usr/bin/go)
            '(ln -s /usr/lib/go/bin/gofmt /out/usr/bin/gofmt)
            '(find /out/usr/lib/go/src -type f -name "*_test.go" -delete)
-	         '(find /out/usr/lib/go/src -type d -name "testdata" -exec rm -rf "{}" "+")
-	         '(find /out/usr/lib/go/src -type f -name "*.rc" -o -name "*.bat" -delete))))
+           '(find /out/usr/lib/go/src -type d -name "testdata" -exec rm -rf "{}" "+")
+           '(find /out/usr/lib/go/src -type f -name "*.rc" -o -name "*.bat" -delete))))
