@@ -17,6 +17,7 @@
     tai64n->unix
     tai64n-seconds
     tai64n-nanoseconds
+    tai64n->integer
     string->tai64n
     tai64n->string)
   (import

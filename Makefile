@@ -44,6 +44,8 @@ Makefile.dep: $(wildcard *.sld) autodep.scm
 
 include Makefile.dep
 
+# autodep.scm isn't clever enough to figure these out;
+# just specify them manually
 distill.plan.c: copy-sparse.c
 distill.hash.c: blake2b-ref.c blake2.h blake2-impl.h
 distill.tai64.c: tai64.inc.h

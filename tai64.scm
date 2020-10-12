@@ -26,13 +26,22 @@
                        (arithmetic-shift v 8)
                        (u8vector-ref vec i))))))
 
+;; tai64n-seconds yields the seconds component
+;; of the tai64n object
 (: tai64n-seconds (u8vector --> integer))
 (define (tai64n-seconds tm)
   (decode-int tm 0 8))
 
+;; tai64n-nanoseconds yields the
+;; nanoseconds component of the tai64n object
 (: tai64n-nanoseconds (u8vector --> integer))
 (define (tai64n-nanoseconds tm)
   (decode-int tm 8 12))
+
+(: tai64n->integer (u8vector --> integer))
+(define (tai64n->integer tm)
+  (+ (* (tai64n-seconds tm) 1000000000)
+     (tai64n-nanoseconds tm)))
 
 (: tai64n->unix (u8vector -> integer))
 (define (tai64n->unix tm)

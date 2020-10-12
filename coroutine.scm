@@ -176,7 +176,10 @@
 (define (proc-status box)
   (vector-ref box 0))
 
-;; see (spawn ...)
+;; proc-return inspects the return value
+;; of a coroutine
+;; (the proc-return of a coroutine that has not
+;; terminated is undefined)
 (: proc-return ((vector symbol 'a list) -> 'a))
 (define (proc-return box)
   (vector-ref box 1))
@@ -193,7 +196,12 @@
 
 ;; spawn runs (apply thunk args) asynchronously
 ;; and returns an opaque object that can be used
-;; to query the status of the procedure
+;; to query the status of the procedure;
+;; see join/value, proc-status, proc-return
+;;
+;; any exceptions thrown when evaluating (thunk args ...)
+;; are caught and the condition object is made available
+;; through proc-return and join/value
 (: spawn (procedure #!rest * -> (vector symbol * list)))
 (define (spawn proc . args)
   (let ((box (vector 'started #f '())))
@@ -270,6 +278,13 @@
 
 ;; join/value waits for a coroutine to exit,
 ;; then yields its return value
+;;
+;; in other words,
+;;   (join/value (spawn proc args ...))
+;; is more-or-less semantically equivalent to
+;;   (proc args ...)
+;; except for that the former evaluates (proc args ...)
+;; in a different dynamic extent than the caller
 ;;
 ;; note that if the coroutine threw an exception,
 ;; the return value will satisfy 'condition?'

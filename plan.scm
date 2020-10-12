@@ -308,22 +308,23 @@
 ;; and interns everything written to
 ;; current-output-port into the current
 ;; artifact directory
+;;
+;; note: output is buffered until the thunk
+;; returns, so don't use this to produce anything
+;; that is seriously large
 (: with-interned-output ((-> *) -> string))
 (define (with-interned-output thunk)
   (let* ((_  (check-tmp-perms))
-         (h  (new-hasher))
-         (f  (create-temporary-file ".to-intern"))
-         (fp (open-output-file f))
-         (bp (make-broadcast-port (hasher->output-port h) fp)))
-    (parameterize ((current-output-port bp))
+         (sp (open-output-string)))
+    (parameterize ((current-output-port sp))
       (thunk))
-    (close-output-port bp)
-    (close-output-port fp)
-    (let* ((hres (hash-finalize h))
+    (let* ((str  (get-output-string sp))
+           (_    (close-output-port sp))
+           (hres (hash-of str))
            (dst  (filepath-join (artifact-dir) hres)))
-      (or (file-exists? dst)
-          (copy-file f dst #t))
-      (delete-file* f)
+      (unless (file-exists? dst)
+        (with-output-to-file dst
+          (lambda () (write-string str))))
       hres)))
 
 ;; plan-resolved? returns whether or not
@@ -397,8 +398,7 @@
                   (lfd (string-append dir "/label")))
              (unless (file-exists? lfd)
                (create-directory dir #t)
-               (call-with-output-file
-                   lfd
+               (call-with-output-file lfd
                  (cute display (string-append (plan-name p) "-" (short-hash h)) <>)))
              (plan-saved-hash-set! p h)
              h))))
