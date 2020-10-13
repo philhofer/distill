@@ -453,113 +453,6 @@
     (unless (and ok? (= status 0))
       (error "command failed:" (cons prog args)))))
 
-(define current-jobserver
-  (make-parameter #f))
-
-;; call a thunk with a fresh jobserver bound to current-jobserver
-;; during the dynamic extent of the thunk
-(: with-new-jobserver ((-> 'a) -> 'a))
-(define (with-new-jobserver thunk)
-  (let ((js (fdpipe)))
-    (with-cleanup
-     (lambda ()
-       (fdclose (car js))
-       (fdclose (cadr js)))
-     (lambda ()
-       (parameterize ((current-jobserver js))
-         (thunk))))))
-
-(: jobserver+ (fixnum -> *))
-(define (jobserver+ n)
-  (let* ((pipe (current-jobserver))
-         (wfd  (cadr pipe))
-         (bv   (make-string n #\a)))
-    (fdwrite wfd bv)))
-
-(: jobserver- (fixnum -> *))
-(define (jobserver- n)
-  (or (fx<= n 0)
-      (let* ((rfd   (car (current-jobserver)))
-             (buf   (make-string n))
-             (ret   (fdread rfd buf)))
-        (cond
-         ((fx= ret 0) (error "pipe: EOF"))
-         ((fx< ret 0) (error "errno:" (- ret)))
-         (else        (jobserver- (fx- n ret)))))))
-
-(: call-with-job ((-> 'a) -> 'a))
-(define (call-with-job proc)
-  (jobserver- 1)
-  (with-cleanup
-   (lambda () (jobserver+ 1))
-   proc))
-
-;; perform an elaborate chroot into 'root'
-;; and then run '/build' inside that new
-;; root, with stdout and stderr redirected
-;; to 'logfile' (either a file path or file descriptor)
-(: sandbox-run (string string -> undefined))
-(define (sandbox-run root logfile)
-  (let ((bwrap "/usr/bin/bwrap") ;; FIXME
-        (js    (current-jobserver))
-        (args  (list
-                "--unshare-ipc"
-                "--unshare-pid"
-                "--unshare-uts"
-                "--unshare-cgroup-try"
-                "--unshare-net"
-                "--hostname" "builder"
-                "--bind" root "/"       ; rootfs containing host tools
-                "--dir" "/dev"
-                "--dir" "/proc"
-                "--dir" "/tmp"
-                "--dev" "/dev"
-                "--proc" "/proc"
-                "--tmpfs" "/tmp"
-                "--"
-                "/build"))
-        ;; DO NOT CHANGE THIS LIGHTLY:
-        ;; it may cause builds to fail
-        ;; to reproduce!
-        (env   '(("PATH" . "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin")
-                 ("LC_ALL" . "C.UTF-8")
-                 ("SOURCE_DATE_EPOCH" . "0")
-                 ("MAKEFLAGS" . "--jobserver-auth=5,6")))
-        (setfd! (lambda (fd fromfd)
-                  (or (= fd fromfd)
-                      (begin
-                        (duplicate-fileno fromfd fd)
-                        (file-close fromfd))))))
-    (let-values (((pid ok status)
-                  (process-wait/yield
-                   (process-fork
-                    (lambda ()
-                      ;; any exceptions in here should immediately exit
-                      (current-exception-handler (lambda (exn)
-                                                   (print-error-message exn)
-                                                   (fatal "(execing bwrap):" exn)))
-                      (setfd! 6 (cadr js))
-                      (setfd! 5 (car js))
-                      (setfd! fileno/stdin (file-open "/dev/null" open/rdonly))
-                      ;; can't use fdpipe here because we need a *blocking* pipe;
-                      (let-values (((rd wr) (create-pipe)))
-                        (process-fork
-                         (lambda ()
-                           (current-exception-handler
-                            (lambda (exn)
-                              (print-error-message exn)
-                              (fatal "(execing zstd):" exn)))
-                           (for-each file-close '(5 6))
-                           (file-close wr)
-                           (setfd! fileno/stdin rd)
-                           (process-execute "zstd" (list "-q" "-" "-o" logfile))))
-                        (file-close rd)
-                        (setfd! fileno/stdout wr))
-                      (duplicate-fileno fileno/stdout fileno/stderr)
-                      (process-execute bwrap args env))))))
-      (or (and ok (= status 0))
-          (error "sandbox build failed")))))
-
 (: fetch! ((or false string) string -> *))
 (define (fetch! src hash)
   (let* ((url (or src (begin
@@ -716,7 +609,7 @@
   (let ((h (hash-file fp)))
     (unless h (error "couldn't find file" fp))
     (let ((dst (filepath-join (artifact-dir) h)))
-      (if (and (file-exists? dst) (equal? (hash-file dst) h))
+      (if (and (file-exists? dst) (string=? (hash-file dst) h))
           (infoln "artifact reproduced:" (short-hash h))
           (begin
             (copy-file fp dst #t)

@@ -25,7 +25,7 @@ UNITS:=distill.fetch distill.hash distill.nproc \
 	distill.image distill.unix distill.tai64 \
 	distill.service distill.sysctl distill.fs \
 	distill.net distill.kvector distill.contract \
-	distill.coroutine srfi-69 matchable
+	distill.coroutine distill.sandbox srfi-69 matchable
 
 .PHONY: test all install snapshot
 all: distill ${UNITS:%=%.o}

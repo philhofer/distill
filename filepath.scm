@@ -155,3 +155,11 @@ static int dsort(const struct dirent **a, const struct dirent **b) {
                                        (string=? str ".."))
                                    out
                                    (proc str out))))))))))
+
+;; pathfind finds a binary in $PATH or returns #f
+(: pathfind (string -> (or string false)))
+(define (pathfind bin)
+  (let loop ((lst (string-split (get-environment-variable "PATH") ":")))
+    (and (pair? lst)
+         (or (file-exists? (filepath-join (car lst) bin))
+             (loop (cdr lst))))))

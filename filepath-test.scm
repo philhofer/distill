@@ -55,3 +55,8 @@
               (and
                (string<? (car rest) head)
                (loop (car rest) (cdr rest)))))))
+
+;; hopefully this is the case?
+(test string=? "/bin/sh" (pathfind "sh"))
+;; ... and hopefully this isn't the case
+(test eq? #f (pathfind "really!not!a!program"))

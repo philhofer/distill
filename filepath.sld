@@ -6,7 +6,8 @@
     dirname
     basename
     abspath
-    folddir)
+    folddir
+    pathfind)
   (import
     scheme
     (srfi 2)
@@ -17,7 +18,9 @@
        (only (chicken fixnum) fx< fx>= fx+)
        (chicken foreign)
        (only (chicken base) include error)
-       (only (chicken string) substring=?)
-       (only (chicken process-context) current-directory)
+       (only (chicken string) substring=? string-split)
+       (only (chicken process-context) current-directory
+             get-environment-variable)
+       (only (chicken file) file-exists?)
        (chicken type))))
   (include "filepath.scm"))

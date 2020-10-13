@@ -49,17 +49,17 @@
         (chicken type) ;; type hints can be replaced with a no-op
         (chicken foreign)
         (only (chicken string) conc)
-	(only (chicken file) file-exists? directory-exists? create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
-	(chicken file posix)
+        (only (chicken file) file-exists? directory-exists? create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
+        (chicken file posix)
         (only (chicken base) include error unless when flatten void current-error-port exit identity disjoin o delay-force)
-	(only (chicken io) read-string write-string read-line)
+        (only (chicken io) read-string write-string read-line)
         (only (chicken port) make-broadcast-port)
         (only (chicken process-context) current-directory get-environment-variable)
         (only (chicken condition) print-error-message)
-	(only (chicken time) current-milliseconds)
-	(only (chicken bitwise) bitwise-and)
-	(chicken process)
-	(only (chicken sort) sort))))
+        (only (chicken time) current-milliseconds)
+        (only (chicken bitwise) bitwise-and)
+        (chicken process)
+        (only (chicken sort) sort))))
 
   (import
     scheme
@@ -79,5 +79,6 @@
     (distill kvector)
     (distill tai64)
     (distill hash)
+    (distill sandbox)
     (distill fetch))
   (include "plan.scm"))

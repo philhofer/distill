@@ -15,5 +15,5 @@
 	       (only (chicken process) process-run)
 	       (only (chicken process-context) get-environment-variable)
 	       (only (chicken string) string-split)
-	       (only (chicken base) include receive delay-force))))
+	       (only (chicken base) include receive delay-force error))))
   (include "fetch.scm"))
