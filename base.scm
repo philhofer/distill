@@ -391,9 +391,9 @@
   (memoize-eq
    (lambda (target-triple)
      (cmmi-package
-      "binutils" "2.35" ; upgrade me to 2.37
+      "binutils" "2.37"
       "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-      "T4QnOCw-pixGZ40MF5PY_yQuLVmiUB_PX065is3HXgM="
+      "m29aXIuswEe57fzacV7oDPhxGayaCqH2Dy2NTU7lkxQ="
       tools: (list byacc reflex)
       libs:  (list zlib)
       native-cc: $cc-env/for-build
@@ -466,9 +466,9 @@
                        (list (fake-musl-for-triple triple)
                              (musl-headers-for-triple triple)))))
        (cmmi-package
-        "gcc" "9.3.0" ; upgrade me to 9.4
+        "gcc" "9.4.0"
         "https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
-        "Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="
+        "rL94uba7wDwZ432zSGmyrOQboRdwa0l0eEf9qxFlGNI="
         patches: (patchfiles* "patches/gcc/pie-gcc.patch")
         tools: (list byacc reflex gawk)
         ;; we depend on cc-for-build automatically,
@@ -550,9 +550,9 @@
 
 (define (busybox/config config-path extra-inputs)
   (cc-package
-   "busybox" "1.32.0" ; upgrade me to 1.33.1
+   "busybox" "1.33.1"
    "https://busybox.net/downloads/$name-$version.tar.bz2"
-   "huLCgRsdLYg2mHLwb9_ogCACO_d0SuJXKKeqSk15XII="
+   "XN3h0WFGSI4gZraBvNHF2t7FLIfhCKZ4_w-ff4f75so="
    extra-src: (list (bind config-path "/src/config.head"))
    libs:      extra-inputs
    tools:     (list bzip2)
@@ -738,7 +738,7 @@ EOF
         (config  (remote-file
                   #f "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
     (cc-package
-     "elfutils" "0.180"
+     "elfutils" "0.180" ; upgrade me to 0.185
      "https://sourceware.org/$name/ftp/$version/$name-$version.tar.bz2"
      "UFOiYGMUAwV4w3uwL07JyAOZrbPB4Xcu6S34dZMVLf0="
      libs: (list zlib)
@@ -780,7 +780,7 @@ EOF
                               "BUILD_"
                               (keyword->string kw))))))))
     (cmmi-package
-     "e2fsprogs" "1.45.6"
+     "e2fsprogs" "1.45.6" ; upgrade me to 1.46.3
      "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
      "JPnv_uv4MebWFHZWvwghtda0O-l8X3OF0m7yp16-1mI="
      patches: (patchfiles* "patches/e2fsprogs/repro.patch")
@@ -814,7 +814,7 @@ EOF
                       '(echo "Fri Apr 3 20:09:47 UTC 2020")
                       shebang: "#!/bin/execlineb -s0")))))
     (cc-package
-     "perl" "5.30.3"
+     "perl" "5.30.3" ; upgrade me to 5.34.0
      "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
      "-8eZLXMHd98cQoBwuo6uSbZm7uNsmj-Q2lV-uOPxjqA="
      tools: (list samedate)
@@ -908,7 +908,7 @@ EOF
 
 (define %lz4
   (cc-package
-   "lz4" "1.9.2"
+   "lz4" "1.9.2" ; upgrade me to 1.9.3
    ;; TODO: github release tarballs are not stable
    "https://github.com/lz4/$name/archive/v$version.tar.gz"
    "uwHhgT74Tk7ds0TQeFZTodoI1_5IZsRnVRNNHi7ywlc="
@@ -921,7 +921,7 @@ EOF
 
 (define %zstd
   (cc-package
-   "zstd" "1.4.5"
+   "zstd" "1.4.5" ; upgrade me to 1.5.0
    ;; note: this "release" tarball differs from the automated
    ;; github download release only in gzip timestamp
    ;; (decompressed content is identical)
@@ -944,7 +944,7 @@ EOF
 (define libzstd (libs %zstd))
 
 (define squashfs-tools
-  (let ((ver "4.4"))
+  (let ((ver "4.4")) ; upgrade me to 4.5
     (cc-package
      "squashfs-tools" ver
      ;; TODO: github release tarballs are not stable...
@@ -963,14 +963,14 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.2.1"
+   "libressl" "3.2.1" ; upgrade me to 3.3.3
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
    "_Fi446gVx0ILV7viYzPBewcC8FlVnT1M_LgTlysDmjc="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
   (cmmi-package
-   "libarchive" "3.4.3"
+   "libarchive" "3.4.3" ; upgrade me to 3.5.1
    "https://github.com/libarchive/$name/releases/download/v$version/$name-$version.tar.gz"
    "g5Ye1us8NuxJl7fMXxjVGmySIr97QigjcLTjHe9tn7A="
    libs: (list libbz2 zlib liblzma liblz4 libressl libzstd)
@@ -988,7 +988,7 @@ EOF
 
 (define libnftnl
   (cmmi-package
-   "libnftnl" "1.1.7"
+   "libnftnl" "1.1.7" ; upgrade me to 1.2.0
    "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
    "G0C2QOZexE0Kc8P6YJGHh_kK2eyjInsQYPECqOuxSg4="
    libs: (list linux-headers libmnl)
@@ -997,7 +997,7 @@ EOF
 
 (define iptables
   (cmmi-package
-   "iptables" "1.8.5"
+   "iptables" "1.8.5" ; upgrade me to 1.8.7
    "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
    "3o9fJ6KJfo_9K9CoYaHrJBIm9kDItejamfQDKljpdZM="
    libs: (list linux-headers libnftnl libmnl)
@@ -1028,7 +1028,7 @@ EOF
                          "%.o: %.c"
                          "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
     (cc-package
-     "iproute2" "5.6.0"
+     "iproute2" "5.6.0" ; upgrade me to 5.13
      "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
      "bziQSr_HXdEGLJPNH0jdUOKiuehV0HY1KI95UkV4cC0="
      patches: (patchfiles*
@@ -1123,7 +1123,7 @@ EOF
 
 (define dosfstools
   (cmmi-package
-   "dosfstools" "4.1"
+   "dosfstools" "4.1" ; upgrade me to 4.2
    "https://github.com/dosfstools/$name/releases/download/v$version/$name-$version.tar.gz"
    "a1HIBRNaQ-39GorXwCXTMLs-rZjAqaQNf0cbD-iqRr4="
    libs: (list linux-headers)
@@ -1131,7 +1131,7 @@ EOF
 
 (define mtools
   (cmmi-package
-   "mtools" "4.0.24"
+   "mtools" "4.0.24" ; upgrade me to 4.0.35
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
    "TDTnHIdZ2Sr-dDRK4r7Jus0HR0WaSkVypAykJJAsU0o="))
 
@@ -1148,7 +1148,7 @@ EOF
 
 (define nasm
   (cmmi-package
-   "nasm" "2.14.02"
+   "nasm" "2.14.02" ; upgrade me to 2.15.05
    "https://www.nasm.us/pub/nasm/releasebuilds/$version/$name-$version.tar.gz"
    "TcHpCBPswC-Ee4VmIN26EzJDKsr0znrTJljcDM0TxiM="))
 
