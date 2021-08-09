@@ -690,7 +690,8 @@
                                           ".log.zst"))))
             (delete-file* linkname) ;; delete old link if it exists
             (create-symbolic-link outfile linkname)
-            (infoln "build failed; please see" linkname)))
+            (infoln "build failed; please see" linkname)
+            exn))
         (lambda ()
           (or
            (plan-null-build? p)

@@ -123,4 +123,4 @@
                       (duplicate-fileno fileno/stdout fileno/stderr)
                       (process-execute bwrap args env))))))
       (or (and ok (= status 0))
-          (error "sandbox build failed")))))
+          (error "sandbox build exited with" status)))))

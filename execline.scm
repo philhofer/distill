@@ -19,7 +19,7 @@
           (if (= i len)
               (display obj)
               (case (string-ref obj i)
-                ((#\space #\newline #\tab #\linefeed #\\ #\# #\")
+                ((#\space #\newline #\tab #\linefeed #\\ #\# #\" #\{ #\})
                  ;; any obvious escape sequences or semantic characters
                  ;; mean we encode the string into the script just
                  ;; as it would appear as a scheme literal

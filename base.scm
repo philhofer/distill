@@ -250,9 +250,9 @@
 
 (define m4
   (cmmi-package
-   "m4" "1.4.18" ; upgrade me to 1.4.19
+   "m4" "1.4.19"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0="
+   "kSKhIX9sv81oEEBmBL3-1N8aJ_2dPdDqxxJP2W0K6lM="
    ;; m4 leaves some garbage in /usr/lib
    cleanup: '(rm -rf /out/usr/lib)))
 
@@ -265,9 +265,9 @@
 
 (define libgmp
   (cmmi-package
-   "gmp" "6.2.0" ; upgrade me to 6.2.1
+   "gmp" "6.2.1"
    "https://gmplib.org/download/gmp/gmp-$version.tar.xz"
-   "YQMYgwK95PJL5gS5-l_Iw59tc1O31Kx3X2XFdWm8t6M="
+   "W4qlaa9eWffZEteaNvBOdJgw75jYF5Y1I3HitfZ9Pfw="
    ;; gmp's configure script ignores CFLAGS_FOR_BUILD,
    ;; so we have to shove everything into CC_FOR_BUILD
    env: `((CC_FOR_BUILD ,$build-CC ,$build-CFLAGS))
@@ -283,9 +283,9 @@
 
 (define libmpc
   (cmmi-package
-   "mpc" "1.2.0" ; upgrade me to 1.2.1
+   "mpc" "1.2.1"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "3MXNkST2WkPuntknubd9CJdkEuuWsVXJITtFP4MBHYs="
+   "saUnptee8zIjJt904UoCTh2kFrWdR0R-NpGEc8x3p1U="
    libs: (list libgmp libmpfr)))
 
 (define %bzip2
@@ -324,14 +324,14 @@
 
 (define skalibs
   (ska-cmmi-package
-   "skalibs" "2.9.2.1" ; upgrade me to 2.10.0.3
-   "-GI9LFINaiNdVFzBFvQxD2880lyqLAC2YpWNdRXUPaE="
+   "skalibs" "2.10.0.3"
+   "2RON6bsHp8WvaYvxYSkju5xDpteJaKVjMHs4TLapbdE="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define libexecline+tools
   (ska-cmmi-package
-   "execline" "2.6.1.1" ; upgrade me to 2.8.0.1
-   "uT3m68KBynOnxZHVGfu3ZjXV1ODRVSNNNfF7HrJEqEI="
+   "execline" "2.8.0.1"
+   "bI3Ilf7RIQxhJrxCCWgCsv7U2L6c2azucsSJlt07nKw="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-pedantic-posix
@@ -342,16 +342,16 @@
 
 (define byacc
   (cmmi-package
-   "byacc" "20200910" ; upgrade me to 20210808
+   "byacc" "20210808"
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-   "W8Cw05mawBuSJTA0VGhVlFW0dmI0pR6dcOUxqeUnZLI="
+   "m2apaVuWus8fQqylSZ9qk9HxOSsq4lobKV0VGy7MdWs="
    extra-configure: '(--enable-btyacc)))
 
 (define reflex
   (cmmi-package
-   "reflex" "20200715"
+   "reflex" "20210808"
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-   "xopKaaL7wprugSHJBnTvdmfSwb7qZfG-0_5KhtYnx1Q="
+   "zwuklONPxFh-JcsxOy-w9KzfSkUZOs20rncYNQhtSWM="
    tools: (list byacc)
    ;; install flex(1) and lex(1) symlinks
    cleanup: (elif*
@@ -391,7 +391,7 @@
   (memoize-eq
    (lambda (target-triple)
      (cmmi-package
-      "binutils" "2.35"
+      "binutils" "2.35" ; upgrade me to 2.37
       "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
       "T4QnOCw-pixGZ40MF5PY_yQuLVmiUB_PX065is3HXgM="
       tools: (list byacc reflex)
@@ -466,7 +466,7 @@
                        (list (fake-musl-for-triple triple)
                              (musl-headers-for-triple triple)))))
        (cmmi-package
-        "gcc" "9.3.0"
+        "gcc" "9.3.0" ; upgrade me to 9.4
         "https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
         "Knfr2Y-XW8XSlBKweJ5xdZ50LJhnZeMmxDafNX2LEcM="
         patches: (patchfiles* "patches/gcc/pie-gcc.patch")
@@ -550,7 +550,7 @@
 
 (define (busybox/config config-path extra-inputs)
   (cc-package
-   "busybox" "1.32.0"
+   "busybox" "1.32.0" ; upgrade me to 1.33.1
    "https://busybox.net/downloads/$name-$version.tar.bz2"
    "huLCgRsdLYg2mHLwb9_ogCACO_d0SuJXKKeqSk15XII="
    extra-src: (list (bind config-path "/src/config.head"))
@@ -1048,8 +1048,8 @@ EOF
 
 (define libs6+tools
   (ska-cmmi-package
-   "s6" "2.9.2.0"
-   "OSuPaQ4eMzzIAHCi4_ZM5h1e7Rv1AxXp5pE2GnBu2Ng="
+   "s6" "2.10.0.3"
+   "R2Uvj1NNGerFO0D-AFcy3JbqutPSdev3VWA2U6G6ZHs="
    libs: (list skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-static-libc)))
@@ -1059,8 +1059,8 @@ EOF
 
 (define libs6rc+tools
   (ska-cmmi-package
-   "s6-rc" "0.5.2.0"
-   "UL_1XcPT-C6P75sfxovYnDvgDrZ6R_dcm0wp1SOUaJY="
+   "s6-rc" "0.5.2.2"
+   "3jp5-8rJ-0rzgziZmbJPaPldfw1WF7X5dyEQCM6cS3k="
    libs: (list libs6 skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-static-libc)))

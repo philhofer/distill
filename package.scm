@@ -488,17 +488,11 @@
 
 (define $strip-cmd
   (eltemplate
-   `(forbacktickx
-     file (find /out -type f -perm -o+x)
-     importas "-i" -u file file
-     backtick prefix (head -c4 $file)
-     importas "-i" -u prefix prefix
-     ;; the execline printing code knows
-     ;; how to escape a raw byte sequence
-     ;; (elf binaries begin with (0x7f)ELF)
-     if (test $prefix "=" #u8(127 69 76 70))
-     if (echo "strip" $file)
-     ,(elconc $triple "-strip") $file)))
+   `(foreground
+     ;; note: strip(1) will complain if it sees
+     ;; a shell script here instead of an ELF binary,
+     ;; but that's fine; just ignore those errors...
+     (find /out -type f -perm -o+x -exec ,(elconc $triple "-strip") "{}" ";"))))
 
 ;; bind locates a file relative to the current working directory,
 ;; the current install directory, or the current install's lib directory,
