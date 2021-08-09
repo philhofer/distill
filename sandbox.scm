@@ -104,9 +104,9 @@
                       (current-exception-handler (lambda (exn)
                                                    (print-error-message exn)
                                                    (fatal "(execing bwrap):" exn)))
+                      (setfd! fileno/stdin (file-open "/dev/null" open/rdonly))
                       (setfd! 6 (cadr js))
                       (setfd! 5 (car js))
-                      (setfd! fileno/stdin (file-open "/dev/null" open/rdonly))
                       ;; can't use fdpipe here because we need a *blocking* pipe;
                       (let-values (((rd wr) (create-pipe)))
                         (process-fork
@@ -115,9 +115,8 @@
                             (lambda (exn)
                               (print-error-message exn)
                               (fatal "(execing zstd):" exn)))
-                           (for-each file-close '(5 6))
-                           (file-close wr)
                            (setfd! fileno/stdin rd)
+                           (for-each file-close (list 5 6 wr))
                            (process-execute "zstd" (list "-q" "-" "-o" logfile))))
                         (file-close rd)
                         (setfd! fileno/stdout wr))
