@@ -178,8 +178,8 @@
 
 (define *musl-url*
   "https://www.musl-libc.org/releases/musl-$version.tar.gz")
-(define *musl-version* "1.2.1")
-(define *musl-hash* "sw1MSXLr0ImjAIyeZvc3FLJiB0yFLh80eu8BGuQ12WM=")
+(define *musl-version* "1.2.2")
+(define *musl-hash* "VyzTwxxNZsDuAOvNXjEfgdTTE78k0mslq9QnfbpXgLA=")
 
 (define (musl-arch-name triple)
   (let ((arch (triple->arch triple)))
@@ -250,7 +250,7 @@
 
 (define m4
   (cmmi-package
-   "m4" "1.4.18"
+   "m4" "1.4.18" ; upgrade me to 1.4.19
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
    "_Zto8BBAes0pngDpz96kt5-VLF6oA0wVmLGqAVBdHd0="
    ;; m4 leaves some garbage in /usr/lib
@@ -265,7 +265,7 @@
 
 (define libgmp
   (cmmi-package
-   "gmp" "6.2.0"
+   "gmp" "6.2.0" ; upgrade me to 6.2.1
    "https://gmplib.org/download/gmp/gmp-$version.tar.xz"
    "YQMYgwK95PJL5gS5-l_Iw59tc1O31Kx3X2XFdWm8t6M="
    ;; gmp's configure script ignores CFLAGS_FOR_BUILD,
@@ -283,7 +283,7 @@
 
 (define libmpc
   (cmmi-package
-   "mpc" "1.2.0"
+   "mpc" "1.2.0" ; upgrade me to 1.2.1
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
    "3MXNkST2WkPuntknubd9CJdkEuuWsVXJITtFP4MBHYs="
    libs: (list libgmp libmpfr)))
@@ -324,13 +324,13 @@
 
 (define skalibs
   (ska-cmmi-package
-   "skalibs" "2.9.2.1"
+   "skalibs" "2.9.2.1" ; upgrade me to 2.10.0.3
    "-GI9LFINaiNdVFzBFvQxD2880lyqLAC2YpWNdRXUPaE="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define libexecline+tools
   (ska-cmmi-package
-   "execline" "2.6.1.1"
+   "execline" "2.6.1.1" ; upgrade me to 2.8.0.1
    "uT3m68KBynOnxZHVGfu3ZjXV1ODRVSNNNfF7HrJEqEI="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
@@ -342,7 +342,7 @@
 
 (define byacc
   (cmmi-package
-   "byacc" "20200910"
+   "byacc" "20200910" ; upgrade me to 20210808
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
    "W8Cw05mawBuSJTA0VGhVlFW0dmI0pR6dcOUxqeUnZLI="
    extra-configure: '(--enable-btyacc)))
