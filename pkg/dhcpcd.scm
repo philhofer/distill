@@ -6,9 +6,9 @@
 
 (define dhcpcd
   (cmmi-package
-   "dhcpcd" "9.3.0"
+   "dhcpcd" "9.4.0"
    "https://roy.marples.name/downloads/$name/$name-$version.tar.xz"
-   "oxm27HuwQjFsfVBYCfY-hXLTH_0EpWVKfp2401ocZw4="
+   "kOYZFiCK2aqMzo2isaZMe9s0jKwaL5akuNiX8qTCaBI="
    libs: (list linux-headers)
    ;; not autoconf
    override-configure: `(,(el= '--build= $build-triple)

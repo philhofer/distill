@@ -5,9 +5,9 @@
 
 (define tar
   (cmmi-package
-   "tar" "1.32"
+   "tar" "1.34"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
-   "yevL-uqj4F98n_dVcnVzCc6F6jEGPn2IqXZqH28Y3Go="
+   "ghz7FwomEuqMQMrc9I6ryBMNwSmMIM3XiqSe9rcl5Y0="
    env: '((gl_cv_func_gettimeofday_clobber . no)
           (gl_cv_func_tzset_clobber . no))))
 

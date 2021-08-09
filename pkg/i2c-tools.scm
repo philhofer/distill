@@ -5,9 +5,9 @@
 
 (define i2c-tools
   (cc-package
-   "i2c-tools" "4.1"
+   "i2c-tools" "4.3"
    "https://mirrors.edge.kernel.org/pub/software/utils/$name/$name-$version.tar.gz"
-   "gRACB_gv_oz_gszxCsu1E1nrPfS5tFHejfNd0VzED3s="
+   "i8bNkBTDWsBnX304zwSqP_DnsiJsDx9I-vNF34H4McE="
    env: (list $cc-env)
    libs: (list linux-headers)
    build: '(if

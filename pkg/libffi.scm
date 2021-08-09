@@ -5,7 +5,7 @@
 
 (define libffi
   (cmmi-package
-   "libffi" "3.3"
+   "libffi" "3.4.2"
    "https://github.com/libffi/$name/releases/download/v$version/$name-$version.tar.gz"
-   "D5qxr8A4qKcecQUxZOf_kYJNvwVv64my5oB_bnJyy7M="
+   "M1XgtdqF0c0rJ_KXx9d34_kOV-peO9RkvChzJG0-zPU="
    extra-configure: '(--disable-docs)))

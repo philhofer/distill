@@ -21,10 +21,10 @@
 
 (define python3
   (cmmi-package
-   "Python" "3.8.6"
+   "Python" "3.9.6"
    "https://www.python.org/ftp/python/$version/$name-$version.tar.xz"
-   "Qj9Hu3o28YQu7GGxnGI0FDUV8Xeq9v1zSonXFyFNqpw="
-   extra-src: (list (bind "patches/python/py-setup" "/src/py-setup"))
+   "Orxtc7Mb8vFdp4nveaojbC7xpLlXs978TAjf55Iihwg="
+   extra-src: (list (bind "patches/python/py-setup-3.9.6" "/src/py-setup"))
    libs: (list ncurses libexpat libressl zlib libbz2 liblzma libffi
                linux-headers gdbm libreadline)
    cross: (list

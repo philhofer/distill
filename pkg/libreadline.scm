@@ -6,8 +6,7 @@
 
 (define libreadline
   (cmmi-package
-   "readline" "8.0"
+   "readline" "8.1"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "uIhQtdWX5EA75LisbuLAQyi1mcLYNydQCBEhEH3YcO4="
+   "Zy87rjG6dQ5aefwkUg70ikMHq0vDrwrDx-uh6lGqIP8="
    libs: (list ncurses)))
-

@@ -5,9 +5,9 @@
 
 (define openntpd
   (cmmi-package
-   "openntpd" "6.2p3"
+   "openntpd" "6.8p1"
    "https://cdn.openbsd.org/pub/OpenBSD/OpenNTPD/$name-$version.tar.gz"
-   "gxEKgw_Uz8JpD8jmwQEp3HrQB5VB8Ax9LT1rmAqANlM="
+   "Zp7t2oL1zBpj8vEx-ZCbaCdGDJ0a-5pGN13iSEnhTxg="
    libs: (list libressl)
    ;; gcc warns that these two buffers are possibly too small
    ;; for the s(n)printfs that are used to write to them:

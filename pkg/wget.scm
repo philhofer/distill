@@ -5,9 +5,9 @@
 
 (define wget
   (cmmi-package
-   "wget" "1.20.3"
+   "wget" "1.21.1"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "G3jWdBQ-_4BxoX6NpCl6-mbpV_NH0BEOZZRMLKqlTrs="
+   "h8qOV881NJqRVDFE5jJtIMkp2sPQjt06oJv-tK0Dy1I="
    tools: (list perl)
    libs:  (list libressl)
    env:   '((OPENSSL_LIBS . "-lssl -lcrypto")

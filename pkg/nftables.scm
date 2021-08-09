@@ -9,9 +9,9 @@
 
 (define nftables
   (cmmi-package
-   "nftables" "0.9.6"
+   "nftables" "0.9.9"
    "http://netfilter.org/projects/nftables/files/$name-$version.tar.bz2"
-   "B3H8OBCu8vsvw6KQYoJtS4tExCPfUhodndQDWlbW8KI="
+   "xZDlbMRtT82r3nwMOtjtQDza-aqvfPd8vvDN3zDzmP8="
    env:  '((LIBMNL_LIBS . -lmnl)
            (LIBMNL_CFLAGS . -lmnl)
            (LIBNFTNL_LIBS . -lnftnl)

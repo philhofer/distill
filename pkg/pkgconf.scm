@@ -4,7 +4,7 @@
 
 (define pkgconf
   (cmmi-package
-   "pkgconf" "1.7.3"
+   "pkgconf" "1.8.0"
    "https://distfiles.dereferenced.org/$name/$name-$version.tar.xz"
-   "O1NCzLczHDSuYYmse0CyA4L8jcVFs23lXx0EyPDzBn8="
+   "h_rPUSGygKe3k1uEsBnspmbfHw2EtDnFQ2ser-JJgEs="
    cleanup: '(ln -sf pkgconf /out/usr/bin/pkg-config)))
