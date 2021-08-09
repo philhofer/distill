@@ -738,9 +738,9 @@ EOF
         (config  (remote-file
                   #f "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
     (cc-package
-     "elfutils" "0.180" ; upgrade me to 0.185
+     "elfutils" "0.185"
      "https://sourceware.org/$name/ftp/$version/$name-$version.tar.bz2"
-     "UFOiYGMUAwV4w3uwL07JyAOZrbPB4Xcu6S34dZMVLf0="
+     "CW04vNtQto7ZjnvBSm-JMFaMLed7_K-HAHMFfimc6sc="
      libs: (list zlib)
      extra-src: (list config)
      ;; the elfutils configure script is a basket case,
@@ -780,9 +780,9 @@ EOF
                               "BUILD_"
                               (keyword->string kw))))))))
     (cmmi-package
-     "e2fsprogs" "1.45.6" ; upgrade me to 1.46.3
+     "e2fsprogs" "1.46.3"
      "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
-     "JPnv_uv4MebWFHZWvwghtda0O-l8X3OF0m7yp16-1mI="
+     "a9wXTNQyxErxu4hNgWP21DyOHIXyywbJefD8W9hHAfA="
      patches: (patchfiles* "patches/e2fsprogs/repro.patch")
      native-cc: $buildcc-env
      libs: (list linux-headers)
@@ -814,9 +814,9 @@ EOF
                       '(echo "Fri Apr 3 20:09:47 UTC 2020")
                       shebang: "#!/bin/execlineb -s0")))))
     (cc-package
-     "perl" "5.30.3" ; upgrade me to 5.34.0
+     "perl" "5.34.0"
      "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
-     "-8eZLXMHd98cQoBwuo6uSbZm7uNsmj-Q2lV-uOPxjqA="
+     "JDhxLyTq0WGUTwwjAp6hebPCPRtXhK4_xLxKxnRzqDk="
      tools: (list samedate)
      libs:  (list libbz2 zlib)
      env:   `((BUILD_ZLIB . 0)
@@ -908,10 +908,10 @@ EOF
 
 (define %lz4
   (cc-package
-   "lz4" "1.9.2" ; upgrade me to 1.9.3
+   "lz4" "1.9.3"
    ;; TODO: github release tarballs are not stable
    "https://github.com/lz4/$name/archive/v$version.tar.gz"
-   "uwHhgT74Tk7ds0TQeFZTodoI1_5IZsRnVRNNHi7ywlc="
+   "W4pQ75Y5v-fFfBPnLBgOuskxo7zF9NN69eKg1MicPZc="
    build: (elif*
            `(make DESTDIR=/out PREFIX=/usr ,$cc-env ,$make-overrides install)
            (list $strip-cmd))))
@@ -921,12 +921,12 @@ EOF
 
 (define %zstd
   (cc-package
-   "zstd" "1.4.5" ; upgrade me to 1.5.0
+   "zstd" "1.5.0"
    ;; note: this "release" tarball differs from the automated
    ;; github download release only in gzip timestamp
    ;; (decompressed content is identical)
    "https://github.com/facebook/zstd/releases/download/v$version/zstd-$version.tar.gz"
-   "d9Na3jBddIFbIronfi6bQz9FAUPgPZSW5HTaxZlNrlg="
+   "vNix4eqekWyco3gWmJtihAUuR-dYWrpbx0aeGbRfBjQ="
    build: (let ((makeflags '(HAVE_PTHREAD=1
                              HAVE_ZLIB=0
                              HAVE_LZMA=0
@@ -944,12 +944,12 @@ EOF
 (define libzstd (libs %zstd))
 
 (define squashfs-tools
-  (let ((ver "4.4")) ; upgrade me to 4.5
+  (let ((ver "4.5"))
     (cc-package
      "squashfs-tools" ver
      ;; TODO: github release tarballs are not stable...
      "https://github.com/plougher/$name/archive/$version.tar.gz"
-     "o-ja9XdUjDj8KcrNOfKi7jQ1z37f7dtf3YUFgqRTIuo="
+     "tYpeCmJz_63zEPg_RpaNRXDSZTaj-zhtlKdSQy48hn8="
      ;; non-standard directory:
      dir:   (string-append "squashfs-tools-" ver "/squashfs-tools")
      env:   (list $cc-env)
@@ -963,16 +963,16 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.2.1" ; upgrade me to 3.3.3
+   "libressl" "3.3.3"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "_Fi446gVx0ILV7viYzPBewcC8FlVnT1M_LgTlysDmjc="
+   "ffOQdfqQIjb2EsEMkjOqRaEEcmUOyd4YinXTa2lWlpE="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
   (cmmi-package
-   "libarchive" "3.4.3" ; upgrade me to 3.5.1
-   "https://github.com/libarchive/$name/releases/download/v$version/$name-$version.tar.gz"
-   "g5Ye1us8NuxJl7fMXxjVGmySIr97QigjcLTjHe9tn7A="
+   "libarchive" "3.5.1"
+   "https://github.com/libarchive/$name/releases/download/$version/$name-$version.tar.gz"
+   "FpiOY3UpgNtgY1g0Rz_rsQIol5CtNaz0hXGXMkPgrgw="
    libs: (list libbz2 zlib liblzma liblz4 libressl libzstd)
    extra-configure: '(--without-xml2 --without-acl --without-attr --without-expat)))
 
@@ -988,18 +988,18 @@ EOF
 
 (define libnftnl
   (cmmi-package
-   "libnftnl" "1.1.7" ; upgrade me to 1.2.0
+   "libnftnl" "1.2.0"
    "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-   "G0C2QOZexE0Kc8P6YJGHh_kK2eyjInsQYPECqOuxSg4="
+   "J2UoEzmRmIwDXp055lfdO1-w73L1YMx_2KS44geRCbw="
    libs: (list linux-headers libmnl)
    extra-configure: '(LIBMNL_CFLAGS=-lmnl
                       LIBMNL_LIBS=-lmnl)))
 
 (define iptables
   (cmmi-package
-   "iptables" "1.8.5" ; upgrade me to 1.8.7
+   "iptables" "1.8.7"
    "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-   "3o9fJ6KJfo_9K9CoYaHrJBIm9kDItejamfQDKljpdZM="
+   "3hpDWOjl9KzR8myBS1wpIC5UEX8T6X07Wstma0vYIpA="
    libs: (list linux-headers libnftnl libmnl)
    extra-cflags: '(-D_GNU_SOURCE)
    extra-configure: '(libmnl_CFLAGS=-lmnl
@@ -1028,12 +1028,11 @@ EOF
                          "%.o: %.c"
                          "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
     (cc-package
-     "iproute2" "5.6.0" ; upgrade me to 5.13
+     "iproute2" "5.13.0" ; upgrade me to 5.13
      "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
-     "bziQSr_HXdEGLJPNH0jdUOKiuehV0HY1KI95UkV4cC0="
+     "SFUdMngYxFuQR7fc4KPbW_TdtkMmTrfZFivHiStz_kQ="
      patches: (patchfiles*
-               "patches/iproute2/musl-fixes.patch"
-               "patches/iproute2/fix-install-errors.patch")
+               "patches/iproute2/musl-fixes.patch")
      cross: (list config.mk)
      libs:  (list linux-headers iptables libmnl libelf zlib)
      build: (elif*
@@ -1123,17 +1122,17 @@ EOF
 
 (define dosfstools
   (cmmi-package
-   "dosfstools" "4.1" ; upgrade me to 4.2
+   "dosfstools" "4.2"
    "https://github.com/dosfstools/$name/releases/download/v$version/$name-$version.tar.gz"
-   "a1HIBRNaQ-39GorXwCXTMLs-rZjAqaQNf0cbD-iqRr4="
+   "MFobnzq2zA1EJiuxBFsUV0cWq9_Lnw6tdzKZaiXebg8="
    libs: (list linux-headers)
    extra-configure: '(--without-udev --without-iconv)))
 
 (define mtools
   (cmmi-package
-   "mtools" "4.0.24" ; upgrade me to 4.0.35
+   "mtools" "4.0.35"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "TDTnHIdZ2Sr-dDRK4r7Jus0HR0WaSkVypAykJJAsU0o="))
+   "Qg8sPS5BCnnxHnSdDiSLu7o9pp4UWpNOzQjm_UHcnJg="))
 
 (define imgtools
   (let ((hash "q_64uUxDhbgZf5FD5aQLWUIhehbsjahGBVTjKkyzqMk="))
@@ -1148,9 +1147,9 @@ EOF
 
 (define nasm
   (cmmi-package
-   "nasm" "2.14.02" ; upgrade me to 2.15.05
+   "nasm" "2.15.05"
    "https://www.nasm.us/pub/nasm/releasebuilds/$version/$name-$version.tar.gz"
-   "TcHpCBPswC-Ee4VmIN26EzJDKsr0znrTJljcDM0TxiM="))
+   "tK-tisQigylmhne9oPZ60TpBUtSlpTSfFQ5IOoJqF2E="))
 
 (define mlb2
   (let ((hash "4v7UmuN_yWWdeYzF8L2G32yjeTIV9rwTFe1nyeNvl6E="))
