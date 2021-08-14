@@ -19,6 +19,16 @@
 (import-for-syntax
  (only (chicken string) conc))
 
+;; we need these to be loaded,
+;; but we don't need them present
+;; in the binding environment
+(let ()
+  (import
+   (distill service)
+   (distill fs)
+   (distill image)
+   (distill system)))
+
 ;; by default, search dirs are
 ;; the current directory, followed by
 ;; the installed prefix + /lib/distill/
@@ -66,8 +76,7 @@
                                    (when (form? 'import datum)
                                      (scan-imports (cdr datum)))
                                    (cons datum (loop (read)))))))))
-              (with-input-from-file
-                  file
+              (with-input-from-file file
                 (lambda ()
                   (real-eval `(module (,kind ,sym)
                                       (,sym)
@@ -89,8 +98,7 @@
    lst))
 
 (define (%load file)
-  (with-input-from-file
-      file
+  (with-input-from-file file
     (lambda ()
       (let loop ((expr (read)))
         (or (eof-object? expr)

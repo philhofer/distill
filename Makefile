@@ -61,12 +61,13 @@ distill.%.c distill.%.import.scm: %.mod.scm
 	$(CHICKEN) $< -unit $* -static $(CHICKEN_FEATURES) $(CHICKEN_FLAGS) \
 		-feature compiling-static-extension \
 		-emit-all-import-libraries -module-registration \
+		-regenerate-import-libraries \
 		-emit-types-file distill.$*.types \
 		-emit-link-file distill.$*.link \
 		-output-file distill.$*.c
 
 distill.c: distill.scm ${UNITS:%=%.import.scm}
-	$(CHICKEN) $< -module main -static $(CHICKEN_FEATURES) $(CHICKEN_FLAGS)
+	$(CHICKEN) $< -module main -static $(CHICKEN_FEATURES) -module-registration $(CHICKEN_FLAGS)
 
 %.o: %.c
 	$(CC) $(NEEDED_CFLAGS) $(CFLAGS) -I./libchicken -c $^ -o $@

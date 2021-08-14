@@ -245,7 +245,7 @@
     redirfd -r 0 /dev/null
     redirfd -w -n -b 1 ,*catchall-fifo*
     fdmove -c 2 1
-    s6-svscan -d 4 -St0 ,*service-dir*))
+    s6-svscan -d 4 -t0 ,*service-dir*))
 
 (define (boot-scripts)
   (let* ((script*  (lambda (path body)
@@ -311,7 +311,7 @@
           ;; TODO: vendor these:
           (remote-file
            "https://salsa.debian.org/md/netbase/-/raw/master/etc/services"
-           "nw1h7RChZb_XKCID72w_9sFUXE3Nluej6ZC9TWEuOq8="
+           "14CskWLv_71RLWwcMAe2GbqVQx2VsHTxPR1I8OPtcD4="
            "/etc/services" #o644)
           (remote-file
            "https://salsa.debian.org/md/netbase/-/raw/master/etc/protocols"
