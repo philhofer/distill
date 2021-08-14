@@ -85,11 +85,11 @@
 ;; with this:
 (define mv-ddr-localversion
   (interned
-    "/src/mv_ddr_build_message.c"
-    #o644
-    (string-append
-      "const char *mv_ddr_build_message = \"(distill - reproducible)\";\n"
-      "const char *mv_ddr_version_string = \"mv_ddr-devel-18.08.0-distill\";\n")))
+   "/src/mv_ddr_build_message.c"
+   #o644
+   (string-append
+    "const char *mv_ddr_build_message = \"(distill - reproducible)\";\n"
+    "const char *mv_ddr_version_string = \"mv_ddr-devel-18.08.0-distill\";\n")))
 
 (define atf-mcbin
   ;; it took some serious yak-shaving to get this to build
@@ -108,18 +108,18 @@
   ;;   the code is derived from FreeRTOS)
   ;;
   (let* ((name "arm-trusted-firmware")
-	 (ver  "2.2")
+         (ver  "2.2")
          (mv-ddr-ver 'mv_ddr-armada-atf-mainline)
          (mv-ddr-src (remote-archive
-                       ;; TODO: this is not guaranteed to be a stable tarball,
-                       ;; but marvell has all but abandoned this code...
-                       (conc "https://github.com/MarvellEmbeddedProcessors/mv-ddr-marvell/archive/" mv-ddr-ver ".tar.gz")
-                       "nV3OhnbmGNAy4JQz60aYjucT1SrMuoVHppiYbyd40zI="))
-	 (dir        (string-append "/" name "-" ver))
-	 ;; symlink the mv_ddr source into the atf source tree:
-	 (mv-ddr-lnk (interned-symlink
-		      (filepath-join dir "drivers/marvell/mv_ddr")
-		      (conc "/mv-ddr-marvell-" mv-ddr-ver))))
+                      ;; TODO: this is not guaranteed to be a stable tarball,
+                      ;; but marvell has all but abandoned this code...
+                      (conc "https://github.com/MarvellEmbeddedProcessors/mv-ddr-marvell/archive/" mv-ddr-ver ".tar.gz")
+                      "nV3OhnbmGNAy4JQz60aYjucT1SrMuoVHppiYbyd40zI="))
+         (dir        (string-append "/" name "-" ver))
+         ;; symlink the mv_ddr source into the atf source tree:
+         (mv-ddr-lnk (interned-symlink
+                      (filepath-join dir "drivers/marvell/mv_ddr")
+                      (conc "/mv-ddr-marvell-" mv-ddr-ver))))
     (cc-package
      name ver
      "https://github.com/ARM-software/$name/archive/v$version.tar.gz"
@@ -127,80 +127,80 @@
      raw-output: "/boot/flash-image.bin"
      use-native-cc: #t
      extra-src: (list mv-ddr-src
-		      mv-ddr-lnk
-		      mv-ddr-localversion
-		      marvell-scp-bl2-blob)
+                      mv-ddr-lnk
+                      mv-ddr-localversion
+                      marvell-scp-bl2-blob)
      env:       '((MAKEFLAGS . "")) ;; do not inherit jobserver; parallel build is broken
      tools:     (list libressl)
      libs:      (list uboot-mcbin)
      no-libc:   #t
      build:   (let ((mflags `(V=1 ,(elconc 'CROSS_COMPILE= $cross-compile)
-				  SCP_BL2=/src/mrvl_scp_bl2.img
-				  PLAT=a80x0_mcbin
-				  ,(elconc 'BL33= $sysroot '/boot/u-boot.bin)))
-		    (bflags `(V=1 ,(elconc 'CROSS_COMPILE= $cross-compile)
-				  ,(el= 'HOSTCC= $build-CC)
-				  ,(el= 'HOSTLD= $build-LD)
-				  ,(el= 'HOSTCCFLAGS= $build-CFLAGS))))
-		   (elif*
-		     '(cp /src/mv_ddr_build_message.c drivers/marvell/mv_ddr/)
-		     ;; do not force a clean on every make invocation:
-		     '(sed "-i" -e "/^mrvl_clean:/,+3d" plat/marvell/marvell.mk)
-		     '(sed "-i" -e "s/mrvl_clean//g" plat/marvell/marvell.mk)
-		     ;; busybox truncate(1) doesn't support '%size' format
-		     '(sed "-i" -e "s/ %128K / 128K /" plat/marvell/a8k/common/a8k_common.mk)
-		     ;; quiet unused variable warning from gcc
-		     '(sed "-i" -e "s/u32 rd_data, wr_data;/u32 rd_data, wr_data=0;/g" drivers/marvell/mv_ddr/mv_ddr4_training_leveling.c)
-		     ;; remove rule for mv_ddr_build_message.c; we create our own
-		     '(sed "-i" -e "/^# create mv_ddr build/,+1d" drivers/marvell/mv_ddr/Makefile)
-		     ;; the top-level makefile doesn't invoke these sub-makes
-		     ;; correctly, so invoke them ahead of time with
-		     ;; the right overrides...
-		     `(make ,@bflags "LDLIBS=-static-pie -lcrypto"
-			    -C tools/fiptool all)
-		     `(make ,@bflags "DOIMAGE_LD_FLAGS=-static-pie"
-			    -C tools/marvell/doimage all)
-		     `(make ,@mflags "SCP_BL2=/src/mrvl_scp_bl2.img" all fip)
-		     '(install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin))))))
+                                  SCP_BL2=/src/mrvl_scp_bl2.img
+                                  PLAT=a80x0_mcbin
+                                  ,(elconc 'BL33= $sysroot '/boot/u-boot.bin)))
+                    (bflags `(V=1 ,(elconc 'CROSS_COMPILE= $cross-compile)
+                                  ,(el= 'HOSTCC= $build-CC)
+                                  ,(el= 'HOSTLD= $build-LD)
+                                  ,(el= 'HOSTCCFLAGS= $build-CFLAGS))))
+                (elif*
+                 '(cp /src/mv_ddr_build_message.c drivers/marvell/mv_ddr/)
+                 ;; do not force a clean on every make invocation:
+                 '(sed "-i" -e "/^mrvl_clean:/,+3d" plat/marvell/marvell.mk)
+                 '(sed "-i" -e "s/mrvl_clean//g" plat/marvell/marvell.mk)
+                 ;; busybox truncate(1) doesn't support '%size' format
+                 '(sed "-i" -e "s/ %128K / 128K /" plat/marvell/a8k/common/a8k_common.mk)
+                 ;; quiet unused variable warning from gcc
+                 '(sed "-i" -e "s/u32 rd_data, wr_data;/u32 rd_data, wr_data=0;/g" drivers/marvell/mv_ddr/mv_ddr4_training_leveling.c)
+                 ;; remove rule for mv_ddr_build_message.c; we create our own
+                 '(sed "-i" -e "/^# create mv_ddr build/,+1d" drivers/marvell/mv_ddr/Makefile)
+                 ;; the top-level makefile doesn't invoke these sub-makes
+                 ;; correctly, so invoke them ahead of time with
+                 ;; the right overrides...
+                 `(make ,@bflags "LDLIBS=-static-pie -lcrypto"
+                        -C tools/fiptool all)
+                 `(make ,@bflags "DOIMAGE_LD_FLAGS=-static-pie"
+                        -C tools/marvell/doimage all)
+                 `(make ,@mflags "SCP_BL2=/src/mrvl_scp_bl2.img" all fip)
+                 '(install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin))))))
 
 (define mcbin-sdimage
   (let ((kernel (linux/config-static "mcbin" "patches/linux/config.mcbin.aarch64"
-				     dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
+                                     dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
     (make-platform
      config:   (gcc+musl-static-config
-		'aarch64
-		optflag: '-O2
-		sspflag: '-fstack-protector-strong
-		;; compiling with -mcpu=... helps us get some
-		;; additional coverage on our GCC recipe with
-		;; cross-compilation, because this is an illegal
-		;; flag for any compiler/architecture except aarch64,
-		;; so builds will fail if this flag leaks into the
-		;; wrong CFLAGS arguments
-		extra-cflags: '(-mcpu=cortex-a72)
-		build: (force default-build-config))
+                'aarch64
+                optflag: '-O2
+                sspflag: '-fstack-protector-strong
+                ;; compiling with -mcpu=... helps us get some
+                ;; additional coverage on our GCC recipe with
+                ;; cross-compilation, because this is an illegal
+                ;; flag for any compiler/architecture except aarch64,
+                ;; so builds will fail if this flag leaks into the
+                ;; wrong CFLAGS arguments
+                extra-cflags: '(-mcpu=cortex-a72)
+                build: (force default-build-config))
      kernel:   kernel
      cmdline:  '("root=/dev/mmcblk1p2 rootfstype=squashfs") ; see uboot cmdline
      packages: (list mcbin-preboot imgtools)
      services: (list (var-mount "/dev/mmcblk1p3"))
      mkimage:  (lambda (plat rootpkgs)
-		 (let* ((kern (platform-kernel plat))
-			(root (squashfs rootpkgs))
-			(boot (ext2fs "mbcin/boot" "14bcce9f-5096-4fa8-bdb6-51b0b12823f1" kern)))
-		   (lambda (conf)
-		     (let ((fw (filepath-join ($sysroot conf) "/boot/flash-image.bin"))
-			   (p1 (filepath-join ($sysroot conf) "/fs.img"))
-			   (p2 (filepath-join ($sysroot conf) "/rootfs.img")))
-		       (package-template
-			label: "mcbin-sdimage"
-			raw-output: "/img"
-			tools:  (list imgtools execline-tools busybox-core)
-			inputs: (list boot atf-mcbin root)
-			build:  `(backtick -n fwsize (alignsize -a20 -e2097152 ,fw)
-					   importas -u |-i| fwsize fwsize
-					   ;; mmcblk1p1 is the boot partition;
-					   ;; mmcblk1p2 is the root partition;
-					   ;; the firmware lives at mmcblk1 +2M
-					   gptimage -d -b $fwsize /out/img (,p1 L ,p2 L)
-					   ;; REMOVE ME:
-					   dd ,(string-append "if=" fw) of=/out/img bs=1M seek=2 conv=notrunc)))))))))
+                 (let* ((kern (platform-kernel plat))
+                        (root (squashfs rootpkgs))
+                        (boot (ext2fs "mbcin/boot" "14bcce9f-5096-4fa8-bdb6-51b0b12823f1" kern)))
+                   (lambda (conf)
+                     (let ((fw (filepath-join ($sysroot conf) "/boot/flash-image.bin"))
+                           (p1 (filepath-join ($sysroot conf) "/fs.img"))
+                           (p2 (filepath-join ($sysroot conf) "/rootfs.img")))
+                       (package-template
+                        label: "mcbin-sdimage"
+                        raw-output: "/img"
+                        tools:  (list imgtools execline-tools busybox-core)
+                        inputs: (list boot atf-mcbin root)
+                        build:  `(backtick -n fwsize (alignsize -a20 -e2097152 ,fw)
+                                           importas -u |-i| fwsize fwsize
+                                           ;; mmcblk1p1 is the boot partition;
+                                           ;; mmcblk1p2 is the root partition;
+                                           ;; the firmware lives at mmcblk1 +2M
+                                           gptimage -d -b $fwsize /out/img (,p1 L ,p2 L)
+                                           ;; REMOVE ME:
+                                           dd ,(string-append "if=" fw) of=/out/img bs=1M seek=2 conv=notrunc)))))))))

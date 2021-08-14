@@ -583,8 +583,8 @@
    "patches/busybox/config-core"
    '()))
 
-(define *linux-version* "5.4.70")
-(define *linux-hash* "ljOmep0hj_mVF7DFcmOZtFHGbGreHvWCJAVRcgpkNJ0=")
+(define *linux-version* "5.10.58")
+(define *linux-hash* "HwqUM-Hs4_XHgB4t6-SGVY6SXquWPKzlmcv7fImieR4=")
 
 (define (linux-source version hash)
   (remote-archive
