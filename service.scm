@@ -252,13 +252,22 @@
                      (interned path #o744
                                (with-output-to-string
                                  (lambda () (write-exexpr body))))))
-         (scanctl* (lambda (script flag)
-                     (script* script `(foreground (s6-rc -v2 -bad -t 10000 change)
-                                                  s6-svscanctl ,flag /run/service))))
+         (scanctl* (lambda (script)
+                     (script* script `(background ; fork so we can setsid
+                                       (s6-setsid ; don't get killed when the shell dies!
+                                        foreground (s6-rc -v2 -bad -t 10000 change)
+                                        foreground (s6-svscanctl -t -b /run/service))))))
          (init     (script* "/sbin/init" (init-script)))
-         (reboot   (scanctl* "/sbin/reboot" "-i"))
-         (poweroff (scanctl* "/sbin/poweroff" "-7"))
-         (halt     (scanctl* "/sbin/halt" "-0"))
+         (reboot   (script* "/sbin/reboot"
+                            '(background
+                              (s6-setsid
+                               foreground (s6-rc -v2 -bad -t 10000 change)
+                               foreground (kill -15 -1)
+                               foreground (sleep 1)
+                               foreground (sync)
+                               hard reboot))))
+         (poweroff (scanctl* "/sbin/poweroff"))
+         (halt     (scanctl* "/sbin/halt"))
          (crash    (script* "/etc/early-services/.s6-svscan/crash"
                             '(foreground
                               (redirfd -w 1 /dev/console
@@ -270,23 +279,18 @@
                               foreground (sleep 1)
                               foreground (sync)
                               hard reboot)))
-         (finish   (interned "/etc/early-services/.s6-svscan/finish"
-                             #o744
-                             (with-output-to-string
-                               (lambda ()
-                                 (write-exexpr
-                                  ;; note: at this point it is expected that
-                                  ;; everything under process supervision is already dead,
-                                  ;; but there still may be other processes running
-                                  '(redirfd
-                                    -w 1 /dev/console
-                                    fdmove -c 2 1
-                                    foreground (kill -15 -1)
-                                    foreground (sleep 1)
-                                    foreground (kill -9 -1)
-                                    foreground (sync)
-                                    hard $1)
-                                  shebang: "#!/bin/execlineb -s1")))))
+         (finish   (script* "/etc/early-services/.s6-svscan/finish"
+                            ;; note: at this point it is expected that
+                            ;; everything under process supervision is already dead,
+                            ;; but there still may be other processes running
+                            '(redirfd
+                              -w 1 /dev/console
+                              fdmove -c 2 1
+                              foreground (kill -15 -1)
+                              foreground (sleep 1)
+                              foreground (kill -9 -1)
+                              foreground (sync)
+                              hard poweroff)))
          (logger   (interned "/etc/early-services/s6-svscan-log/run"
                              #o744
                              (with-output-to-string
