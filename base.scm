@@ -704,6 +704,7 @@ EOF
              native-toolchain)
      inputs: '()
      env:   `((KCONFIG_NOTIMESTAMP . 1)
+              (KCONFIG_NOSILENTUPDATE . 1)
               (KBUILD_BUILD_TIMESTAMP . "@0")
               (KBUILD_BUILD_USER . distill)
               (KBUILD_BUILD_HOST . distill)
@@ -712,6 +713,7 @@ EOF
      build: (let ((make-args (list
                               $cc-env/for-kbuild
                               'YACC=yacc ;; not bison -y
+                              'GENKSYMS=/bin/true
                               (elconc 'ARCH= (o linux-arch-dir-name $arch))
                               "HOST_LIBELF_LIBS=-lelf -lz")))
               (elif*
@@ -722,11 +724,16 @@ EOF
                '(find "." -type f -name "Make*"
                       -exec sed "-i" -e
                       "s/-lelf/-lelf -lz/g" "{}" ";")
+               ;; busybox diff does not have 'diff -u'
+               ;; because all diffs are unified!
+               '(find "." -type f -name "Make*" -or -name "*.sh"
+                      -exec sed "-i" -e
+                      "s/diff -u/diff/" "{}" ";")
                `(make
                     V=1 KCONFIG_ALLCONFIG=/src/config
                     ,@make-args
                     allnoconfig)
-               `(make V=1 ,@make-args)
+               `(make V=1 KCONFIG_ALLCONFIG=/src/config ,@make-args)
                (and dtb `(install -D -m "644" -t /out/boot ,dtb))
                `(make V=1 ,@make-args install))))))
 
