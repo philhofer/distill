@@ -258,7 +258,11 @@
                            (let ((c (vector-ref contract i))
                                  (i (fx+ i 1)))
                              (and (or (not c)
-                                      (c (vector-ref out i)))
+                                      (c (vector-ref out i))
+                                      (error "field does not conform to contract:"
+                                             (vector-ref kt (- i 1))  ;; keyword
+                                             (vector-ref out i) ;; value
+                                             c))                ;; predicate
                                   (loop i))))))))
     (vector-set! template 0 kt)
     (let loop ((args spec))
@@ -275,9 +279,9 @@
       (let ((vec (vector-copy template)))
         (let loop ((args args))
           (if (null? args)
-              (if (conform? vec contract)
-                  vec
-                  (error "kvector doesn't conform to spec" spec))
+              (begin
+                (conform? vec contract)
+                vec)
               (let ((idx (kidx kt (car args))))
                 (if idx
                     (begin
