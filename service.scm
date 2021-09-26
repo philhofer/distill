@@ -215,7 +215,7 @@
     ;; to keep world-writeable /tmp from being a trivial DoS vector,
     ;; limit the size of the mount to some fixed % of RAM
     ;; TODO: make this configurable?
-    foreground (mount -t tmpfs -o "noexec,nosuid,nodev,mode=1777,size=10%" tmpfs /tmp)
+    foreground (mount -t tmpfs -o "exec,nosuid,nodev,mode=1777,size=10%" tmpfs /tmp)
     foreground (if (test -x /sbin/preboot)
                    if (echo "running preboot")
                    /sbin/preboot)
