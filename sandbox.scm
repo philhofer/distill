@@ -60,6 +60,27 @@
       (or (force pro)
           (fatal "bwrap(1) not installed in $PATH")))))
 
+;; set two file descriptors to 5 and 6, respectively;
+;; needs to handle the annoying cases where
+;; five is 6 or six is 5, in which case we need
+;; to move one or both of the file descriptors to
+;; new temporary fds
+(define (set-5+6! five six)
+  (define (not-fd val num)
+    (if (= val num)
+        (let ((newval (duplicate-fileno val)))
+          (file-close val)
+          newval)
+        val))
+  (define (move-fd from to)
+    (unless (= from to)
+      (duplicate-fileno from to)
+      (file-close from)))
+  (let ((five (not-fd five 6))
+        (six  (not-fd six 5)))
+    (move-fd five 5)
+    (move-fd six 6)))
+
 ;; perform an elaborate chroot into 'root'
 ;; and then run '/build' inside that new
 ;; root, with stdout and stderr redirected
@@ -106,8 +127,7 @@
                                                    (fatal "(execing bwrap):" exn)))
                       (setfd! fileno/stdin (file-open "/dev/null" open/rdonly))
                       ;; we're assuming here that (< (car js) (cadr js))
-                      (setfd! 5 (car js))
-                      (setfd! 6 (cadr js))
+                      (set-5+6! (car js) (cadr js))
                       ;; can't use fdpipe here because we need a *blocking* pipe;
                       (let-values (((rd wr) (create-pipe)))
                         (process-fork
@@ -118,7 +138,7 @@
                               (fatal "(execing zstd):" exn)))
                            (setfd! fileno/stdin rd)
                            (file-close wr)
-                           (for-each file-close '(5 6))
+                           (for-each file-close '(5 6)) ;; don't hold on to jobserver fds
                            (process-execute "zstd" (list "-q" "-" "-o" logfile))))
                         (file-close rd)
                         (setfd! fileno/stdout wr))
