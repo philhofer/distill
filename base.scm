@@ -10,6 +10,36 @@
    "https://b2cdn.sunfi.sh/file/pub-cdn/"
    c-hash))
 
+;; stuff like default busybox configs, etc.
+;; are stored remotely and fetched on-demand
+(define (cdn-artifact hash abspath mode)
+  (remote-file (cdn-url hash) hash abspath mode))
+
+;; since we want to build all dependencies
+;; into the final binary (either via cdn urls
+;; or with including text directly),
+;; include patches with this helper macro;
+;; should expand to
+;;   (list (interned ...) ...)
+(define-syntax include-patchfiles
+  (er-macro-transformer
+   (lambda (expr inject cmp)
+     (import
+      (chicken string)
+      (chicken io))
+     (let ((%interned (inject 'interned))
+           (%list     (inject 'list)))
+       `(,%list
+         ,@(let lp ((lst (cdr expr))
+                    (n    0))
+             (if (null? lst)
+                 '()
+                 (cons
+                  (let ((text (with-input-from-file (car lst) read-string))
+                        (name (conc "/src/patch-" n ".patch")))
+                    `(,%interned ,name #o644 ,text))
+                  (lp (cdr lst) (+ n 1))))))))))
+
 ;; for a triple, create the ordinary gcc, ld, as, etc.
 ;; binaries that are either symlinks or thin wrappers
 ;; for the actual binaries (i.e. x86_64-linux-musl-gcc, etc.)
@@ -221,6 +251,7 @@
            `(make ,$make-overrides)
            '(make DESTDIR=/out install))))
 
+;; static library that defines the __stack_chk_fail_local symbol
 (define libssp-nonshared
   (package-template
    label:   "libssp-nonshared"
@@ -228,7 +259,10 @@
    tools:   '() ; just cc-tools
    inputs:  '()
    dir:     "/src"
-   src:     (bind "patches/ssp-nonshared/ssp-nonshared.c" "/src/ssp-nonshared.c")
+   src:     (list
+             (interned "/src/ssp-nonshared.c" #o644 "extern void __stack_chk_fail(void);
+void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __stack_chk_fail(); }
+"))
    build: (elif*
            `(,$CC ,$CFLAGS -c ssp-nonshared.c -o __stack_chk_fail_local.o)
            `(,$AR -Dcr libssp_nonshared.a __stack_chk_fail_local.o)
@@ -344,7 +378,7 @@
   (cmmi-package
    "byacc" "20210808"
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-   "m2apaVuWus8fQqylSZ9qk9HxOSsq4lobKV0VGy7MdWs="
+   "KWkkb_YrnTmHra1UN7N86JLZ4qLpbir3haIM1nD0iQY="
    extra-configure: '(--enable-btyacc)))
 
 (define reflex
@@ -469,7 +503,7 @@
         "gcc" "9.4.0"
         "https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
         "rL94uba7wDwZ432zSGmyrOQboRdwa0l0eEf9qxFlGNI="
-        patches: (patchfiles* "patches/gcc/pie-gcc.patch")
+        patches: (include-patchfiles "patches/gcc/pie-gcc.patch")
         tools: (list byacc reflex gawk)
         ;; we depend on cc-for-build automatically,
         ;; so we only need additional target tools
@@ -580,7 +614,7 @@
 ;; linux headers
 (define busybox-core
   (busybox/config
-   "patches/busybox/config-core"
+   (cdn-artifact "eKDTI4zJ4jm7TrfB7gHkFntuMDwftgeBipnBkMp0y1w=" "/src/config" #o644)
    '()))
 
 (define *linux-version* "5.10.58")
@@ -690,7 +724,7 @@ EOF
                              (dtb     #f))
   (let ((config  (bind config-path "/src/config"))
         (install (installkernel* install))
-        (patches (patchfiles* "patches/dtc/lexer.patch")))
+        (patches (include-patchfiles "patches/dtc/lexer.patch")))
     (package-template
      src:   (append
              (list (linux-source *linux-version* *linux-hash*) install config)
@@ -790,7 +824,7 @@ EOF
      "e2fsprogs" "1.46.3"
      "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
      "a9wXTNQyxErxu4hNgWP21DyOHIXyywbJefD8W9hHAfA="
-     patches: (patchfiles* "patches/e2fsprogs/repro.patch")
+     patches: (include-patchfiles "patches/e2fsprogs/repro.patch")
      native-cc: $buildcc-env
      libs: (list linux-headers)
      ;; can't just do $BUILD_CC foo.c;
@@ -880,7 +914,7 @@ EOF
      "pz0pQDEdfHbuQ9ZBllOqIxVYQGCIY4P0ZW5pLtwZkvA="
      no-libc:   #t
      use-native-cc: #t
-     patches:   (patchfiles* "patches/dtc/lexer.patch")
+     patches:   (include-patchfiles "patches/dtc/lexer.patch")
      extra-src: (list envfile dotconf)
      tools:     (list byacc reflex)
      build: (let ((make-args `("YACC=yacc -d"
@@ -1038,7 +1072,7 @@ EOF
      "iproute2" "5.13.0" ; upgrade me to 5.13
      "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
      "SFUdMngYxFuQR7fc4KPbW_TdtkMmTrfZFivHiStz_kQ="
-     patches: (patchfiles*
+     patches: (include-patchfiles
                "patches/iproute2/musl-fixes.patch")
      cross: (list config.mk)
      libs:  (list linux-headers iptables libmnl libelf zlib)
@@ -1085,9 +1119,10 @@ EOF
              `(make ,(el= 'CC= $CC) ,(el= 'CFLAGS= $CFLAGS) ,(el= 'LDFLAGS= $LDFLAGS) DESTDIR=/out install)
              (list $strip-cmd)))))
 
+;; busybox with additional stuff built in
 (define busybox-full
   (busybox/config
-   "patches/busybox/config-full"
+   (cdn-artifact "mxH_lkBbfTDWJ-w_Ukyc6bVSPpcLXPdAjx7OGJte2rE=" "/src/config" #o644)
    (list linux-headers)))
 
 ;; keep everything down here at the bottom of the file;

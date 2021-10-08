@@ -8,6 +8,7 @@
     local-archive
     remote-archive
     remote-file
+    update-path
     sub-archive
     overlay
 
@@ -51,7 +52,7 @@
         (only (chicken string) conc)
         (only (chicken file) file-exists? directory-exists? create-directory create-temporary-file create-temporary-directory delete-file* delete-file delete-directory rename-file)
         (chicken file posix)
-        (only (chicken base) include error unless when flatten void current-error-port exit identity disjoin o delay-force)
+        (only (chicken base) include error unless when flatten void current-error-port exit identity disjoin o delay-force vector-copy!)
         (only (chicken io) read-string write-string read-line)
         (only (chicken port) make-broadcast-port)
         (only (chicken process-context) current-directory get-environment-variable)

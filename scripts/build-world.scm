@@ -46,10 +46,10 @@
   (find-files
    "./pkg"
    action: (lambda (f lst)
-	     (let ((suf (trim-suffix f ".scm")))
-	       (if suf
-		   (cons (string->symbol (basename suf)) lst)
-		   lst)))
+             (let ((suf (trim-suffix f ".scm")))
+               (if suf
+                   (cons (string->symbol (basename suf)) lst)
+                   lst)))
    seed: '()))
 
 ;; filter out packges that are arch-specific
@@ -58,7 +58,7 @@
     (filter
      (lambda (name)
        (let ((c (assq name pkgs-for-arch)))
-	 (or (not c) (memq arch (cdr c)))))
+         (or (not c) (memq arch (cdr c)))))
      package-names)))
 
 (define (builtin-for conf)
@@ -67,54 +67,54 @@
                               ((_ (name expr) rest* ...)
                                (let ((tail (builtin* rest* ...)))
                                  (if expr
-                                   (cons (cons (quote name) name) tail)
-                                   tail)))
+                                     (cons (cons (quote name) name) tail)
+                                     tail)))
                               ((_ name rest* ...)
                                (cons (cons (quote name) name) (builtin* rest* ...))))))
     (builtin*
-      musl
-      libssp-nonshared
-      libgmp
-      libmpfr
-      libmpc
-      libisl
-      zlib
-      bzip2
-      gawk
-      byacc
-      reflex
-      make
-      skalibs
-      busybox-core
-      busybox-full
-      execline-tools
-      xz-utils
-      lz4
-      zstd
-      squashfs-tools
-      libarchive
-      libressl
-      s6
-      s6-rc
-      linux-headers
-      libelf
-      exportall
-      e2fsprogs
-      dosfstools
-      mtools
-      imgtools
-      nasm
-      mlb2
-      hard
-      libmnl
-      libnftnl
-      iptables
-      iproute2
-      matchable-egg
-      srfi-13-egg
-      srfi-14-egg
-      srfi-69-egg      
-      (perl (eq? ($arch conf) *this-machine*)))))
+     musl
+     libssp-nonshared
+     libgmp
+     libmpfr
+     libmpc
+     libisl
+     zlib
+     bzip2
+     gawk
+     byacc
+     reflex
+     make
+     skalibs
+     busybox-core
+     busybox-full
+     execline-tools
+     xz-utils
+     lz4
+     zstd
+     squashfs-tools
+     libarchive
+     libressl
+     s6
+     s6-rc
+     linux-headers
+     libelf
+     exportall
+     e2fsprogs
+     dosfstools
+     mtools
+     imgtools
+     nasm
+     mlb2
+     hard
+     libmnl
+     libnftnl
+     iptables
+     iproute2
+     matchable-egg
+     srfi-13-egg
+     srfi-14-egg
+     srfi-69-egg
+     (perl (eq? ($arch conf) *this-machine*)))))
 
 (let* ((config  (let ((args (command-line-arguments)))
                   (if (null? args)

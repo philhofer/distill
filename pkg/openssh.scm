@@ -6,12 +6,16 @@
  (pkg libedit)
  (pkg ncurses))
 
+;; fix dns handling for musl
+(define fix-dns.patch
+  (cdn-artifact "Q4tNRrMwqrWYUf4WdcNkZPOmxGBnwQfd2da-34HX9wQ=" "/src/fix-dns.patch" #o644))
+
 (define openssh
   (cmmi-package
    "openssh" "8.6p1"
    "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/$name-$version.tar.gz"
    "fjWn7lV0XqhXovkoCAc6apxGL7kYhbj_NjIWlbhi9Nk="
-   patches: (patchfiles* "patches/openssh/fix-dns.patch")
+   patches: (list fix-dns.patch)
    libs: (list linux-headers libedit ncurses zlib libressl)
    extra-configure: '(--with-pid-dir=/run
                       --disable-lastlog

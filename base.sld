@@ -24,6 +24,9 @@
       (import-for-syntax
         (only (chicken io) read-string))))
   (export
+    ; for loading premade configs, etc:
+    cdn-artifact
+
     ; libc:
     musl
     libssp-nonshared

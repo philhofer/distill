@@ -14,17 +14,17 @@
  (pkg gdbm)
  (pkg libreadline))
 
-;; see patches/python/py-setup for
-;; the static config for all of the
-;; python libraries included in the
-;; base install
+;; this py-setup arranges for just about
+;; all of the modules to be built-in statically
+(define python-config
+  (cdn-artifact "6iCCIatqDyPAUvIMW9CiVQG_vP-oBZxzL-RLAOuX050=" "/src/py-setup" #o644))
 
 (define python3
   (cmmi-package
    "Python" "3.9.6"
    "https://www.python.org/ftp/python/$version/$name-$version.tar.xz"
    "Orxtc7Mb8vFdp4nveaojbC7xpLlXs978TAjf55Iihwg="
-   extra-src: (list (bind "patches/python/py-setup-3.9.6" "/src/py-setup"))
+   extra-src: (list python-config)
    libs: (list ncurses libexpat libressl zlib libbz2 liblzma libffi
                linux-headers gdbm libreadline)
    cross: (list

@@ -499,15 +499,20 @@
 ;; and produces an artifact that appears at 'therepath' with the same
 ;; permissions as the file has locally
 ;;
+;; if herepath is an artifact, bind returns
+;; a new artifact with the target path updated
+;; to point to therepath
+;;
 ;; TODO: handle directories
 (define (bind herepath therepath)
-  (let ((f (or
-            (file-exists? herepath)
-            (let ((ep (executable-pathname)))
-              (or (file-exists? (filepath-join ep herepath))
-                  (file-exists? (filepath-join ep "../../lib/distill/" herepath))
-                  (error "couldn't find file" herepath))))))
-    (overlay f therepath)))
+  (or (update-path herepath therepath)
+      (let ((f (or
+                (file-exists? herepath)
+                (let ((ep (executable-pathname)))
+                  (or (file-exists? (filepath-join ep herepath))
+                      (file-exists? (filepath-join ep "../../lib/distill/" herepath))
+                      (error "couldn't find file" herepath))))))
+        (overlay f therepath))))
 
 ;; patchfiles* looks relative to the current directory,
 ;; the current executable's directory, and finally

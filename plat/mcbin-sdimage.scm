@@ -35,8 +35,8 @@
   (map
    (lambda (lst)
      (string-append (##sys#symbol->string (car lst))
-		    "="
-		    (cadr lst)))
+                    "="
+                    (cadr lst)))
    '((scriptaddr:     "0x4d00000")
      (pxefile_addr_r: "0x4e00000")
      (fdt_addr_r:     "0x4f00000")
@@ -61,10 +61,10 @@
    (lambda ()
      (write-exexpr
       '(if (test -b /dev/mmcblk1p2)
-	   if -t -n (test -b /dev/mmcblk1p3)
-	   foreground (echo "re-partitioning /dev/mmcblk1...")
-	   if (dosextend -n3 -k /dev/mmcblk1)
-	   test -b /dev/mmcblk1p3)))))
+           if -t -n (test -b /dev/mmcblk1p3)
+           foreground (echo "re-partitioning /dev/mmcblk1...")
+           if (dosextend -n3 -k /dev/mmcblk1)
+           test -b /dev/mmcblk1p3)))))
 
 ;; TODO: reverse-engineer this.
 ;; FreeRTOS is somewhere in here.
@@ -164,8 +164,10 @@
                  '(install -D -m "644" -t /out/boot build/a80x0_mcbin/release/flash-image.bin))))))
 
 (define mcbin-sdimage
-  (let ((kernel (linux/config-static "mcbin" "patches/linux/config.mcbin.aarch64"
-                                     dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
+  (let ((kernel (linux/config-static
+                 "mcbin"
+                 (cdn-artifact "7T9BGGKMOBpAtgHatOv8gRA2Nf92jDWptxrJLV9T3ms=" ".config" #o644)
+                 dtb: 'arch/arm64/boot/dts/marvell/armada-8040-mcbin.dtb)))
     (make-platform
      config:   (gcc+musl-static-config
                 'aarch64

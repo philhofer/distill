@@ -141,6 +141,22 @@
                   (if (matches? line) (cons line out) out)
                   (read-line inp))))))))))
 
+;; update-path takes a file artifact
+;; and returns a new artifact with
+;; an updated output path
+(: update-path (* string -> (or artifact false)))
+(define (update-path art newpath)
+  (and (artifact? art)
+       (eq? (artifact-kind art) 'file)
+       (let ((oldmode (vector-ref (artifact-format art) 2)))
+         (%artifact
+          `#(file ,newpath ,oldmode)
+          (artifact-hash art)
+          (artifact-extra art)))))
+
+;; remote-file creates a new file artiact
+;; at the given absolute path with the given file permissions
+;; from the source url and hash provided
 (: remote-file ((or false string) string string fixnum --> artifact))
 (define (remote-file src hash abspath mode)
   (%artifact

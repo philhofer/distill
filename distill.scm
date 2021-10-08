@@ -7,6 +7,8 @@
  (chicken file)
  (only (chicken string) string-split)
  (only (chicken condition) print-error-message)
+ (only (chicken io) read-list write-string)
+ (only (chicken port) with-input-from-string)
 
  (only (chicken read-syntax)
        set-parameterized-read-syntax!)
@@ -54,33 +56,73 @@
 ;; procedure inside load-builtin, etc.
 (define real-eval (eval-handler))
 
+;; intern all of the modules in pkg/, plat/, etc.
+;; so that they can be hot-loaded
+(begin-for-syntax
+ (import
+  (chicken file)
+  (only (chicken io) read-string))
+ (define (read-file name)
+   (with-input-from-file name read-string))
+ (define interned-files
+   (let* ((dirs     '(pkg svc plat))
+          (dir-files (lambda (dir)
+                       (glob (string-append (symbol->string dir) "/*.scm"))))
+          (files     (map dir-files dirs)))
+     (foldl
+      (lambda (alist fileset)
+        (foldl
+         (lambda (alist file)
+           (cons (cons file (read-file file)) alist))
+         alist
+         fileset))
+      '()
+      files))))
+
+(define-syntax loaded-files
+  (er-macro-transformer
+   (lambda (exp rename compare)
+     `(quote ,interned-files))))
+
+(define *preload-alist* (loaded-files))
+
 ;; load-builtin loads a module with the given symbol
 ;; from (search-dirs)/<kind>/<sym>.scm, taking care to load
 ;; its dependencies in advance by walking the import table
+;;
+;; if the file is not present in one of those directories
+;; but it *is* present in the preloaded file alist,
+;; then that file is used instead
 (define load-builtin
   (let ((loaded (make-hash-table)))
     (lambda (kind sym)
       (or (hash-table-ref/default loaded sym #f)
           (begin
             (hash-table-set! loaded sym #t)
-            (let ((file (let loop ((dirs (cons "." (search-dirs))))
-                          (if (null? dirs)
-                              (error "can't find" kind sym)
-                              (let ((f (filepath-join (car dirs) kind (string-append (symbol->string sym) ".scm"))))
-                                (if (file-exists? f) f (loop (cdr dirs)))))))
-                  (read* (lambda ()
-                           (let loop ((datum (read)))
-                             (if (eof-object? datum)
-                                 '()
-                                 (begin
-                                   (when (form? 'import datum)
-                                     (scan-imports (cdr datum)))
-                                   (cons datum (loop (read)))))))))
-              (with-input-from-file file
-                (lambda ()
-                  (real-eval `(module (,kind ,sym)
-                                      (,sym)
-                                      ,@(read*)))))))))))
+            (let* ((fullname (filepath-join kind (string-append (symbol->string sym) ".scm")))
+                   (file     (let loop ((dirs (cons "." (search-dirs))))
+                               (if (null? dirs)
+                                   #f
+                                   (let ((f (filepath-join (car dirs) fullname)))
+                                     (if (file-exists? f) f (loop (cdr dirs)))))))
+                   (with-input (lambda (thunk)
+                                 (if file
+                                     (with-input-from-file file thunk)
+                                     (let ((pr (assoc fullname *preload-alist*)))
+                                       (and pr (with-input-from-string (cdr pr) thunk))))))
+                   (forms      (with-input read-list)))
+              (if forms
+                  (begin
+                    (for-each
+                     (lambda (form)
+                       (when (form? 'import form)
+                         (scan-imports form)))
+                     forms)
+                    (real-eval
+                     `(module (,kind ,sym)
+                              (,sym)
+                              ,@forms)))
+                  (fatal "couldn't locate" fullname))))))))
 
 (define (scan-imports lst)
   (for-each
@@ -111,6 +153,28 @@
                         (scan-imports (cdr im)))
               (real-eval expr)
               (loop (read))))))))
+
+(define (builtin-cmd args)
+  (for-each
+   (lambda (pr)
+     (print (car pr)))
+   *preload-alist*))
+
+(define (write-file name datums)
+  (with-output-to-file name
+    (lambda ()
+      (for-each write datums))))
+
+(define (edit-cmd args)
+  (for-each
+   (lambda (name)
+     (let ((pr (assoc name *preload-alist*)))
+       (if pr
+           (with-output-to-file name
+             (lambda ()
+               (write-string (cdr pr))))
+           (fatal name "not a builtin file"))))
+   args))
 
 (define (sum-cmd args)
   (import
@@ -277,6 +341,23 @@
                      (eval-handler           child-eval))
         (for-each %load args))))
 
+(define (init-cmd args)
+  (import (chicken file))
+  (let ((need-dirs '("pkg" "svc" "plat" "artifacts" "plans")))
+    (for-each create-directory need-dirs)
+    (with-output-to-file "system.scm"
+      (lambda ()
+        ;; write a skeleton system.scm file
+        (write
+         '(import
+           scheme
+           (distill base)
+           (distill system)
+           (define system
+             (make-system
+              services: '()
+              packages: '()))))))))
+
 (let ((dirs (get-environment-variable "DISTILL_PATH"))
       (args (command-line-arguments))
       (cmds `((sum    . ,sum-cmd)
@@ -284,7 +365,10 @@
               (list   . ,list-cmd)
               (run    . ,run-cmd)
               (intern . ,intern-cmd)
-              (again  . ,again-cmd))))
+              (again  . ,again-cmd)
+              (builtin . ,builtin-cmd)
+              (edit    . ,edit-cmd)
+              (init    . ,init-cmd))))
   (when dirs
     (search-dirs
      (append (string-split dirs ":") (search-dirs))))
