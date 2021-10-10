@@ -358,14 +358,14 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define skalibs
   (ska-cmmi-package
-   "skalibs" "2.10.0.3"
-   "2RON6bsHp8WvaYvxYSkju5xDpteJaKVjMHs4TLapbdE="
+   "skalibs" "2.11.0.0"
+   "wPDqmXfAncWrgLe-EOT8nAuVcTZ2btCKTOiZFgc5nGw="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define libexecline+tools
   (ska-cmmi-package
-   "execline" "2.8.0.1"
-   "bI3Ilf7RIQxhJrxCCWgCsv7U2L6c2azucsSJlt07nKw="
+   "execline" "2.8.1.0"
+   "WZOWlNlK-wWMD44KjGNAeM9vnopdlQWkBG5hOCiWgq8="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-pedantic-posix
@@ -1089,8 +1089,8 @@ EOF
 
 (define libs6+tools
   (ska-cmmi-package
-   "s6" "2.10.0.3"
-   "R2Uvj1NNGerFO0D-AFcy3JbqutPSdev3VWA2U6G6ZHs="
+   "s6" "2.11.0.0"
+   "oSVPiQwoBfEoL6Vj6Rac-8lnehNoThNfvmyI_hu11FA="
    libs: (list skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-static-libc)))
@@ -1100,8 +1100,8 @@ EOF
 
 (define libs6rc+tools
   (ska-cmmi-package
-   "s6-rc" "0.5.2.2"
-   "3jp5-8rJ-0rzgziZmbJPaPldfw1WF7X5dyEQCM6cS3k="
+   "s6-rc" "0.5.2.3"
+   "pMapqPgXMblKqtnog-AMtFD49IR777C9b3XIoVKT1-Q="
    libs: (list libs6 skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-static-libc)))
