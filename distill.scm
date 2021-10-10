@@ -29,7 +29,8 @@
    (distill service)
    (distill fs)
    (distill image)
-   (distill system)))
+   (distill system)
+   (distill net)))
 
 ;; by default, search dirs are
 ;; the current directory, followed by

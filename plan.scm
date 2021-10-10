@@ -100,7 +100,7 @@
    (artifact-hash art)
    #f))
 
-;; subarchive-match takes an archive artifact
+;; archive-match takes an archive artifact
 ;; and a list of glob expressions and returns
 ;; the list of archive members that match 'matches'
 (: archive-match (string (list-of string) -> (list-of string)))

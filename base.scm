@@ -733,7 +733,7 @@ EOF
      label: (conc "linux-" *linux-version* "-" name)
      cross: (list $cc-tools)
      tools: (list
-             perl xz-tools reflex
+             perl xz-tools reflex gawk
              byacc libelf zlib linux-headers
              native-toolchain)
      inputs: '()
@@ -748,6 +748,7 @@ EOF
                               $cc-env/for-kbuild
                               'YACC=yacc ;; not bison -y
                               'GENKSYMS=/bin/true
+                              'AWK=gawk ;; not busybox awk; it will hang :(
                               (elconc 'ARCH= (o linux-arch-dir-name $arch))
                               "HOST_LIBELF_LIBS=-lelf -lz")))
               (elif*
