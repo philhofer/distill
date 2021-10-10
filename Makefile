@@ -27,6 +27,8 @@ UNITS:=distill.fetch distill.hash distill.nproc \
 	distill.net distill.kvector distill.contract \
 	distill.coroutine distill.sandbox srfi-69 matchable
 
+BUILTINS:=$(wildcard pkg/*.scm) $(wildcard plat/*.scm) $(wildcard svc/*.scm)
+
 .PHONY: test all install snapshot
 all: distill ${UNITS:%=%.o}
 VERSION ?= $(shell git rev-parse --short HEAD)
@@ -66,7 +68,7 @@ distill.%.c distill.%.import.scm: %.mod.scm
 		-emit-link-file distill.$*.link \
 		-output-file distill.$*.c
 
-distill.c: distill.scm ${UNITS:%=%.import.scm}
+distill.c: distill.scm ${UNITS:%=%.import.scm} $(BUILTINS)
 	$(CHICKEN) $< -module main -static $(CHICKEN_FEATURES) -module-registration $(CHICKEN_FLAGS)
 
 %.o: %.c

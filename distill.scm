@@ -232,7 +232,7 @@
                    (current-input-port)
                    (open-input-file arg)))
             (dir (artifact-dir))
-            (tmp (filepath-join dir (string-append arg ".tmp")))
+            (tmp (filepath-join dir (string-append (basename arg) ".tmp")))
             (t (open-output-file tmp))
             (h (copy-port+hash f t)))
        (close-input-port f)
