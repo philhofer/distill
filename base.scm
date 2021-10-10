@@ -1005,16 +1005,16 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.3.3"
+   "libressl" "3.3.5"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "ffOQdfqQIjb2EsEMkjOqRaEEcmUOyd4YinXTa2lWlpE="
+   "F4oV9WpT9JhAXtu_FJ7oiNiv56TNSTf7GcPosn0_SB4="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
   (cmmi-package
-   "libarchive" "3.5.1"
+   "libarchive" "3.5.2"
    "https://github.com/libarchive/$name/releases/download/$version/$name-$version.tar.gz"
-   "FpiOY3UpgNtgY1g0Rz_rsQIol5CtNaz0hXGXMkPgrgw="
+   "PTw4RAD0ld68diP_8vueOv0eP0mZz3KwyoYmhWXI724="
    libs: (list libbz2 zlib liblzma liblz4 libressl libzstd)
    extra-configure: '(--without-xml2 --without-acl --without-attr --without-expat)))
 
@@ -1070,7 +1070,7 @@ EOF
                          "%.o: %.c"
                          "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
     (cc-package
-     "iproute2" "5.13.0" ; upgrade me to 5.13
+     "iproute2" "5.13.0"
      "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
      "SFUdMngYxFuQR7fc4KPbW_TdtkMmTrfZFivHiStz_kQ="
      patches: (include-patchfiles
