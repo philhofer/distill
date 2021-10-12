@@ -1013,7 +1013,7 @@ EOF
 (define libarchive+tools
   (cmmi-package
    "libarchive" "3.5.2"
-   "https://github.com/libarchive/$name/releases/download/$version/$name-$version.tar.gz"
+   "https://libarchive.org/downloads/$name-$version.tar.gz"
    "PTw4RAD0ld68diP_8vueOv0eP0mZz3KwyoYmhWXI724="
    libs: (list libbz2 zlib liblzma liblz4 libressl libzstd)
    extra-configure: '(--without-xml2 --without-acl --without-attr --without-expat)))
