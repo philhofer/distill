@@ -219,7 +219,8 @@
          (art      (begin
                      (build-graph! (list plan))
                      (plan-outputs plan))))
-    (info "output is" (artifact-hash art))))
+    (display (artifact-hash art))
+    (newline)))
 
 (define (intern-cmd args)
   (import
