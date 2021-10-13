@@ -15,7 +15,7 @@
        ((pathfind "curl") =>
         (lambda (prog)
           (lambda (url dst)
-            (run prog "-s" "-S" "-o" dst url))))
+            (run prog "-s" "-S" "-o" dst "-L" url))))
        (else (fatal "neither curl(1) nor wget(1) in $PATH"))))))
 
 ;; from the given url and puts it in the given file;
