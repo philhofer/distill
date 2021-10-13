@@ -967,8 +967,8 @@ EOF
    ;; note: this "release" tarball differs from the automated
    ;; github download release only in gzip timestamp
    ;; (decompressed content is identical)
-   "https://github.com/facebook/zstd/releases/download/v$version/zstd-$version.tar.gz"
-   "vNix4eqekWyco3gWmJtihAUuR-dYWrpbx0aeGbRfBjQ="
+   "https://github.com/facebook/zstd/releases/download/v$version/zstd-$version.tar.zst"
+   "6xGuojF9IrezHCPWKDFfEhIBz1qxniTEN3u3lIhklOo="
    build: (let ((makeflags '(HAVE_PTHREAD=1
                              HAVE_ZLIB=0
                              HAVE_LZMA=0
