@@ -159,6 +159,13 @@
      (queue-push! p (lambda () (ret #t)))
      (%yield))))
 
+(define (empty-queue) (cons '() '()))
+
+(: queue-signal! (pair -> boolean))
+(define (queue-signal! q)
+  (let ((cont (queue-pop! q)))
+    (and cont (begin (pushcont! cont) #t))))
+
 ;; process-wait/yield is the semantically the same
 ;; as chicken.process#process-wait, except that it
 ;; suspends the current coroutine while waiting
@@ -323,3 +330,42 @@
      (let ((res (thunk)))
        (done)
        res))))
+
+(define make-keyed-lock make-hash-table)
+
+;; lock-key! locks a key associated
+;; with a keyed lock; any other calls
+;; to lock-key! in other continuations
+;; will block at lock-key! until the first
+;; caller calls unlock-key!, at which point
+;; another caller will execute, and so forth
+(: lock-key! (* * -> undefined))
+(define (lock-key! lock key)
+  (let ((res (hash-table-ref/default lock key #f)))
+    (if res
+        (let ((num (car res))
+              (q   (cdr res)))
+          (unless (= num 0)
+            (set-car! res (+ num 1))
+            (queue-wait! q)))
+        (hash-table-set! lock key (cons 1 (empty-queue))))))
+
+;; unlock-key! unlocks a key associated
+;; with a keyed lock
+;; (see also: lock-key!)
+(: unlock-key! (* * -> undefined))
+(define (unlock-key! lock key)
+  (let* ((res (hash-table-ref/default lock key #f))
+         (q   (cdr res))
+         (num (car res)))
+    (unless (> num 0)
+      (error "mis-matched lock/unlock of key"))
+    (queue-signal! q)
+    (set-car! res (- num 1))))
+
+(: with-locked-key! (* * procedure -> *))
+(define (with-locked-key lock key thunk)
+  (lock-key! lock key)
+  (let ((ret (thunk)))
+    (unlock-key! lock key)
+    ret))

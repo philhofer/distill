@@ -469,6 +469,12 @@
     (unless (and ok? (= status 0))
       (error "command failed:" (cons prog args)))))
 
+(: with-locked-hash (string (-> 'a) -> 'a))
+(define with-locked-hash
+  (let ((lock (make-keyed-lock)))
+    (lambda (hash thunk)
+      (with-locked-key lock hash thunk))))
+
 (: fetch! ((or false string) string -> *))
 (define (fetch! src hash)
   (let* ((url (or src (begin
@@ -476,17 +482,22 @@
                         (string-append (cdn-url) hash))))
          (dst (filepath-join (artifact-dir) hash))
          (tmp (string-append dst ".tmp")))
-    (infoln "fetching" url)
-    (let ((h (fetch+hash url tmp)))
-      (cond
-       ((not h)
-        (error "fetching url failed" url))
-       ((string=? h hash)
-        (rename-file tmp dst #t))
-       (else
-        (begin
-          (delete-file tmp)
-          (error "fetched artifact has the wrong hash" h "not" hash)))))))
+    (with-locked-hash
+     hash
+     (lambda ()
+       (or (file-exists? dst)
+           (begin
+             (infoln "fetching" url)
+             (let ((h (fetch+hash url tmp)))
+               (cond
+                ((not h)
+                 (error "fetching url failed" url))
+                ((string=? h hash)
+                 (rename-file tmp dst #t))
+                (else
+                 (begin
+                   (delete-file tmp)
+                   (error "fetched artifact has the wrong hash" h "not" hash)))))))))))
 
 ;; plan-outputs-file is the file that stores the serialized
 ;; interned file information for a plan

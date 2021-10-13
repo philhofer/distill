@@ -11,7 +11,9 @@
     fdread
     fdpipe
     fdclose
-    join/value)
+    join/value
+    make-keyed-lock
+    with-locked-key)
   (import
     scheme
     (srfi 4)
@@ -28,6 +30,6 @@
                (chicken foreign)
                (chicken fixnum)
                (only (chicken base) include error when call/cc identity
-                     define-constant)
+                     define-constant unless)
                (only (chicken process) process-wait))))
   (include "coroutine.scm"))

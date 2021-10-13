@@ -104,4 +104,22 @@
                                 (abort "bar")
                                 #f))))))
 
+(let* ((lock   (make-keyed-lock))
+       (key    "the-key")
+       (value  #f)
+       (inside (lambda ()
+                 (with-locked-key
+                  lock key
+                  (lambda ()
+                    (when value
+                      (error "inside should equal #f"))
+                    (set! value #t)
+                    (bin/true #t)
+                    (set! value #f)
+                    #t))))
+       (s0     (spawn inside))
+       (s1     (spawn inside)))
+  (test eq? #t (join/value s0))
+  (test eq? #t (join/value s1)))
+
 (display "test OK.\n")
