@@ -572,7 +572,7 @@
                   ((tar.gz) "-z")
                   ((tar.bz) "-j")
                   ((tar.xz) "-J")
-                  ((tar.zst) "--zstd")
+                  ((tar.zst) "-Izstd")
                   ((tar)    "")
                   (else (error "unknown/unsupported archive kind" kind))))
           (infile  (filepath-join (artifact-dir) hash)))
@@ -660,7 +660,7 @@
       ;; compression-level and threading arguments to keep
       ;; that from being a possible source of reproducibility issues,
       ;; _or_ calculate the checksum on the uncompressed archive
-      "--zstd"
+      "-Izstd"
       "-cf" (abspath tmp)
       "--format=ustar"
       "--sort=name"
