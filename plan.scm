@@ -100,11 +100,21 @@
    (artifact-hash art)
    #f))
 
+
+(: tar-compress-flags (symbol -> string))
+(define (tar-compress-flags kind)
+  (case kind
+    ((tar.gz) "-z")
+    ((tar.bz) "-j")
+    ((tar.xz) "-J")
+    ((tar.zst) "-Izstd")
+    (else (error "unknown/unsupported archive kind" kind))))
+
 ;; archive-match takes an archive artifact
 ;; and a list of glob expressions and returns
 ;; the list of archive members that match 'matches'
-(: archive-match (string (list-of string) -> (list-of string)))
-(define (archive-match file matches)
+(: archive-match (symbol string (list-of string) -> (list-of string)))
+(define (archive-match kind file matches)
   (unless (file-exists? file)
     (error "archive-match: file doesn't exist" file))
   (let* ((fnmatch (foreign-lambda* int ((nonnull-c-string pat) (nonnull-c-string str))
@@ -123,7 +133,7 @@
                        (fdclose wfd)
                        (process-execute
                         "env"
-                        (list "LC_ALL=C.UTF-8" "tar" "-tf" file)))))
+                        (list "LC_ALL=C.UTF-8" "tar" (tar-compress-flags kind) "-tf" file)))))
              (end   (spawn process-wait/yield child))
              (inp   (open-input-file* rfd)))
         (fdclose wfd)
@@ -575,22 +585,16 @@
   (define (unpack-sub-archive dst kind hash src args)
     (unpack-archive dst kind hash src
                     (archive-match
+                     kind
                      (filepath-join (artifact-dir) hash)
                      args)))
 
   (define (unpack-archive dst kind hash src tail)
-    (let ((comp (case kind
-                  ((tar.gz) "-z")
-                  ((tar.bz) "-j")
-                  ((tar.xz) "-J")
-                  ((tar.zst) "--zstd")
-                  ((tar)    "")
-                  (else (error "unknown/unsupported archive kind" kind))))
-          (infile  (filepath-join (artifact-dir) hash)))
+    (let ((infile  (filepath-join (artifact-dir) hash)))
       (when (not (file-exists? infile))
         (fetch! src hash))
       (create-directory dst #t)
-      (run "tar" (cons* comp "-xkf" infile "-C" dst tail))))
+      (run "tar" (cons* (tar-compress-flags kind) "-xkf" infile "-C" dst tail))))
 
   (define (unpack-symlink dst abspath lnk)
     (let ((target (filepath-join dst abspath)))
@@ -671,7 +675,7 @@
       ;; compression-level and threading arguments to keep
       ;; that from being a possible source of reproducibility issues,
       ;; _or_ calculate the checksum on the uncompressed archive
-      "--zstd"
+      "-Izstd"
       "-cf" (abspath tmp)
       "--format=ustar"
       "--sort=name"
@@ -871,7 +875,7 @@
                      link: (vector
                             (vector-ref v 1) (vector-ref v 2) #f))))
          (inputs  (map vec->in vinput))
-         (plan    (make-plan
+         (plan    ((kvector-constructor <plan>) ; do not apply contract rules
                    name:   label
                    inputs: inputs
                    saved-output: voutput
