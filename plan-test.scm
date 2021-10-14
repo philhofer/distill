@@ -8,6 +8,12 @@
 
 (include "test-helpers.scm")
 
+(define (make-empty dir)
+  (when (directory-exists? dir)
+    (delete-directory dir #t))
+  (create-directory dir))
+
+(for-each make-empty '("./test-artifacts" "./test-plans"))
 (artifact-dir "./test-artifacts")
 (plan-dir "./test-plans")
 
@@ -57,3 +63,6 @@
       (test string=?
             (artifact-hash art)
             (artifact-hash art2)))))
+
+(delete-directory "./test-artifacts" #t)
+(delete-directory "./test-plans" #t)

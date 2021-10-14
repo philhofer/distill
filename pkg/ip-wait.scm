@@ -46,7 +46,7 @@
                              fdmove 0 3
                              cat)
         importas |-i| -u bg !
-        if (grep -m1 -E "$2")
+        if (grep -q -m1 -E "$2")
         if (kill "$bg")
         if (kill "$mon")
         wait |-i| ("$bg" "$mon"))

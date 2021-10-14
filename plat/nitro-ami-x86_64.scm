@@ -1,13 +1,18 @@
 (import
  scheme
+ (only (chicken port) with-output-to-string)
  (only (chicken module) export)
  (distill base)
  (distill plan)
  (distill execline)
  (distill fs)
  (distill image)
+ (distill service)
+ (distill execline)
  (distill system)
 
+ (pkg ip-wait)
+ (pkg wget)
  (svc getty))
 
 ;; Amazon EC2 Nitro-based platform
@@ -49,6 +54,61 @@
    "ami-x86_64"
    (cdn-artifact "7QIo0Y7kSLUMeyWmL1f-jHmNsG_7iW04nwAhmJ_MTZc=" ".config" #o644)))
 
+;; write a script called ec2-meta
+;; which is invoked like
+;;   ec2-meta public-keys/0/openssh-key
+;; in order to deduplicate code that needs to
+;; access ec2 metadata
+(define bin/ec2-meta
+  (interned "/bin/ec2-meta" #o755
+            (with-output-to-string
+              (lambda ()
+                (write-exexpr
+                 `(foreground
+                   ;; block until the default route is available
+                   (redirfd -w 1 /dev/null ip-wait route "^default")
+                   backtick -E token
+                   (wget -q --method=PUT -O "-"
+                         "--header=X-aws-ec2-metadata-token-ttl-seconds: 21600"
+                         http://169.254.169.254/latest/api/token)
+                   wget -q -O "-" "--header=X-aws-ec2-metadata-token: ${token}"
+                   "http://169.254.169.254/latest/meta-data/${1}")
+                 shebang: "#!/bin/execlineb -s1")))))
+
+;; ec2-ssh-keys extracts ssh keys from
+;; the ec2 metadata service and sticks them
+;; into /run/ec2-authorized-keys, which is what
+;; the /root/.ssh/authorized_keys will point
+;; to (as a symlink)
+;;
+;; BUGS: only fetches key 0
+(define ec2-ssh-keys
+  (make-service
+   name: 'ec2-ssh-keys
+   inputs: (list
+            wget
+            ip-wait
+            bin/ec2-meta
+            (interned-symlink "/root/.ssh/authorized_keys" "/run/ec2-authorized-keys"))
+   spec:   (oneshot*
+            up: `(/bin/umask
+                  "077"
+                  redirfd -w 1 /run/ec2-authorized-keys
+                  s6-setuidgid nobody
+                  ec2-meta public-keys/0/openssh-key))))
+
+;; ec2-hostname sets the hostname based
+;; on the metadata service "local-hostname" variable
+(define ec2-hostname
+  (make-service
+   name:   'ec2-hostname
+   inputs: (list wget ip-wait bin/ec2-meta)
+   spec:   (oneshot*
+            up: `(backtick
+                  -E hostname
+                  (s6-setuidgid nobody ec2-meta local-hostname)
+                  hostname "$hostname"))))
+
 ;; nitro-ami-x86_64 is a basic AMI platform
 ;; for amazon EC2 images that will run
 ;; on any Nitro-backed x86_64 instance type
@@ -59,6 +119,8 @@
    cmdline:  `(,(string-append "root=" (rootpart 2))
                "rootfstype=squashfs" "console=ttyS0")
    services: (list
+              ec2-hostname
+              ec2-ssh-keys
               (var-mount "/dev/nvme0n1p3")
               ;; ttyS0 is the EC2 console
               (console-root-shell speed: 115200 tty: 'ttyS0))
