@@ -121,10 +121,10 @@
 
 ;; mbr-image produces a (legacy-)bootable image
 (define (mbr-image name)
-  (lambda (plat rootpkgs)
+  (lambda (plat rootpkgs chown)
     (let ((kern  (platform-kernel plat))
           (cmdl  (join-with " " (platform-cmdline plat)))
-          (root  (squashfs rootpkgs))
+          (root  (squashfs rootpkgs chown: chown))
           (kfile (elpath $sysroot "/boot/vmlinuz"))
           (rfile (elpath $sysroot "rootfs.img")))
       (package-template
@@ -138,17 +138,17 @@
 
 ;; esp-image produces an EFI-bootable image
 (define (efi-image name #!key (uuid #f))
-  (lambda (plat rootpkgs)
-    (let ((esp   (linux-esp (platform-kernel plat) (platform-cmdline plat)))
-          (root  (squashfs rootpkgs))
-          (efile (elpath $sysroot "esp.img"))
-          (rfile (elpath $sysroot "rootfs.img")))
-      (package-template
-       label:  (string-append name "-efi-image")
-       raw-output: "/img"
-       tools:  (list imgtools execline-tools busybox-core)
-       inputs: (list esp root)
-       build:  `(gptimage
-                 -d ,@(if uuid '(-u ,uuid) '())
-                 /out/img (,efile U ,rfile L)
-                 true)))))
+(lambda (plat rootpkgs chown)
+  (let ((esp   (linux-esp (platform-kernel plat) (platform-cmdline plat)))
+        (root  (squashfs rootpkgs chown: chown))
+        (efile (elpath $sysroot "esp.img"))
+        (rfile (elpath $sysroot "rootfs.img")))
+    (package-template
+     label:  (string-append name "-efi-image")
+     raw-output: "/img"
+     tools:  (list imgtools execline-tools busybox-core)
+     inputs: (list esp root)
+     build:  `(gptimage
+               -d ,@(if uuid '(-u ,uuid) '())
+               /out/img (,efile U ,rfile L)
+               true)))))

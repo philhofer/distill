@@ -2,7 +2,20 @@
   (export
     adduser
     addgroup
-    groups+users->artifacts)
+    groups+users->artifacts
+
+    make-user
+    user-name
+    user-uid
+    user-gid
+    user-home
+    user-login
+    make-group
+    group-name
+    group-gid
+    group-users
+    user?
+    group?)
   (import
     scheme
     (srfi 26)

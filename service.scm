@@ -148,12 +148,13 @@
           dependencies: (map-lines service-name depends)))
      lst)))
 
-;; services->packages takes a list of services
-;; and produces a complete list of packages
+;; services->packages converts a list of
+;; services, a list of users, and a list of groups
+;; into all of the packages and artifacts
 ;; that the services depend upon, including
 ;; the necessary init scripts and binaries
-(: services->packages ((list-of vector) -> (list-of procedure)))
-(define (services->packages all)
+(: services->packages ((list-of vector) (list-of vector) (list-of vector) -> (list-of procedure)))
+(define (services->packages all extra-users extra-groups)
   (let* ((fold     (lambda (proc init lst)
                      (let loop ((out init)
                                 (lst lst))
@@ -185,9 +186,9 @@
     (append
      (cons db tail)
      (groups+users->artifacts
-      (sublists all service-groups '())
-      (sublists all service-users '()))
-     (boot-scripts))))
+      (sublists all service-groups extra-groups)
+      (sublists all service-users extra-users)
+      (boot-scripts)))))
 
 (define *service-dir* "/run/service")
 (define *catchall-fifo* "/run/service/s6-svscan-log/fifo")

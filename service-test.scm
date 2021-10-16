@@ -24,13 +24,30 @@
          (or (string-prefix? pre (car lines))
              (loop (cdr lines))))))
 
+(define my-group
+  (make-group
+   name:  'unpriv
+   gid:   1000
+   users: '(unpriv)))
+
+(define my-user
+  (make-user
+   name: 'unpriv
+   uid:  1000
+   gid:  (group-gid my-group)
+   login: "/bin/sh"))
+
+(define (has-prefixes str)
+  (and (have-line-prefix "foo:x:" str)
+       (have-line-prefix "unpriv:x:1000:" str)))
+
 ;; test that 'foo is in /etc/fstab
-(let ((pkgs (services->packages (list my-service))))
+(let ((pkgs (services->packages (list my-service) (list my-user) (list my-group))))
   (define (check-etc-passwd str)
-    (or (have-line-prefix "foo:x:" str)
+    (or (has-prefixes str)
         (error "etc/passwd doesn't have user foo:" str)))
   (define (check-etc-group str)
-    (or (have-line-prefix "foo:x:" str)
+    (or (has-prefixes str)
         (error "etc/group doesn't have group foo:" str)))
   (let loop ((pkgs pkgs)
              (seen-passwd #f)

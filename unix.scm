@@ -55,30 +55,45 @@
 ;; of addgroup expressions and a list of
 ;; adduser expressions and returns a list
 ;; of artifacts for /etc/passwd, /etc/group, and so forth
+;;
+;; the groups and users lists can either be
+;; the result of the 'adduser' or 'addgroup'
+;; functions, respectively, or they can be
+;; the result of make-user and make-group,
+;; respectively
 (define (groups+users->artifacts gps ups #!key
                                  (start-uid 100)
                                  (start-gid 100))
   (let* ((ht       (make-hash-table test: eq? hash: eq?-hash))
          (getgroup (lambda (name)
-                     (hash-table-ref ht name)))
+                     (if (integer? name)
+                         name
+                         (hash-table-ref ht name))))
          (groups   (let loop ((in  gps)
                               (out '())
                               (gid start-gid))
                      (if (null? in)
                          out
-                         (loop (cdr in)
+                         (let ((head (car in)))
+                           (if (group? head)
+                               (begin
+                                 (hash-table-set! ht (group-name head) (group-gid head))
+                                 (loop (cdr in) (cons head out) gid))
                                (let ((g ((car in) gid)))
                                  (hash-table-set! ht (group-name g) gid)
-                                 (cons g out))
-                               (+ 1 gid)))))
+                                 (loop (cdr in) (cons g out) (+ 1 gid))))))))
          (users    (let loop ((in  ups)
                               (out '())
                               (uid start-uid))
                      (if (null? in)
                          out
-                         (loop (cdr in)
-                               (cons ((car in) uid getgroup) out)
-                               (+ 1 uid))))))
+                         (let ((head (car in)))
+                           (cond
+                            ((user? head)
+                             (loop (cdr in) (cons head out) uid))
+                            ((procedure? head)
+                             (loop (cdr in) (cons (head uid getgroup) out) (+ 1 uid)))
+                            (else (error "bad user spec" head))))))))
     (list
      (etc/passwd (append base-users users))
      (etc/group  (append base-groups groups)))))

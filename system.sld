@@ -18,10 +18,11 @@
     scheme
     (distill kvector)
     (distill contract)
+    (distill unix)
     (only (distill package) config? expander)
     (only (distill service) service? services->packages)
     (only (distill plan) artifact?))
   (cond-expand
     (chicken (import
-               (only (chicken base) unless include disjoin))))
+               (only (chicken base) unless include disjoin error))))
   (include "system.scm"))
