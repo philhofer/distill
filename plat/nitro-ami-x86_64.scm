@@ -13,7 +13,8 @@
 
  (pkg ip-wait)
  (pkg wget)
- (svc getty))
+ (svc getty)
+ (svc acpid))
 
 ;; Amazon EC2 Nitro-based platform
 ;;
@@ -121,6 +122,9 @@
    services: (list
               ec2-hostname
               ec2-ssh-keys
+              ;; EC2 termination begins with
+              ;; an ACPI poweroff event
+              acpid
               (var-mount "/dev/nvme0n1p3")
               ;; ttyS0 is the EC2 console
               (console-root-shell speed: 115200 tty: 'ttyS0))

@@ -6,7 +6,8 @@
   (distill fs)
   (distill image)
   (distill system)
-  (pkg linux-virt-x86_64))
+  (pkg linux-virt-x86_64)
+  (svc acpid))
 
 ;; qemu-preboot formats the tail end of /dev/vda
 ;; as the /var partition and then reboots so that
@@ -34,6 +35,7 @@
    config:   (default-config 'x86_64)
    kernel:   linux-virt-x86_64
    cmdline:  '("root=/dev/vda2" "rootfstype=squashfs" "console=ttyS0")
-   services: (list (var-mount "/dev/vda3"))
+   services: (cons (var-mount "/dev/vda3")
+                   (var-log-services (list acpid)))
    packages: (list qemu-preboot imgtools)
    mkimage:  (mbr-image "qemu-x86_64")))
