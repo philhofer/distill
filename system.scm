@@ -86,9 +86,9 @@
                         (else (loop (cdr lst))))))
                     (else (error "cannot lookup" id)))))
          (get-user (lambda (id)
-                     (lookup id user-name user-uid users)))
+                     (lookup id user-name user-uid (append users base-users))))
          (get-group (lambda (id)
-                      (lookup id group-name group-gid groups))))
+                      (lookup id group-name group-gid (append groups base-groups)))))
     (map
      (lambda (spec)
        (let ((fullpath (car spec))

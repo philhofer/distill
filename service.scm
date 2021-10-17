@@ -187,8 +187,8 @@
      (cons db tail)
      (groups+users->artifacts
       (sublists all service-groups extra-groups)
-      (sublists all service-users extra-users)
-      (boot-scripts)))))
+      (sublists all service-users extra-users))
+     (boot-scripts))))
 
 (define *service-dir* "/run/service")
 (define *catchall-fifo* "/run/service/s6-svscan-log/fifo")

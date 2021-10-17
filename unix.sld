@@ -2,6 +2,8 @@
   (export
     adduser
     addgroup
+    base-users
+    base-groups
     groups+users->artifacts
 
     make-user

@@ -996,7 +996,19 @@ EOF
      dir:   (string-append "squashfs-tools-" ver "/squashfs-tools")
      env:   (list $cc-env)
      libs:  (list libzstd liblz4 liblzma zlib)
+     tools: (list
+             (interned
+              "/include/fake-lstat.h" #o644
+              (lines
+               '("int fake_lstat(const char *p, struct stat *b)"
+                 "{ int ret=lstat(p, b); b->st_uid=0; b->st_gid=0; return ret; }"))))
      build: (elif*
+             '(sed "-i"
+                   ;; replace lstat() with fake_lstat()
+                   "-e" "s/lstat(/fake_lstat(/g"
+                   ;; include the fake lstat file
+                   "-e" "76a #include \"/include/fake-lstat.h\""
+                   mksquashfs.c)
              `(make XZ_SUPPORT=1 LZO_SUPPORT=0
                     LZ4_SUPPORT=1 ZSTD_SUPPORT=1 XATTR_SUPPORT=0 ,$make-overrides)
              '(mkdir -p /out/usr/bin)

@@ -4,7 +4,7 @@
 ;; files with appear in the root filesysem with those file
 ;; permissions; otherwise the files will appear as root:root owned
 ;; with the same file mode as they appear in the input filesystem(s)
-(define (squashfs inputs #!key (chown '()) (compress 'zstd))
+(define (squashfs inputs chown #!key (compress 'zstd))
   ;; mksquashfs accepts 'pseudo-file' definitions
   ;; that let us modify the mode/uid/gid of files;
   (define (pseudo-file)
@@ -24,8 +24,15 @@
      dir:   "/"
      tools: (list execline-tools squashfs-tools)
      inputs: inputs
+     ;; note: our mksquashfs is patched
+     ;; so that lstat() always yields files
+     ;; with uid=0, gid=0, so by default
+     ;; we get the desired behavior where
+     ;; the files in sysroot are root-owned
+     ;; (not quite the same as -all-root,
+     ;; because that ends up defeating the pseudo-file!)
      build: `(mksquashfs ,$sysroot ,(conc "/out/" out-img)
-                         -all-root -pf "/src/pseudo" -comp ,compress))))
+                         -pf "/src/pseudo" -comp ,compress))))
 
 (define (initramfs inputs #!key (chown '()) (compress 'zstd))
   (unless (null? chown)
@@ -124,7 +131,7 @@
   (lambda (plat rootpkgs chown)
     (let ((kern  (platform-kernel plat))
           (cmdl  (join-with " " (platform-cmdline plat)))
-          (root  (squashfs rootpkgs chown: chown))
+          (root  (squashfs rootpkgs chown))
           (kfile (elpath $sysroot "/boot/vmlinuz"))
           (rfile (elpath $sysroot "rootfs.img")))
       (package-template
@@ -140,7 +147,7 @@
 (define (efi-image name #!key (uuid #f))
 (lambda (plat rootpkgs chown)
   (let ((esp   (linux-esp (platform-kernel plat) (platform-cmdline plat)))
-        (root  (squashfs rootpkgs chown: chown))
+        (root  (squashfs rootpkgs chown))
         (efile (elpath $sysroot "esp.img"))
         (rfile (elpath $sysroot "rootfs.img")))
     (package-template
