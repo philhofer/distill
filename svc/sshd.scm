@@ -20,7 +20,9 @@
      name:   'sshd
      users:  (list (adduser 'sshd group: 'sshd home: "/var/empty"))
      groups: (list (addgroup 'sshd '(sshd)))
-     inputs: (list openssh config)
+     ;; pre-emptively ensure that /root/.ssh
+     ;; is not world-accessible
+     inputs: (list openssh config (interned-dir "/root/.ssh" #o700))
      after:  (list var-mounted-rw)
      ;; TODO: after: if we are not doing
      ;; a wildcard bind, then we must wait
