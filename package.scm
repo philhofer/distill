@@ -191,8 +191,9 @@
               "./usr/share/" "./share/"))
 
 (define (url-translate urlfmt name version)
-  (string-translate* urlfmt `(("$name" . ,name)
-                              ("$version" . ,version))))
+  (and urlfmt
+       (string-translate* urlfmt `(("$name" . ,name)
+                                   ("$version" . ,version)))))
 
 ;; template for C/C++ packages
 ;;
@@ -205,7 +206,7 @@
 ;; the 'build:' argument is mandatory; cc-package
 ;; does not provide a default build script
 (define (cc-package
-         name version urlfmt hash
+         name version urlfmt hash-or-art
          #!key
          (dir #f) ;; directory override
          (build #f)
@@ -220,7 +221,10 @@
          (cross '())
          (extra-src '()))
   (let* ((url (url-translate urlfmt name version))
-         (src (remote-archive url hash))
+         (src (cond
+               (url (remote-archive url hash-or-art))
+               ((artifact? hash-or-art) hash-or-art)
+               (else (error "invalid hash argument to cc-package" hash-or-art))))
          ($native-libc  (o cc-toolchain-libc $native-toolchain))
          ($native-tools (o cc-toolchain-tools $native-toolchain)))
     (package-template

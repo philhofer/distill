@@ -5,8 +5,12 @@
 *.o
 *.types
 *.link
+*.a
+libchicken/*.c
 distill.*.c
 distill.c
+matchable.c
+srfi-69.c
 distill
 vendor/*.c
 Makefile.dep
