@@ -59,6 +59,7 @@
                 PREFIX=/usr
                 CSI=/usr/bin/csi
                 CHICKEN=/usr/bin/chicken
+                ,(el= 'VERSION= git-sha)
                 ,(el= 'CHICKEN_FEATURES= $chicken-features)
                 ,(el= 'AR= $AR)
                 ,(el= 'CC= $CC)
@@ -74,4 +75,7 @@
        (archive (git-archive))
        (package (release-package sha archive))
        (out     (build! package)))
-  (display (artifact-hash (car out))) (newline))
+  (display sha) (newline)
+  (display (artifact-hash archive)) (newline)
+  (display (artifact-hash (car out))) (newline)
+  (exit 0))

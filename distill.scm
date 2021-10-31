@@ -62,13 +62,16 @@
 (begin-for-syntax
  (import
   (chicken file)
-  (only (chicken io) read-string))
+  (only (chicken io) read-string)
+  (chicken sort))
  (define (read-file name)
    (with-input-from-file name read-string))
  (define interned-files
    (let* ((dirs     '(pkg svc plat))
           (dir-files (lambda (dir)
-                       (glob (string-append (symbol->string dir) "/*.scm"))))
+                       (sort
+                        (glob (string-append (symbol->string dir) "/*.scm"))
+                        string<?)))
           (files     (map dir-files dirs)))
      (foldl
       (lambda (alist fileset)
