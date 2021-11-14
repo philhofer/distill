@@ -734,6 +734,32 @@
            (file->artifact (filepath-join outdir raw) raw)
            (dir->artifact outdir))))))
 
+;; live-artifact-hashes walks a list of
+;; plans and artifacts and produces a hash table
+;; of artifacts involved in those plans that are actually live
+(define (live-artifact-hashes plst)
+  (let ((out (make-hash-table hash: string-hash test: string=?)))
+    (letrec ((walk (lambda (item)
+                     (cond
+                      ((artifact? item)
+                       (hash-table-set! out (artifact-hash item) #t))
+                      ((plan? item)
+                       ;; walk depth-first so that resolution actually happens
+                       (for-each (o walk input-link) (plan-inputs item))
+                       (let ((h    (plan-hash item))
+                             (hout (plan-outputs item)))
+                         (or (and h (hash-table-ref/default out h #f))
+                             (begin
+                               (when h
+                                 (hash-table-set! out h #t))
+                               (when hout
+                                 (hash-table-set! out (artifact-hash hout) #t))
+                               #t))))
+                      (else
+                       (error "unexpected item" item))))))
+      (for-each walk plst)
+      out)))
+
 ;; for-each-anchor traverses a list of plans and artifacts
 ;; and recursively applies (proc artifact) to each artifact
 ;; that is a leaf node of the DAG

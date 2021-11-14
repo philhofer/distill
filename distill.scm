@@ -363,10 +363,28 @@
               services: '()
               packages: '()))))))))
 
+;; distill gc <plat> <system.scm>
+;; garbage collects everything that isn't
+;; involved in building the specified
+;; filesystem image
+(define (gc-cmd args)
+  (import
+   (distill plan))
+  (let* ((plan (args->plan args))
+         (live (live-artifact-hashes (list plan))))
+    (find-files
+     (artifact-dir)
+     test: (lambda (f)
+             (not (hash-table-ref/default live (basename f) #f)))
+     action: (lambda (f lst)
+               (print "removing " f)
+               (delete-file* f)))))
+
 (let ((dirs (get-environment-variable "DISTILL_PATH"))
       (args (command-line-arguments))
       (cmds `((sum    . ,sum-cmd)
               (build  . ,build-cmd)
+              (gc     . ,gc-cmd)
               (list   . ,list-cmd)
               (run    . ,run-cmd)
               (intern . ,intern-cmd)

@@ -19,6 +19,7 @@
     input?
 
     for-each-anchor
+    live-artifact-hashes
     build-plan!
     build-graph!
     plan?
