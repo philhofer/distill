@@ -234,12 +234,24 @@
   <input>
   make-input
   input?
+  ;; basedir is the location at which
+  ;; the input is unpacked into the filesystem
   (input-basedir basedir: "/" string?)
+  ;; link points to the actual input value
+  ;; (either an artifact or a plan)
   (input-link    link:    #f  vector?)
-  (input-wrap    wrap:    #f  (perhaps procedure?)))
+  ;; wrap is applied to the output of link
+  ;; when the plan is resolved; after that
+  ;; it is set to #f
+  (input-wrap    wrap:    #f  (perhaps procedure?))
+  ;; input-saved is set to the original
+  ;; value of link when link is edited
+  ;; to point to the output of an artifact
+  (input-saved   saved:   #f  (perhaps vector?)))
 
-(define input-set-link! (kvector-setter <input> link:))
-(define input-set-wrap! (kvector-setter <input> wrap:))
+(define input-set-link!  (kvector-setter <input> link:))
+(define input-set-wrap!  (kvector-setter <input> wrap:))
+(define input-set-saved! (kvector-setter <input> saved:))
 
 (define-kvector-type
   <plan>
@@ -270,22 +282,54 @@
                     (val (wr art)))
                (input-set-link! in val)
                (input-set-wrap! in #f)
+               (input-set-saved! in link)
                val))))
      (else (error "unexpected <input> link value" link)))))
 
+(define *hash-unavailable* (make-hash-table hash: string-hash))
+
+;; perform a fold over all unresovled
+;; inputs of plan, where "unresolved"
+;; means that either the plan has never been built,
+;; or the plan has been built but its output artifact
+;; is not available in the local filesystem *and*
+;; couldn't be fetched with user-fetch-hook (if present)
 (: fold-unresolved (vector procedure * -> *))
 (define (fold-unresolved plan proc seed)
+  (define (populate! art name)
+    (and
+     (not (hash-table-ref/default *hash-unavailable* (artifact-hash art) #f))
+     (user-fetch-hook)
+     (begin
+       (info "trying to fetch result of" name)
+       (or (fetch-artifact
+            #f
+            (artifact-dir)
+            (artifact-hash art)
+            (lambda ()
+              (hash-table-set! *hash-unavailable* (artifact-hash art) #t)
+              #f))))))
   (let loop ((out seed)
              (lst (plan-inputs plan)))
     (if (null? lst)
         out
-        (let ((head (car lst)))
+        (let ((head (car lst))
+              (cont (lambda (p)
+                      (if (plan? p) (proc p out) out))))
           (loop
-           (if (input-resolve! head)
-               out
-               (proc (input-link head) out))
+           (cond
+            ((input-resolve! head) =>
+             (lambda (art)
+               (if (and (plan? (input-saved head))
+                        (not (file-exists? (artifact-path art)))
+                        (not (populate! art (plan-name (input-saved head)))))
+                   (cont (input-saved head))
+                   out)))
+            ((or (input-saved head) (input-link head)) => cont)
+            (else (error "unexpected fallthrough in fold-unresolved cond")))
            (cdr lst))))))
 
+;; see fold-unresolved
 (: map-unresolved (vector (vector -> *) -> *))
 (define (map-unresolved plan proc)
   (fold-unresolved
@@ -445,7 +489,7 @@
   (parameterize ((current-exception-handler
                   (lambda (exn)
                     (display "exception in exception handler!\n" (current-error-port))
-                    (display exn (current-error-port))
+                    (print-error-message exn)
                     (exit 1))))
     (let* ((sys?   (condition-predicate 'exn))
            (eplan? (condition-predicate 'plan-failure)))
@@ -465,7 +509,9 @@
         (let* ((prop  (lambda (sym) (condition-property-accessor 'plan-failure sym)))
                (plan  ((prop 'plan) exn))
                (child ((prop 'child) exn)))
-          (info "plan" (plan-name plan) "encountered a fatal error:")
+          (if (plan? plan)
+              (info "plan" (plan-name plan) "encountered a fatal error:")
+              (info "unexpected plan object" plan))
           (fatal-plan-failure child)))
        (else (begin
                (print-error-message exn)
@@ -479,42 +525,12 @@
     (unless (and ok? (= status 0))
       (error "command failed:" (cons prog args)))))
 
-(: with-locked-hash (string (-> 'a) -> 'a))
-(define with-locked-hash
-  (let ((lock (make-keyed-lock)))
-    (lambda (hash thunk)
-      (with-locked-key lock hash thunk))))
-
-(: fetch! ((or false string) string -> *))
-(define (fetch! src hash)
-  (let* ((url (or src (begin
-                        (infoln "trying to fetch" (short-hash hash) "from fallback CDN")
-                        (string-append (cdn-url) hash))))
-         (dst (filepath-join (artifact-dir) hash))
-         (tmp (string-append dst ".tmp")))
-    (with-locked-hash
-     hash
-     (lambda ()
-       (or (file-exists? dst)
-           (begin
-             (infoln "fetching" url)
-             (let ((h (fetch+hash url tmp)))
-               (cond
-                ((not h)
-                 (error "fetching url failed" url))
-                ((string=? h hash)
-                 (rename-file tmp dst #t))
-                (else
-                 (begin
-                   (delete-file tmp)
-                   (error "fetched artifact has the wrong hash" h "not" hash)))))))))))
-
 ;; plan-outputs-file is the file that stores the serialized
 ;; interned file information for a plan
 (: plan-outputs-file (vector -> (or string false)))
 (define (plan-outputs-file p)
   (and-let* ((h (plan-hash p)))
-            (filepath-join (plan-dir) h "outputs.scm")))
+    (filepath-join (plan-dir) h "outputs.scm")))
 
 ;; write 'lst' as the set of plan outputs associated with 'p'
 (: save-plan-outputs! (vector artifact -> *))
@@ -566,14 +582,14 @@
           (artfile (filepath-join (artifact-dir) hash)))
       ;; ensure that the file is present in artifacts/
       ;; before copying it into the destination
-      (when (not (file-exists? artfile))
+      (unless (file-exists? artfile)
         (match content
                (`(inline . ,content)
                 (with-output-to-file artfile (lambda () (write-string content))))
                (`(remote . ,url)
-                (fetch! url hash))
+                (fetch-artifact url (artifact-dir) hash))
                (#f
-                (fetch! #f hash))
+                (fetch-artifact #f (artifact-dir) hash))
                (else
                 (error "unrecognized file content spec:" content))))
       (when (file-exists? dstfile)
@@ -590,11 +606,8 @@
                      args)))
 
   (define (unpack-archive dst kind hash src tail)
-    (let ((infile  (filepath-join (artifact-dir) hash)))
-      (when (not (file-exists? infile))
-        (fetch! src hash))
-      (create-directory dst #t)
-      (run "tar" (cons* (tar-compress-flags kind) "-xkf" infile "-C" dst tail))))
+    (create-directory dst #t)
+    (run "tar" (cons* (tar-compress-flags kind) "-xkf" (filepath-join (artifact-dir) hash) "-C" dst tail)))
 
   (define (unpack-symlink dst abspath lnk)
     (let ((target (filepath-join dst abspath)))
@@ -611,9 +624,23 @@
       (create-directory dir #t)
       (set-file-permissions! dir mode)))
 
+  (define (ensure-exists! art)
+    (let ((f (artifact-path art)))
+      (unless (file-exists? f)
+        (let* ((extra (artifact-extra art))
+               (url   (cond
+                       ((string? extra) extra)
+                       ((and (pair? extra)
+                             (eq? (car extra) 'remote))
+                        (cdr extra))
+                       (else #f))))
+          (fetch-artifact url (artifact-dir) (artifact-hash art))))))
+
   (let ((format (artifact-format i))
         (hash   (artifact-hash i))
         (extra  (artifact-extra i)))
+    (when (memq (vector-ref format 0) '(archive sub-archive))
+      (ensure-exists! i))
     (match format
            (#('file abspath mode)   (unpack-file dst abspath mode hash extra))
            (#('dir abspath mode)    (unpack-dir dst abspath mode))
@@ -739,24 +766,26 @@
 ;; of artifacts involved in those plans that are actually live
 (define (live-artifact-hashes plst)
   (let ((out (make-hash-table hash: string-hash test: string=?)))
-    (letrec ((walk (lambda (item)
-                     (cond
-                      ((artifact? item)
-                       (hash-table-set! out (artifact-hash item) #t))
-                      ((plan? item)
-                       ;; walk depth-first so that resolution actually happens
-                       (for-each (o walk input-link) (plan-inputs item))
-                       (let ((h    (plan-hash item))
-                             (hout (plan-outputs item)))
-                         (or (and h (hash-table-ref/default out h #f))
-                             (begin
-                               (when h
-                                 (hash-table-set! out h #t))
-                               (when hout
-                                 (hash-table-set! out (artifact-hash hout) #t))
-                               #t))))
-                      (else
-                       (error "unexpected item" item))))))
+    (letrec* ((observe! (lambda (h)
+                          (and h (hash-table-set! out h #t))))
+              (walk (lambda (item)
+                      (cond
+                       ((artifact? item)
+                        (observe! (artifact-hash item)))
+                       ((plan? item)
+                        ;; walk depth-first so that resolution actually happens
+                        (for-each walk-link (plan-inputs item))
+                        ;; note: this is let* because
+                        ;; plan-hash needs to be evaluated
+                        ;; before plan-outputs
+                        (let* ((h    (plan-hash item))
+                               (hout (plan-outputs item)))
+                          (observe! h)
+                          (observe! (artifact-hash hout))
+                          #t))
+                       (else
+                        (error "unexpected item" item)))))
+              (walk-link (o walk input-link)))
       (for-each walk plst)
       out)))
 
@@ -786,9 +815,14 @@
          (plan->proc     (make-hash-table test: eq? hash: eq?-hash))
          (hash->plan     (make-hash-table test: string=? hash: string-hash))
          (err            #f)
-         (built?         (lambda (plan)
-                           (and-let* ((out (plan-outputs plan)))
-                                     (file-exists? (artifact-path out)))))
+         (built?         (lambda (p)
+                           ;; we consider a plan 'built' if we know
+                           ;; the output and it already exists in the
+                           ;; filesystem *or* we can fetch it
+                           (and-let* ((art (plan-outputs p)))
+                             (or (file-exists? (artifact-path art))
+                                 (and (user-fetch-hook)
+                                      (fetch-artifact #f (artifact-dir) (artifact-hash art) (lambda () #f)))))))
          (done+ok?       (lambda (proc)
                            (let* ((ret (join/value proc))
                                   (st  (proc-status proc)))
@@ -819,7 +853,6 @@
           (andmap1 done+ok? (map-unresolved p build-proc))
           (not err)
           (cond
-           ;; if we've built this before, we're done
            ((built? p) #t)
            ;; if this plan isn't unique, its exit status
            ;; should be equivalent to that of its identical twin

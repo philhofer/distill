@@ -20,9 +20,9 @@
 
 (define (ntpd cfg)
   (let* ((confpath "/etc/ntpd.conf")
-	 (conf     (interned
-		    confpath #o644
-		    (lines cfg))))
+         (conf     (interned
+                    confpath #o644
+                    (lines cfg))))
     (make-service
      name:   'ntpd
      inputs: (list openntpd ip-wait conf)
@@ -30,7 +30,7 @@
      groups: (list (addgroup 'ntpd '(ntpd)))
      after:  (list var-mounted-rw)
      spec:   (longrun*
-	      run: `(fdmove -c 2 1
-			    ;; no use starting until we have a default route:
-			    if (s6-setuidgid nobody ip-wait route "^default")
-			    /usr/sbin/ntpd -s -d -f ,confpath)))))
+              run: `(fdmove -c 2 1
+                            ;; no use starting until we have a default route:
+                            if (s6-setuidgid nobody ip-wait route "^default")
+                            /usr/sbin/ntpd -s -d -f ,confpath)))))

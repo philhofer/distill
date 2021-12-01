@@ -370,6 +370,8 @@
 (define (gc-cmd args)
   (import
    (distill plan))
+  (when (null? args)
+    (fatal "usage: distill gc <plat> <system.scm>"))
   (let* ((plan (args->plan args))
          (live (live-artifact-hashes (list plan))))
     (find-files

@@ -343,29 +343,31 @@
 (define (lock-key! lock key)
   (let ((res (hash-table-ref/default lock key #f)))
     (if res
-        (let ((num (car res))
-              (q   (cdr res)))
-          (unless (= num 0)
-            (set-car! res (+ num 1))
-            (queue-wait! q)))
-        (hash-table-set! lock key (cons 1 (empty-queue))))))
+        (let ((locked (car res))
+              (q      (cdr res)))
+          (if (or locked (not (null? (car q))))
+              (queue-wait! q)     ;; wait for wakeup
+              (set-car! res #t))) ;; set locked
+        ;; initial state: locked, empty queue
+        (hash-table-set! lock key (cons #t (empty-queue))))))
 
 ;; unlock-key! unlocks a key associated
 ;; with a keyed lock
 ;; (see also: lock-key!)
 (: unlock-key! (* * -> undefined))
 (define (unlock-key! lock key)
-  (let* ((res (hash-table-ref/default lock key #f))
-         (q   (cdr res))
-         (num (car res)))
-    (unless (> num 0)
-      (error "mis-matched lock/unlock of key"))
-    (queue-signal! q)
-    (set-car! res (- num 1))))
+  (let* ((res    (hash-table-ref/default lock key #f))
+         (q      (cdr res))
+         (locked (car res)))
+    (unless locked
+      (error "mis-matched lock/unlock of key" key))
+    ;; either do a wakeup or unlock
+    (or (queue-signal! q)
+        (set-car! res #f))))
 
-(: with-locked-key! (* * procedure -> *))
+(: with-locked-key (* * procedure -> *))
 (define (with-locked-key lock key thunk)
   (lock-key! lock key)
-  (let ((ret (thunk)))
+  (let ((res (thunk)))
     (unlock-key! lock key)
-    ret))
+    res))

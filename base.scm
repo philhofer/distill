@@ -777,8 +777,7 @@ EOF
 (define libelf
   (let (($cflags (lambda (conf)
                    (cons* '-D_GNU_SOURCE '-DHAVE_CONFIG_H '-I. '-I.. '-I../lib ($CFLAGS conf))))
-        (config  (remote-file
-                  #f "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
+        (config  (cdn-artifact "ralu1MH7h3xuq7QdjYTneOmZLEoU1RygVrTAWaKl2YY=" "/src/config.h" #o644)))
     (cc-package
      "elfutils" "0.185"
      "https://sourceware.org/$name/ftp/$version/$name-$version.tar.bz2"
