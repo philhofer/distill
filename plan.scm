@@ -1,5 +1,20 @@
 (foreign-declare "#include <fnmatch.h>")
+(foreign-declare "#include <unistd.h>")
 (foreign-declare "#include \"copy-sparse.c\"")
+
+(define c-unlink
+  (foreign-lambda int "unlink" c-string))
+
+;; remove whatever is at path, recursively (if a directory);
+;; does *not* follow symbolic links
+(: rm-rf (string -> boolean))
+(define (rm-rf path)
+  (case (file-type path #t #f)
+    ((regular-file symbolic-link socket fifo)
+     (= (c-unlink path) 0))
+    ((directory)
+     (delete-directory path #t))
+    (else #f)))
 
 ;; we have our own copy-file that preserves sparse files
 ;; and can optimizes some copies into a rename(2)
@@ -497,7 +512,7 @@
        ((sys? exn)
         (let ((chain (condition-property-accessor 'exn 'call-chain))
               (eport (current-error-port)))
-          (print-error-message exn)
+          (print-error-message exn eport)
           (let ((lst (chain exn)))
             (for-each
              (lambda (v)
@@ -546,8 +561,7 @@
         (begin
           ;; only keep the 'most recent' plan that
           ;; produces a particular output
-          (when (file-exists? outlnk)
-            (delete-file outlnk))
+          (rm-rf outlnk)
           (create-symbolic-link (plan-hash p) outlnk)
           (create-directory outdir)
           (with-output-to-file outfile (lambda () (write ar)))
