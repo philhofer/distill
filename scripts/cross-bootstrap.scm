@@ -3,7 +3,8 @@
   (chicken string)
   (distill package)
   (distill eprint)
-  (distill base))
+  (distill base)
+  (distill plan))
 
 (define (cdn-url c-hash)
   (string-append
@@ -28,7 +29,8 @@
        (with-urls (map
                    (lambda (art)
                      (vector-set! art 2 (cdn-url (artifact-hash art)))
-                     art))))
+                     art)
+                   alist)))
   (with-output-to-file (conc "prebuilt-"  arch ".scm")
     (lambda ()
       (write (list 'quote with-urls)))))

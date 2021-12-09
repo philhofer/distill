@@ -292,7 +292,7 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define gawk
   (cmmi-package
-   "gawk" "5.1.0"
+   "gawk" "5.1.0" ; fixme: update to 5.1.1
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
    "qPUwDbyEw75NjMOALy2nyYWv_LSMprTZEfAYjIos0-c="
    cleanup: '(rm -f /out/usr/bin/awk)))
@@ -584,9 +584,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define (busybox/config config-path extra-inputs)
   (cc-package
-   "busybox" "1.33.1"
+   "busybox" "1.33.2" ; fixme: upgrade to 1.34.x
    "https://busybox.net/downloads/$name-$version.tar.bz2"
-   "XN3h0WFGSI4gZraBvNHF2t7FLIfhCKZ4_w-ff4f75so="
+   "hZpe5MsUihAFwShliQhtbRDlPGo3oVFXs0_fFk2uU6M="
    extra-src: (list (bind config-path "/src/config.head"))
    libs:      extra-inputs
    tools:     (list bzip2)
@@ -617,8 +617,8 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    (cdn-artifact "eKDTI4zJ4jm7TrfB7gHkFntuMDwftgeBipnBkMp0y1w=" "/src/config" #o644)
    '()))
 
-(define *linux-version* "5.10.72")
-(define *linux-hash* "Sgaj3RCuCZ7uUmVKQ1NcUyBe9SZsuWsJYpwcJzCc0U4=")
+(define *linux-version* "5.10.84")
+(define *linux-hash* "TwISm-xJ_12E006jvkV6We6EE3l1dkgLM4CqFpOUA88=")
 
 (define (linux-source version hash)
   (remote-archive
@@ -1016,9 +1016,9 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.3.5"
+   "libressl" "3.4.2"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "F4oV9WpT9JhAXtu_FJ7oiNiv56TNSTf7GcPosn0_SB4="
+   "ERYgwxE3DnSRCw9VnJ5blMTxljnX2MUM6f6AaQM35bY="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
