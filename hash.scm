@@ -115,5 +115,6 @@ assert(err == 0); hash_to_base64(dst, buf); C_return(0);
     (cond
      ((= res 0) out)
      ((= res 2) #f)
+     ((= res 21) (error "is a directory" fp))
      (else
       (call-with-input-file fp hash-of)))))

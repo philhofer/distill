@@ -55,6 +55,10 @@ fast_hash_file(unsigned char *restrict dst, const char *fname)
         errno = EINVAL;
         goto fail;
     }
+    if (S_ISDIR(stbuf.st_mode)) {
+	errno = EISDIR;
+        goto fail;
+    }
 
     mem = mmap(NULL, (size_t)stbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (mem == MAP_FAILED)
