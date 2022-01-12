@@ -1,6 +1,6 @@
 ;;;; chicken-syntax.scm - non-standard syntax extensions
 ;
-; Copyright (c) 2008-2020, The CHICKEN Team
+; Copyright (c) 2008-2021, The CHICKEN Team
 ; Copyright (c) 2000-2007, Felix L. Winkelmann
 ; All rights reserved.
 ;
@@ -164,10 +164,8 @@
 	   (##sys#check-syntax 'define-specialization x '(_ (variable . #(_ 0)) _ . #(_ 0 1)))
 	   (let* ((head (cadr x))
 		  (name (car head))
-		  (gname (##sys#globalize name '())) ;XXX correct?
 		  (args (cdr head))
 		  (alias (gensym name))
-		  (galias (##sys#globalize alias '())) ;XXX and this?
 		  (rtypes (and (pair? (cdddr x)) (strip-syntax (caddr x))))
 		  (%define (r 'define))
 		  (body (if rtypes (cadddr x) (caddr x))))
@@ -176,26 +174,24 @@
 		      (let ((anames (reverse anames))
 			    (atypes (reverse atypes))
 			    (spec
-			     `(,galias ,@(let loop2 ((anames anames) (i 1))
-					   (if (null? anames)
-					       '()
-					       (cons (vector i)
-						     (loop2 (cdr anames) (fx+ i 1))))))))
-			(##sys#put!
-			 gname '##compiler#local-specializations
-			 (##sys#append
-			  (##sys#get gname '##compiler#local-specializations '())
-			  (list
-			   (cons atypes
-				 (if (and rtypes (pair? rtypes))
-				     (list
-				      (map (cut chicken.compiler.scrutinizer#check-and-validate-type
-						<>
-						'define-specialization)
-					   rtypes)
-				      spec)
-				     (list spec))))))
+			     `(,alias ,@(let loop2 ((anames anames) (i 1))
+					  (if (null? anames)
+					      '()
+					      (cons (vector i)
+						    (loop2 (cdr anames) (fx+ i 1))))))))
 			`(##core#begin
+			  (##core#local-specialization
+			   ,name
+			   ,alias
+			   ,(cons atypes
+				  (if (and rtypes (pair? rtypes))
+				      (list
+				       (map (cut chicken.compiler.scrutinizer#check-and-validate-type
+					      <>
+					      'define-specialization)
+					    rtypes)
+				       spec)
+				      (list spec))))
 			  (##core#declare (inline ,alias) (hide ,alias))
 			  (,%define (,alias ,@anames)
 				    (##core#let ,(map (lambda (an at)
@@ -541,7 +537,7 @@
 	       (let-values (((name lib _ _ _ _) (##sys#decompose-import x r c 'import)))
 		 (if (not lib)
 		     '(##core#undefined)
-		     `(##core#require ,lib ,(module-requirement name)))))
+		     `(##core#require ,lib ,name))))
 	     (cdr x))))))
 
 (##sys#extend-macro-environment
@@ -1044,8 +1040,9 @@
  (##sys#er-transformer
   (lambda (form r c)
     (##sys#check-syntax 'define-record-printer form '(_ _ . _))
-    (let ([head (cadr form)]
-	  [body (cddr form)])
+    (let ((head (cadr form))
+	  (body (cddr form))
+	  (%set-record-printer! (r 'chicken.base#set-record-printer!)))
       (cond [(pair? head)
 	     (##sys#check-syntax 
 	      'define-record-printer (cons head body)
@@ -1056,7 +1053,7 @@
 			      (##sys#module-name (##sys#current-module))
 			      '|#| plain-name)
 			     plain-name)))
-	       `(##sys#register-record-printer
+	       `(,%set-record-printer!
 		 (##core#quote ,tag)
 		 (##core#lambda ,(##sys#slot head 1) ,@body)))]
 	    (else
@@ -1067,7 +1064,7 @@
 			      (##sys#module-name (##sys#current-module))
 			      '|#| plain-name)
 			     plain-name)))
-	       `(##sys#register-record-printer
+	       `(,%set-record-printer!
 		 (##core#quote ,tag) ,@body))))))))
 
 ;;; SRFI-9:
@@ -1307,19 +1304,6 @@
 	  (##sys#apply ##sys#values ,rvar))))))))
 
 (macro-subset me0 ##sys#default-macro-environment)))
-
-
-(set! ##sys#chicken-macro-environment ;; OBSOLETE, remove after bootstrapping
-  (let ((me0 (##sys#macro-environment)))
-
-;; capture current macro env and add all the preceding ones as well
-
-;; TODO: omit `chicken.{base,condition,time,type}-m-e' when plain "chicken" module goes away
-(append ##sys#chicken.condition-macro-environment
-	##sys#chicken.time-macro-environment
-	##sys#chicken.type-macro-environment
-	##sys#chicken.base-macro-environment
-	(macro-subset me0 ##sys#default-macro-environment))))
 
 ;; register features
 

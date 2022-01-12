@@ -1,6 +1,6 @@
 ;;;; posixunix.scm - Miscellaneous file- and process-handling routines
 ;
-; Copyright (c) 2008-2020, The CHICKEN Team
+; Copyright (c) 2008-2021, The CHICKEN Team
 ; Copyright (c) 2000-2007, Felix L. Winkelmann
 ; All rights reserved.
 ;
@@ -142,22 +142,13 @@ static C_TLS struct stat C_statbuf;
 #define C_u_i_execvp(f,a)   C_fix(execvp(C_c_string(f), (char *const *)C_c_pointer_vector_or_null(a)))
 #define C_u_i_execve(f,a,e) C_fix(execve(C_c_string(f), (char *const *)C_c_pointer_vector_or_null(a), (char *const *)C_c_pointer_vector_or_null(e)))
 
-#if defined(__FreeBSD__) || defined(C_MACOSX) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__sgi__) || defined(sgi) || defined(__DragonFly__) || defined(__SUNPRO_C)
 static C_TLS int C_uw;
-# define C_WIFEXITED(n)      (C_uw = C_unfix(n), C_mk_bool(WIFEXITED(C_uw)))
-# define C_WIFSIGNALED(n)    (C_uw = C_unfix(n), C_mk_bool(WIFSIGNALED(C_uw)))
-# define C_WIFSTOPPED(n)     (C_uw = C_unfix(n), C_mk_bool(WIFSTOPPED(C_uw)))
-# define C_WEXITSTATUS(n)    (C_uw = C_unfix(n), C_fix(WEXITSTATUS(C_uw)))
-# define C_WTERMSIG(n)       (C_uw = C_unfix(n), C_fix(WTERMSIG(C_uw)))
-# define C_WSTOPSIG(n)       (C_uw = C_unfix(n), C_fix(WSTOPSIG(C_uw)))
-#else
-# define C_WIFEXITED(n)      C_mk_bool(WIFEXITED(C_unfix(n)))
-# define C_WIFSIGNALED(n)    C_mk_bool(WIFSIGNALED(C_unfix(n)))
-# define C_WIFSTOPPED(n)     C_mk_bool(WIFSTOPPED(C_unfix(n)))
-# define C_WEXITSTATUS(n)    C_fix(WEXITSTATUS(C_unfix(n)))
-# define C_WTERMSIG(n)       C_fix(WTERMSIG(C_unfix(n)))
-# define C_WSTOPSIG(n)       C_fix(WSTOPSIG(C_unfix(n)))
-#endif
+#define C_WIFEXITED(n)      (C_uw = C_unfix(n), C_mk_bool(WIFEXITED(C_uw)))
+#define C_WIFSIGNALED(n)    (C_uw = C_unfix(n), C_mk_bool(WIFSIGNALED(C_uw)))
+#define C_WIFSTOPPED(n)     (C_uw = C_unfix(n), C_mk_bool(WIFSTOPPED(C_uw)))
+#define C_WEXITSTATUS(n)    (C_uw = C_unfix(n), C_fix(WEXITSTATUS(C_uw)))
+#define C_WTERMSIG(n)       (C_uw = C_unfix(n), C_fix(WTERMSIG(C_uw)))
+#define C_WSTOPSIG(n)       (C_uw = C_unfix(n), C_fix(WSTOPSIG(C_uw)))
 
 #ifdef __CYGWIN__
 # define C_mkfifo(fn, m)    C_fix(-1)
@@ -344,7 +335,7 @@ static int set_file_mtime(char *filename, C_word atime, C_word mtime)
             res ) ) ) ) )
 
 (set! chicken.file.posix#file-open
-  (let ((defmode (bitwise-ior _s_irwxu (bitwise-ior _s_irgrp _s_iroth))) )
+  (let ((defmode (bitwise-ior _s_irusr _s_iwusr _s_irgrp _s_iwgrp _s_iroth _s_iwoth)))
     (lambda (filename flags . mode)
       (let ([mode (if (pair? mode) (car mode) defmode)])
         (##sys#check-string filename 'file-open)
@@ -611,6 +602,7 @@ static int set_file_mtime(char *filename, C_word atime, C_word mtime)
   (getter-with-setter
    (foreign-lambda int "C_getuid")
    (lambda (id)
+     (##sys#check-fixnum id 'current-user-id)
      (when (fx< (##core#inline "C_setuid" id) 0)
        (##sys#update-errno)
        (##sys#error 'current-user-id!-setter "cannot set user ID" id) ) )
@@ -620,29 +612,32 @@ static int set_file_mtime(char *filename, C_word atime, C_word mtime)
   (getter-with-setter
    (foreign-lambda int "C_geteuid")
    (lambda (id)
-    (when (fx< (##core#inline "C_seteuid" id) 0)
-      (##sys#update-errno)
-      (##sys#error 
-	 'effective-user-id!-setter "cannot set effective user ID" id) ) )
+     (##sys#check-fixnum id 'current-effective-user-id)
+     (when (fx< (##core#inline "C_seteuid" id) 0)
+       (##sys#update-errno)
+       (##sys#error
+	'effective-user-id!-setter "cannot set effective user ID" id) ) )
    "(chicken.process-context.posix#current-effective-user-id)"))
 
 (set! chicken.process-context.posix#current-group-id
   (getter-with-setter
    (foreign-lambda int "C_getgid")
    (lambda (id)
-    (when (fx< (##core#inline "C_setgid" id) 0)
-      (##sys#update-errno)
-      (##sys#error 'current-group-id!-setter "cannot set group ID" id) ) )
+     (##sys#check-fixnum id 'current-group-id)
+     (when (fx< (##core#inline "C_setgid" id) 0)
+       (##sys#update-errno)
+       (##sys#error 'current-group-id!-setter "cannot set group ID" id) ) )
    "(chicken.process-context.posix#current-group-id)") )
 
 (set! chicken.process-context.posix#current-effective-group-id
   (getter-with-setter 
    (foreign-lambda int "C_getegid")
    (lambda (id)
-    (when (fx< (##core#inline "C_setegid" id) 0)
-      (##sys#update-errno)
-      (##sys#error 
-	 'effective-group-id!-setter "cannot set effective group ID" id) ) )
+     (##sys#check-fixnum id 'current-effective-group-id)
+     (when (fx< (##core#inline "C_setegid" id) 0)
+       (##sys#update-errno)
+       (##sys#error
+	'effective-group-id!-setter "cannot set effective group ID" id) ) )
    "(chicken.process-context.posix#current-effective-group-id)") )
 
 (define-foreign-variable _user-name nonnull-c-string "C_user->pw_name")

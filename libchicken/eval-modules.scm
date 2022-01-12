@@ -1,6 +1,6 @@
 ;;;; module registrations for all core modules
 ;
-; Copyright (c) 2017-2020, The CHICKEN Team
+; Copyright (c) 2017-2021, The CHICKEN Team
 ; All rights reserved.
 ;
 ; Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
@@ -91,7 +91,7 @@
 (defmod chicken.file)
 (defmod chicken.read-syntax)
 (defmod chicken.repl)
-#;(defmod chicken.tcp)
+(defmod chicken.tcp)
 (defmod srfi-4)
 
 (set! ##sys#import-library-hook

@@ -1,17 +1,17 @@
 ;;;; modules.scm - module-system support
 ;
-; Copyright (c) 2011-2020, The CHICKEN Team
+; Copyright (c) 2011-2021, The CHICKEN Team
 ; All rights reserved.
 ;
 ; Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
 ; conditions are met:
 ;
 ;   Redistributions of source code must retain the above copyright notice, this list of conditions and the following
-;     disclaimer.
+;     disclaimer. 
 ;   Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
-;     disclaimer in the documentation and/or other materials provided with the distribution.
+;     disclaimer in the documentation and/or other materials provided with the distribution. 
 ;   Neither the name of the author nor the names of its contributors may be used to endorse or promote
-;     products derived from this software without specific prior written permission.
+;     products derived from this software without specific prior written permission. 
 ;
 ; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS
 ; OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
@@ -33,16 +33,18 @@
   (disable-interrupts)
   (fixnum)
   (not inline ##sys#alias-global-hook)
-  (hide check-for-redef find-export find-module/import-library
-	match-functor-argument merge-se module-indirect-exports
-	module-rename register-undefined))
+  (hide check-for-redef compiled-module-dependencies find-export
+	find-module/import-library match-functor-argument merge-se
+	module-indirect-exports module-rename register-undefined))
 
 (import scheme
 	chicken.base
 	chicken.internal
 	chicken.keyword
 	chicken.platform
-	chicken.syntax)
+	chicken.syntax
+	(only chicken.string string-split)
+	(only chicken.format fprintf format))
 
 (include "common-declarations.scm")
 (include "mini-srfi-1.scm")
@@ -55,7 +57,7 @@
 
 #+debugbuild
 (define (map-se se)
-  (map (lambda (a)
+  (map (lambda (a) 
 	 (cons (car a) (if (symbol? (cdr a)) (cdr a) '<macro>)))
        se))
 
@@ -75,12 +77,12 @@
 (define ##sys#current-module (make-parameter #f))
 (define ##sys#module-alias-environment (make-parameter '()))
 
-(declare
+(declare 
   (hide make-module module? %make-module
 	module-name module-library
 	module-vexports module-sexports
 	set-module-vexports! set-module-sexports!
-	module-export-list set-module-export-list!
+	module-export-list set-module-export-list! 
 	module-defined-list set-module-defined-list!
 	module-import-forms set-module-import-forms!
 	module-meta-import-forms set-module-meta-import-forms!
@@ -92,8 +94,8 @@
 
 (define-record-type module
   (%make-module name library export-list defined-list exist-list defined-syntax-list
-		undefined-list import-forms meta-import-forms meta-expressions
-		vexports sexports iexports saved-environments)
+		undefined-list import-forms meta-import-forms meta-expressions 
+		vexports sexports iexports saved-environments) 
   module?
   (name module-name)			; SYMBOL
   (library module-library)		; SYMBOL
@@ -114,7 +116,7 @@
 (define ##sys#module-name module-name)
 
 (define (##sys#module-exports m)
-  (values
+  (values 
    (module-export-list m)
    (module-vexports m)
    (module-sexports m)))
@@ -155,7 +157,7 @@
 	(cond ((##sys#current-module) =>
 	       (lambda (m)
 		 (set-module-saved-environments! m now)))
-	      (else
+	      (else 
 	       (set! saved-default-envs now)))
 	(let ((saved (if mod (module-saved-environments mod) saved-default-envs)))
 	  (when saved
@@ -204,7 +206,7 @@
       (set-module-exist-list! mod (cons sym (module-exist-list mod)))
       (when exp
 	(dm "defined: " sym)
-	(set-module-defined-list!
+	(set-module-defined-list! 
 	 mod
 	 (cons (cons sym #f)
 	       (module-defined-list mod)))))) )
@@ -215,16 +217,16 @@
 		   (find-export sym mod #t)))
 	  (ulist (module-undefined-list mod))
 	  (mname (module-name mod)))
-      (when (assq sym ulist)
+      (when (assq sym ulist)	    
 	(##sys#warn "use of syntax precedes definition" sym)) ;XXX could report locations
       (check-for-redef sym (##sys#current-environment) (##sys#macro-environment))
       (dm "defined syntax: " sym)
       (when exp
-	(set-module-defined-list!
+	(set-module-defined-list! 
 	 mod
 	 (cons (cons sym val)
 	       (module-defined-list mod))) )
-      (set-module-defined-syntax-list!
+      (set-module-defined-syntax-list! 
        mod
        (cons (cons sym val) (module-defined-syntax-list mod))))))
 
@@ -277,9 +279,9 @@
 			  (warn "indirect export of syntax binding" (car iexports))
 			  (loop2 (cdr iexports)))
 			 ((assq (car iexports) dlist) => ; defined in current module?
-			  (lambda (a)
-			    (cons
-			     (cons
+			  (lambda (a) 
+			    (cons 
+			     (cons 
 			      (car iexports)
 			      (or (cdr a) (module-rename (car iexports) mname)))
 			     (loop2 (cdr iexports)))))
@@ -290,7 +292,7 @@
 				  (else
 				   (warn "indirect reexport of syntax" (car iexports))
 				   (loop2 (cdr iexports))))))
-			 (else
+			 (else 
 			  (warn "indirect export of unknown binding" (car iexports))
 			  (loop2 (cdr iexports)))))))))))
 
@@ -311,7 +313,14 @@
 			  (else (hash-table-set! seen (caar se) #t)
 				(lp (cdr se) (cons (car se) se2))))))))))
 
-(define (##sys#compiled-module-registration mod)
+(define (compiled-module-dependencies mod)
+  (let ((libs (filter-map ; extract library names
+	       (lambda (x) (nth-value 1 (##sys#decompose-import x o eq? 'module)))
+	       (module-import-forms mod))))
+    (map (lambda (lib) `(##core#require ,lib))
+	 (delete-duplicates libs eq?))))
+
+(define (##sys#compiled-module-registration mod compile-mode)
   (let ((dlist (module-defined-list mod))
 	(mname (module-name mod))
 	(ifs (module-import-forms mod))
@@ -319,6 +328,9 @@
 	(mifs (module-meta-import-forms mod)))
     `((##sys#with-environment
         (lambda ()
+	  ,@(if (and (eq? compile-mode 'static) (pair? ifs) (pair? sexports))
+		(compiled-module-dependencies mod)
+		'())
           ,@(if (and (pair? ifs) (pair? sexports))
    	        `((scheme#eval '(import-syntax ,@(strip-syntax ifs))))
   	        '())
@@ -342,7 +354,7 @@
 	    ,@(map (lambda (sexport)
 	  	     (let* ((name (car sexport))
                             (a (assq name dlist)))
-                       (cond ((pair? a)
+                       (cond ((pair? a) 
                               `(scheme#cons ',(car sexport) ,(strip-syntax (cdr a))))
                              (else
                                (dm "re-exported syntax" name mname)
@@ -373,16 +385,18 @@
 	   'import "cannot find implementation of re-exported syntax"
 	   name))))
   (let* ((sexps
-	  (map (lambda (se)
-		 (if (symbol? se)
-		     (find-reexport se)
-		     (list (car se) #f (##sys#ensure-transformer (cdr se) (car se)))))
-	       sexports))
+	  (filter-map (lambda (se)
+			(and (not (symbol? se))
+			     (list (car se) #f (##sys#ensure-transformer (cdr se) (car se)))))
+		      sexports))
+	 (reexp-sexps
+	  (filter-map (lambda (se) (and (symbol? se) (find-reexport se)))
+		      sexports))
 	 (nexps
 	  (map (lambda (ne)
 		 (list (car ne) #f (##sys#ensure-transformer (cdr ne) (car ne))))
 	       sdefs))
-	 (mod (make-module name lib '() vexports sexps iexports))
+	 (mod (make-module name lib '() vexports (append sexps reexp-sexps) iexports))
 	 (senv (if (or (not (null? sexps))  ; Only macros have an senv
 		       (not (null? nexps))) ; which must be patched up
 		   (merge-se
@@ -402,7 +416,7 @@
      mod
      (cons (merge-se (##sys#current-environment) vexports sexps)
 	   (##sys#macro-environment)))
-    (set! ##sys#module-table (cons (cons name mod) ##sys#module-table))
+    (set! ##sys#module-table (cons (cons name mod) ##sys#module-table)) 
     mod))
 
 (define (##sys#register-core-module name lib vexports #!optional (sexports '()))
@@ -414,7 +428,7 @@
 		      (if (symbol? se)
 			  (or (assq se me)
 			      (##sys#error
-			       "unknown syntax referenced while registering module"
+			       "unknown syntax referenced while registering module" 
 			       se name))
 			  se))
 		    sexports)
@@ -425,7 +439,7 @@
 		     (module-vexports mod)
 		     (module-sexports mod))
 	   (##sys#macro-environment)))
-    (set! ##sys#module-table (cons (cons name mod) ##sys#module-table))
+    (set! ##sys#module-table (cons (cons name mod) ##sys#module-table)) 
     mod))
 
 ;; same as register-core-module, but uses module's name as its library
@@ -443,13 +457,70 @@
 		 (loop (cdr xl))))
 	    (else (loop (cdr xl)))))))
 
-(define ##sys#finalize-module
+(define ##sys#finalize-module 
   (let ((display display)
 	(write-char write-char))
     (lambda (mod #!optional (invalid-export (lambda _ #f)))
       ;; invalid-export: Returns a string if given identifier names a
       ;; non-exportable object. The string names the type (e.g. "an
       ;; inline function"). Returns #f otherwise.
+
+      ;; Given a list of (<identifier> . <source-location>), builds a nicely
+      ;; formatted error message with suggestions where possible.
+      (define (report-unresolved-identifiers unknowns)
+	(let ((out (open-output-string)))
+	  (fprintf out "Module `~a' has unresolved identifiers" (module-name mod))
+
+	  ;; Print filename from a line number entry
+	  (let lp ((locs (apply append (map cdr unknowns))))
+	    (unless (null? locs)
+	      (or (and-let* ((loc (car locs))
+			     (ln (and (pair? loc) (cdr loc)))
+			     (ss (string-split ln ":"))
+			     ((= 2 (length ss))))
+		    (fprintf out "\n  In file `~a':" (car ss))
+		    #t)
+		  (lp (cdr locs)))))
+
+	  (for-each
+	   (lambda (id.locs)
+	     (fprintf out "\n\n  Unknown identifier `~a'" (car id.locs))
+
+	     ;; Print all source locations where this ID occurs
+	     (for-each
+	      (lambda (loc)
+		(define (ln->num ln) (let ((ss (string-split ln ":")))
+				       (if (and (pair? ss) (= 2 (length ss)))
+					   (cadr ss)
+					   ln)))
+		(and-let* ((loc-s
+			    (cond
+			      ((and (pair? loc) (car loc) (cdr loc)) =>
+			       (lambda (ln)
+				 (format "In procedure `~a' on line ~a" (car loc) (ln->num ln))))
+			      ((and (pair? loc) (cdr loc))
+			       (format "On line ~a" (ln->num (cdr loc))))
+			      (else (format "In procedure `~a'" loc)))))
+		  (fprintf out "\n    ~a" loc-s)))
+	      (reverse (cdr id.locs)))
+
+	     ;; Print suggestions from identifier db
+	     (and-let* ((id (car id.locs))
+			(a (getp id '##core#db)))
+	       (fprintf out "\n  Suggestion: try importing ")
+	       (cond
+		 ((= 1 (length a))
+		  (fprintf out "module `~a'" (cadar a)))
+		 (else
+		  (fprintf out "one of these modules:")
+		  (for-each
+		   (lambda (a)
+		     (fprintf out "\n    ~a" (cadr a)))
+		   a)))))
+	   unknowns)
+
+	  (##sys#error (get-output-string out))))
+
       (let* ((explist (module-export-list mod))
 	     (name (module-name mod))
 	     (dlist (module-defined-list mod))
@@ -472,12 +543,12 @@
 		    (let* ((h (car xl))
 			   (id (if (symbol? h) h (car h))))
 		      (cond ((assq id sexports) (loop (cdr xl)))
-                            (else
-                              (cons
-                                (cons
+                            (else 
+                              (cons 
+                                (cons 
 			          id
                                   (let ((def (assq id dlist)))
-                                    (if (and def (symbol? (cdr def)))
+                                    (if (and def (symbol? (cdr def))) 
                                         (cdr def)
                                         (let ((a (assq id (##sys#current-environment))))
 					  (define (fail msg)
@@ -501,49 +572,27 @@
 							" has not been defined.")))
                                                 (else (bomb "fail")))))))
                               (loop (cdr xl))))))))))
-        (for-each
-	 (lambda (u)
-	   (let* ((where (cdr u))
-		  (u (car u)))
-	     (unless (memq u elist)
-	       (let ((out (open-output-string)))
-		 (set! missing #t)
-		 (display "reference to possibly unbound identifier `" out)
-		 (display u out)
-		 (write-char #\' out)
-		 (when (pair? where)
-		   (display " in:" out)
-		   (for-each
-		    (lambda (sym)
-		      (display "\nWarning:    " out)
-		      (display sym out))
-		    where))
-		 (and-let* ((a (getp u '##core#db)))
-		   (cond ((= 1 (length a))
-			  (display "\nWarning:    suggesting: `(import " out)
-			  (display (cadar a) out)
-			  (display ")'" out))
-			 (else
-			  (display "\nWarning:    suggesting one of:" out)
-			  (for-each
-			   (lambda (a)
-			     (display "\nWarning:    (import " out)
-			     (display (cadr a) out)
-			     (write-char #\) out))
-			   a))))
-		 (##sys#warn (get-output-string out))))))
-	 (reverse (module-undefined-list mod)))
+
+	;; Check all identifiers were resolved
+	(let ((unknowns '()))
+	  (for-each (lambda (u)
+		      (unless (memq (car u) elist)
+			(set! unknowns (cons u unknowns))))
+		    (module-undefined-list mod))
+	  (unless (null? unknowns)
+	    (report-unresolved-identifiers unknowns)))
+
 	(when missing
 	  (##sys#error "module unresolved" name))
-	(let* ((iexports
+	(let* ((iexports 
 		(map (lambda (exp)
 		       (cond ((symbol? (cdr exp)) exp)
 			     ((assq (car exp) (##sys#macro-environment)))
 			     (else (##sys#error "(internal) indirect export not found" (car exp)))) )
 		     (module-indirect-exports mod)))
-	       (new-se (merge-se
-			(##sys#macro-environment)
-			(##sys#current-environment)
+	       (new-se (merge-se 
+			(##sys#macro-environment) 
+			(##sys#current-environment) 
 			iexports vexports sexports sdlist)))
 	  (for-each
 	   (lambda (m)
@@ -551,8 +600,8 @@
 	       (dm `(FIXUP: ,(car m) ,@(map-se se)))
 	       (set-car! (cdr m) se)))
 	   sdlist)
-	  (dm `(EXPORTS:
-		,(module-name mod)
+	  (dm `(EXPORTS: 
+		,(module-name mod) 
 		(DLIST: ,@dlist)
 		(SDLIST: ,@(map-se sdlist))
 		(IEXPORTS: ,@(map-se iexports))
@@ -560,7 +609,7 @@
 		(SEXPORTS: ,@(map-se sexports))))
 	  (set-module-vexports! mod vexports)
 	  (set-module-sexports! mod sexports)
-	  (set-module-iexports!
+	  (set-module-iexports! 
 	   mod
 	   (merge-se (module-iexports mod) iexports)) ; "reexport" may already have added some
 	  (set-module-saved-environments!
@@ -638,7 +687,7 @@
 			     (cond ((null? ids)
 				    (for-each
 				     (lambda (id)
-				       (warn "imported identifier doesn't exist" spec id))
+				       (warn "imported identifier doesn't exist" name id))
 				     missing)
 				    (values name lib `(,head ,spec ,@imports) v s impi))
 				   ((assq (car ids) impv) =>
@@ -773,8 +822,8 @@
        cm
        (merge-se (module-iexports cm) vsi))
       (dm "export-list: " (module-export-list cm)))
-    (import-env (append vsv (import-env)))
-    (macro-env (append vss (macro-env)))))
+    (import-env (merge-se (import-env) vsv))
+    (macro-env (merge-se (macro-env) vss))))
 
 (define (module-rename sym prefix)
   (##sys#string->symbol
@@ -785,15 +834,14 @@
 
 (define (##sys#alias-global-hook sym assign where)
   (define (mrename sym)
-    (cond ((##sys#current-module) =>
+    (cond ((##sys#current-module) => 
 	   (lambda (mod)
 	     (dm "(ALIAS) global alias " sym " in " (module-name mod))
-	     (unless assign
+	     (unless assign 
 	       (register-undefined sym mod where))
 	     (module-rename sym (module-name mod))))
 	  (else sym)))
-  (cond ((keyword? sym) sym)
-	((namespaced-symbol? sym) sym)
+  (cond ((namespaced-symbol? sym) sym)
 	((assq sym (##sys#current-environment)) =>
 	 (lambda (a)
 	   (let ((sym2 (cdr a)))
@@ -847,7 +895,7 @@
 	  (exports (cadr funcdef))
 	  (body (cddr funcdef)))
       (define (merr)
-	(err "argument list mismatch in functor instantiation"
+	(err "argument list mismatch in functor instantiation" 
 	     (cons name args) (cons fname (map car fargs))))
       `(##core#let-module-alias
 	,(let loop ((as args) (fas fargs))
@@ -896,9 +944,9 @@
 	 exps)
 	(when (pair? missing)
 	  (##sys#syntax-error-hook
-	   'module
+	   'module 
 	   (apply
-	    string-append
+	    string-append 
 	    "argument module `" (symbol->string mname) "' does not match required signature\n"
 	    "in instantiation `" (symbol->string name) "' of functor `"
 	    (symbol->string fname) "', because the following required exports are missing:\n"
@@ -1104,8 +1152,11 @@
 (##sys#register-primitive-module
  'srfi-16 '() (se-subset '(case-lambda) ##sys#chicken.base-macro-environment))
 
-(##sys#register-primitive-module
- 'srfi-17 '() (se-subset '(set!) ##sys#default-macro-environment))
+(##sys#register-core-module
+ 'srfi-17 'library
+ '((getter-with-setter . chicken.base#getter-with-setter)
+   (setter . chicken.base#setter))
+ (se-subset '(set!) ##sys#default-macro-environment))
 
 (##sys#register-core-module
  'srfi-23 'library '((error . chicken.base#error)))

@@ -1,6 +1,6 @@
 ;;;; irregex.scm -- IrRegular Expressions
 ;;
-;; Copyright (c) 2005-2019 Alex Shinn.  All rights reserved.
+;; Copyright (c) 2005-2021 Alex Shinn.  All rights reserved.
 ;; BSD-style license: http://synthcode.com/license.txt
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -30,6 +30,12 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; History
+;; 0.9.10: 2021/07/06 - fixes for submatches under kleene star, empty seqs
+;;                     in alternations, and bol in folds for backtracking
+;;                     matcher (thanks John Clements and snan for reporting
+;;                     and Peter Bex for fixing)
+;; 0.9.9: 2021/05/14 - more comprehensive fix for repeated empty matches
+;; 0.9.8: 2020/07/13 - fix irregex-replace/all with look-behind patterns
 ;; 0.9.7: 2019/12/31 - more intuitive handling of empty matches in -fold,
 ;;                     -replace and -split
 ;; 0.9.6: 2016/12/05 - fixed exponential memory use of + in compilation
@@ -148,13 +154,14 @@
        (##sys#slot (##sys#slot m 1) (+ 3 (* n 4))))
      (define (%irregex-match-fail m) (##sys#slot m 4))
      (define (%irregex-match-fail-set! m x) (##sys#setslot m 4 x))
-     (define-record-printer (regexp-match m out)
-       (let ((n (irregex-match-num-submatches m)))
-	 (display "#<regexp-match (" out)
-	 (display n out)
-	 (display " submatch" out)
-	 (when (or (eq? n 0) (fx> n 1)) (display "es" out))
-	 (display ")>" out)))
+     (set-record-printer! 'regexp-match
+       (lambda (m out)
+	 (let ((n (irregex-match-num-submatches m)))
+	   (display "#<regexp-match (" out)
+	   (display n out)
+	   (display " submatch" out)
+	   (when (or (eq? n 0) (fx> n 1)) (display "es" out))
+	   (display ")>" out))))
      (define-inline (irregex-match-valid-numeric-index? m n)
        (let ((v (##sys#slot m 1)))
 	 (and (>= n 0) (< (* n 4) (- (##sys#size v) 4)))))
@@ -393,7 +400,16 @@
    (lambda (x) (and (not (eq? x src)) ((chunker-get-next cnk) x)))
    (chunker-get-str cnk)
    (chunker-get-start cnk)
-   (lambda (x) (if (eq? x src) i ((chunker-get-end cnk) x)))
+   (lambda (x)
+     ;; TODO: this is a hack workaround for the fact that we don't
+     ;; have either a notion of chunk equivalence or chunk truncation,
+     ;; until which time (neg-)look-behind in a fold won't work on
+     ;; non-basic chunks.
+     (if (or (eq? x src)
+             (and (not ((chunker-get-next cnk) x))
+                  (not ((chunker-get-next cnk) src))))
+         i
+         ((chunker-get-end cnk) x)))
    (chunker-get-substring cnk)
    (chunker-get-subchunk cnk)))
 
@@ -2223,12 +2239,18 @@
                                         (chunk&position (cons src (+ i 1))))
                                     (vector-set! slot (car s) chunk&position)))
                                 (cdr cmds))
-                      (for-each (lambda (c)
-                                  (let* ((tag (vector-ref c 0))
-                                         (ss (vector-ref memory (vector-ref c 1)))
-                                         (ds (vector-ref memory (vector-ref c 2))))
-                                    (vector-set! ds tag (vector-ref ss tag))))
-                                (car cmds)))))
+		      ;; Reassigning commands may be in an order which
+                      ;; causes memory cells to be clobbered before
+                      ;; they're read out.  Make 2 passes to maintain
+                      ;; old values by copying them into a closure.
+                      (for-each (lambda (execute!) (execute!))
+                                (map (lambda (c)
+                                       (let* ((tag (vector-ref c 0))
+                                              (ss (vector-ref memory (vector-ref c 1)))
+                                              (ds (vector-ref memory (vector-ref c 2)))
+                                              (value-from (vector-ref ss tag)))
+                                         (lambda () (vector-set! ds tag value-from))))
+                                     (car cmds))))))
                   (if new-finalizer
                       (lp2 (+ i 1) next src (+ i 1) new-finalizer)
                       (lp2 (+ i 1) next res-src res-index #f))))
@@ -2337,8 +2359,8 @@
     (domain . (seq domain-atom (+ #\. domain-atom)))
     ;; XXXX now anything can be a top-level domain, but this is still handy
     (top-level-domain . (w/nocase (or "arpa" "com" "gov" "mil" "net" "org"
-                                      "aero" "biz" "coop" "info" "museum"
-                                      "name" "pro" (= 2 alpha))))
+                                      "edu" "aero" "biz" "coop" "info"
+				      "museum" "name" "pro" (= 2 alpha))))
     (domain/common . (seq (+ domain-atom #\.) top-level-domain))
     ;;(email-local-part . (seq (+ (or (~ #\") string))))
     (email-local-part . (+ (or alphanumeric #\_ #\- #\. #\+)))
@@ -2349,7 +2371,7 @@
                           (seq "%" hex-digit hex-digit)))
     (http-url . (w/nocase
                  "http" (? "s") "://"
-                 (or domain/common ipv4-address) ;; (seq "[" ipv6-address "]")
+                 (or domain ipv4-address) ;; (seq "[" ipv6-address "]")
                  (? ":" (+ numeric)) ;; port
                  ;; path
                  (? "/" (* (or url-char "/"))
@@ -2545,7 +2567,7 @@
                                            flags
                                            next))))
                           (and a
-                               (let ((c (add-state! (new-state-number a)
+                               (let ((c (add-state! (new-state-number (max a b))
                                                     '())))
                                  (nfa-add-epsilon! buf c a #f)
                                  (nfa-add-epsilon! buf c b #f)
@@ -3490,9 +3512,10 @@
                (fail))))
         ((bol)
          (lambda (cnk init src str i end matches fail)
-           (if (or (and (eq? src (car init)) (eqv? i (cdr init)))
-                   (and (> i ((chunker-get-start cnk) src))
-                        (eqv? #\newline (string-ref str (- i 1)))))
+           (if (let ((ch (if (> i ((chunker-get-start cnk) src))
+                             (string-ref str (- i 1))
+                             (chunker-prev-char cnk init src))))
+                 (or (not ch) (eqv? #\newline ch)))
                (next cnk init src str i end matches fail)
                (fail))))
         ((bow)
@@ -3878,9 +3901,9 @@
     (if (not (and (integer? end) (exact? end)))
         (error 'irregex-fold "not an exact integer" end))
     (irregex-match-chunker-set! matches irregex-basic-string-chunker)
-    (let lp ((src init-src) (i start) (acc knil))
+    (let lp ((src init-src) (from start) (i start) (acc knil))
       (if (>= i end)
-          (finish i acc)
+          (finish from acc)
           (let ((m (irregex-search/matches
                     irx
                     irregex-basic-string-chunker
@@ -3889,18 +3912,19 @@
                     i
                     matches)))
             (if (not m)
-                (finish i acc)
-                (let ((j (%irregex-match-end-index m 0))
-                      (acc (kons i m acc)))
+                (finish from acc)
+                (let ((j-start (%irregex-match-start-index m 0))
+                      (j (%irregex-match-end-index m 0))
+                      (acc (kons from m acc)))
                   (irregex-reset-matches! matches)
                   (cond
                    ((flag-set? (irregex-flags irx) ~consumer?)
                     (finish j acc))
-                   ((= j i)
+                   ((= j j-start)
                     ;; skip one char forward if we match the empty string
-                    (lp (list str (+ j 1) end) (+ j 1) acc))
+                    (lp (list str j end) j (+ j 1) acc))
                    (else
-                    (lp (list str j end) j acc))))))))))
+                    (lp (list str j end) j j acc))))))))))
 
 (define (irregex-fold irx kons . args)
   (if (not (procedure? kons)) (error 'irregex-fold "not a procedure" kons))
@@ -3957,15 +3981,11 @@
   (irregex-fold/fast
    irx
    (lambda (i m acc)
-     (let* ((m-start (%irregex-match-start-index m 0))
-            (res (if (>= i m-start)
-                     (append (irregex-apply-match m o) acc)
-                     (append (irregex-apply-match m o)
-                             (cons (substring str i m-start) acc)))))
-       ;; include the skipped char on empty matches
-       (if (= i (%irregex-match-end-index m 0))
-           (cons (substring str i (+ i 1)) res)
-           res)))
+     (let ((m-start (%irregex-match-start-index m 0)))
+       (if (>= i m-start)
+           (append (irregex-apply-match m o) acc)
+           (append (irregex-apply-match m o)
+                   (cons (substring str i m-start) acc)))))
    '()
    str
    (lambda (i acc)
@@ -4026,9 +4046,6 @@
      irx
      (lambda (i m a)
        (cond
-        ((= i (%irregex-match-end-index m 0))
-         ;; empty match, include the skipped char to rejoin in finish
-         (cons (string-ref str i) a))
         ((= i (%irregex-match-start-index m 0))
          a)
         (else

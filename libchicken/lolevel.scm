@@ -1,6 +1,6 @@
 ;;;; lolevel.scm - Low-level routines for CHICKEN
 ;
-; Copyright (c) 2008-2020, The CHICKEN Team
+; Copyright (c) 2008-2021, The CHICKEN Team
 ; Copyright (c) 2000-2007, Felix L. Winkelmann
 ; All rights reserved.
 ;
@@ -98,7 +98,7 @@ EOF
 	  [else
 	   (##sys#signal-hook
 	    #:type-error loc
-	    "bad argument type - not an a-list of non-immediate objects" x) ] ) ) )
+	    "bad argument type - not an a-list of block objects" x) ] ) ) )
 
 (define (##sys#check-generic-structure x . loc)
   (unless (%record-structure? x)

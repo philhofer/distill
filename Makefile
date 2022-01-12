@@ -2,8 +2,8 @@ PREFIX ?= /usr
 AR ?= ar
 
 # TODO: detect these better?
-CSI:=csi-5.2
-export CHICKEN:=chicken-5.2
+CSI:=csi-5.3
+export CHICKEN:=chicken-5.3
 
 export CC := gcc
 export NEEDED_CFLAGS = -D_GNU_SOURCE -DHAVE_CHICKEN_CONFIG_H -DC_ENABLE_PTABLES \

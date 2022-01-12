@@ -1,6 +1,6 @@
 ;;;; library.scm - R5RS library for the CHICKEN compiler
 ;
-; Copyright (c) 2008-2020, The CHICKEN Team
+; Copyright (c) 2008-2021, The CHICKEN Team
 ; Copyright (c) 2000-2007, Felix L. Winkelmann
 ; All rights reserved.
 ;
@@ -1084,13 +1084,19 @@ EOF
     ;; to be a hardcoded primitive module.
     ;;
     ;; [syntax] time
-    (cpu-time current-milliseconds current-seconds)
+    (cpu-time 
+     current-milliseconds ; DEPRECATED
+     current-process-milliseconds current-seconds)
 
 (import scheme)
 (import (only chicken.module reexport))
 
+;; Deprecated
 (define (current-milliseconds)
   (##core#inline_allocate ("C_a_i_current_milliseconds" 7) #f))
+
+(define (current-process-milliseconds)
+  (##core#inline_allocate ("C_a_i_current_process_milliseconds" 7) #f))
 
 (define (current-seconds) 
   (##core#inline_allocate ("C_a_get_current_seconds" 7) #f))
@@ -1783,7 +1789,7 @@ EOF
   (lambda (n)
     (cond ((exact-integer? n) n)
 	  ((##core#inline "C_i_flonump" n)
-	   (cond ((not (finite? n)) (bad-inexact 'numerator n))
+	   (cond ((not (finite? n)) (##sys#error-bad-inexact n 'numerator))
 		 ((##core#inline "C_u_i_fpintegerp" n) n)
 		 (else (exact->inexact (numerator (inexact->exact n))))))
 	  ((ratnum? n) (%ratnum-numerator n))
@@ -1795,7 +1801,7 @@ EOF
   (lambda (n)
     (cond ((exact-integer? n) 1)
 	  ((##core#inline "C_i_flonump" n)
-	   (cond ((not (finite? n)) (bad-inexact 'denominator n))
+	   (cond ((not (finite? n)) (##sys#error-bad-inexact n 'denominator))
 		 ((##core#inline "C_u_i_fpintegerp" n) 1.0)
 		 (else (exact->inexact (denominator (inexact->exact n))))))
 	  ((ratnum? n) (%ratnum-denominator n))
@@ -4020,20 +4026,27 @@ EOF
 		 (info 'symbol-info s (##sys#port-line port)) ) )))
 
 	  (define (r-xtoken k)
-	    (let loop ((lst '()) (pkw #f) (skw #f) (qtd #f))
+	    (define pkw ; check for prefix keyword immediately
+	      (and (eq? ksp #:prefix)
+		   (eq? #\: (##sys#peek-char-0 port))
+		   (begin (##sys#read-char-0 port) #t)))
+	    (let loop ((lst '()) (skw #f) (qtd #f))
 	      (let ((c (##sys#peek-char-0 port)))
 		(cond ((or (eof-object? c)
 			   (char-whitespace? c)
 			   (memq c terminating-characters))
-		       ;; The not null? checks here ensure we read a
-		       ;; plain ":" as a symbol, not as a keyword.
-		       ;; However, when the keyword is quoted like ||:,
-		       ;; it _should_ be read as a keyword.
-		       (if (and skw (eq? ksp #:suffix)
-				(or qtd (not (null? (cdr lst)))))
-			   (k (##sys#reverse-list->string (cdr lst)) #t)
-			   (k (##sys#reverse-list->string lst)
-			      (and pkw (or qtd (not (null? lst)))))))
+		       ;; The various cases here cover:
+		       ;; - Nonempty keywords formed with colon in the ksp position
+		       ;; - Empty keywords formed explicitly with vbar quotes
+		       ;; - Bare colon, which should always be a symbol
+		       (cond ((and skw (eq? ksp #:suffix) (or qtd (not (null? (cdr lst)))))
+			      (k (##sys#reverse-list->string (cdr lst)) #t))
+			     ((and pkw (or qtd (not (null? lst))))
+			      (k (##sys#reverse-list->string lst) #t))
+			     ((and pkw (not qtd) (null? lst))
+			      (k ":" #f))
+			     (else
+			      (k (##sys#reverse-list->string lst) #f))))
 		      ((memq c reserved-characters)
 		       (reserved-character c))
 		      (else
@@ -4042,29 +4055,25 @@ EOF
 			   ((#\|)
 			    (let ((part (r-string #\|)))
 			      (loop (append (##sys#fast-reverse (##sys#string->list part)) lst)
-				    pkw #f #t)))
+				    #f #t)))
 			   ((#\newline)
 			    (##sys#read-warning
 			     port "escaped symbol syntax spans multiple lines"
 			     (##sys#reverse-list->string lst))
-			    (loop (cons #\newline lst) pkw #f qtd))
+			    (loop (cons #\newline lst) #f qtd))
 			   ((#\:)
-			    (cond ((and (null? lst)
-					(not qtd)
-					(eq? ksp #:prefix))
-				   (loop '() #t #f qtd))
-				  (else (loop (cons #\: lst) pkw #t qtd))))
+			    (loop (cons #\: lst) #t qtd))
 			   ((#\\)
 			    (let ((c (##sys#read-char-0 port)))
 			      (if (eof-object? c)
 				  (##sys#read-error
 				   port
 				   "unexpected end of file while reading escaped character")
-				  (loop (cons c lst) pkw #f qtd))))
+				  (loop (cons c lst) #f qtd))))
 			   (else
 			    (loop
 			     (cons (if csp c (char-downcase c)) lst)
-			     pkw #f qtd)))))))))
+			     #f qtd)))))))))
 	  
 	  (define (r-char)
 	    ;; Code contributed by Alex Shinn
@@ -4644,7 +4653,7 @@ EOF
 			       (outchr port #\)) )
 			    (outchr port #\space)
 			    (out (##sys#slot x i)) ) ) ) ) )
-		(else (##sys#error "unprintable non-immediate object encountered")))))
+		(else (##sys#error "unprintable block object encountered")))))
       (##sys#void))))
 
 (define ##sys#procedure->string 
@@ -5002,10 +5011,13 @@ EOF
       (unless (null? tasks)
 	(for-each (lambda (t) (t)) tasks)
 	(loop))))
-  (when (##sys#debug-mode?)
-    (##sys#print "[debug] forcing finalizers...\n" #f ##sys#standard-error))
-  (when (chicken.gc#force-finalizers)
-    (##sys#force-finalizers)))
+  (when (fx> (##sys#slot ##sys#pending-finalizers 0) 0)
+    (##sys#run-pending-finalizers #f))
+  (when (fx> (##core#inline "C_i_live_finalizer_count") 0)
+    (when (##sys#debug-mode?)
+      (##sys#print "[debug] forcing finalizers...\n" #f ##sys#standard-error))
+    (when (chicken.gc#force-finalizers)
+      (##sys#force-finalizers))))
 
 (set! chicken.base#exit-handler
   (make-parameter
@@ -5424,7 +5436,7 @@ EOF
 	((24) (apply ##sys#signal-hook #:type-error loc "bad argument type - not a structure of the required type" args))
 	((25) (apply ##sys#signal-hook #:type-error loc "bad argument type - not a blob" args))
 	((26) (apply ##sys#signal-hook #:type-error loc "locative refers to reclaimed object" args))
-	((27) (apply ##sys#signal-hook #:type-error loc "bad argument type - not a non-immediate value" args))
+	((27) (apply ##sys#signal-hook #:type-error loc "bad argument type - not a block object" args))
 	((28) (apply ##sys#signal-hook #:type-error loc "bad argument type - not a number vector" args))
 	((29) (apply ##sys#signal-hook #:type-error loc "bad argument type - not an integer" args))
 	((30) (apply ##sys#signal-hook #:type-error loc "bad argument type - not an unsigned integer" args))
@@ -6435,7 +6447,7 @@ static C_word C_fcall C_setenv(C_word x, C_word y) {
       (string-append (str sv) (str st) (str bp) (##sys#symbol->string mt))))
   (if full
       (let ((spec (string-append
-		   (if (feature? #:64bit) " 64bit" "")
+		   " " (number->string (foreign-value "C_WORD_SIZE" int)) "bit"
 		   (if (feature? #:dload) " dload" "")
 		   (if (feature? #:ptables) " ptables" "")
 		   (if (feature? #:gchooks) " gchooks" "")
@@ -6528,7 +6540,7 @@ static C_word C_fcall C_setenv(C_word x, C_word y) {
 (define ##sys#features
   '(#:chicken
     #:srfi-6 #:srfi-8 #:srfi-12 #:srfi-17 #:srfi-23 #:srfi-30
-    #:srfi-39 #:srfi-62 #:srfi-88 #:full-numeric-tower))
+    #:srfi-39 #:srfi-62 #:srfi-87 #:srfi-88 #:full-numeric-tower))
 
 ;; Add system features:
 
@@ -6549,8 +6561,14 @@ static C_word C_fcall C_setenv(C_word x, C_word y) {
   (set! ##sys#features (cons #:gchooks ##sys#features)))
 (when (foreign-value "IS_CROSS_CHICKEN" bool)
   (set! ##sys#features (cons #:cross-chicken ##sys#features)))
-(when (fx= (foreign-value "C_WORD_SIZE" int) 64)
-  (set! ##sys#features (cons #:64bit ##sys#features)))
+
+;; Register a feature to represent the word size (e.g., 32bit, 64bit)
+(set! ##sys#features
+      (cons (string->keyword
+             (string-append
+              (number->string (foreign-value "C_WORD_SIZE" int))
+              "bit"))
+            ##sys#features))
 
 (set! ##sys#features
   (let ((major (##sys#number->string (foreign-value "C_MAJOR_VERSION" int)))

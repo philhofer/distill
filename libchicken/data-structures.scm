@@ -1,6 +1,6 @@
 ;;; data-structures.scm - Optional data structures extensions
 ;
-; Copyright (c) 2008-2020, The CHICKEN Team
+; Copyright (c) 2008-2021, The CHICKEN Team
 ; All rights reserved.
 ;
 ; Redistribution and use in source and binary forms, with or without
@@ -543,7 +543,16 @@
                             #f
                             (cons edge path)
                             state))))))))
-  (let loop ((dag dag)
+  (define normalized-dag
+    (foldl (lambda (result node)
+             (alist-update! (car node)
+                            (append (cdr node)
+                                    (or (alist-ref (car node) dag pred) '()))
+                            result
+                            pred))
+           '()
+           dag))
+  (let loop ((dag normalized-dag)
              (state (cons (list) (list))))
     (if (null? dag)
         (cdr state)

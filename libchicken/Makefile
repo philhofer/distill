@@ -252,3 +252,4 @@ eval-modules.c: eval-modules.scm common-declarations.scm \
 .PHONY: clean
 clean:
 	$(RM) libchicken.a $(UNITS:%=%.o) $(filter-out runtime.c,$(wildcard *.c))
+

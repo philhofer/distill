@@ -16,6 +16,11 @@
      (delete-directory path #t))
     (else #f)))
 
+;; output tarballs are not reproducible
+;; unless calls to create-directory, etc.
+;; produce the same permissions each time
+(set! (file-creation-mode) #o22)
+
 ;; we have our own copy-file that preserves sparse files
 ;; and can optimizes some copies into a rename(2)
 (: copy-file (string string boolean -> true))
@@ -874,13 +879,13 @@
            (else
             (parameterize ((info-prefix (string-append (plan-name p) "-" (short-hash (plan-hash p)) " |")))
               (infoln "queued")
-              (let ((qtime (current-milliseconds)))
+              (let ((qtime (current-process-milliseconds)))
                 (call-with-job
                  (lambda ()
-                   (let ((stime (current-milliseconds)))
+                   (let ((stime (current-process-milliseconds)))
                      (infoln "starting; queued" (duration qtime stime))
                      (save-plan-outputs! p (plan->outputs! p))
-                     (infoln "completed; ran" (duration stime (current-milliseconds))))
+                     (infoln "completed; ran" (duration stime (current-process-milliseconds))))
                    #t))))))))))
     (with-new-jobserver
      (lambda ()

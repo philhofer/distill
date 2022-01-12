@@ -1,6 +1,6 @@
 /* chicken.h - General headerfile for compiler generated executables
 ;
-; Copyright (c) 2008-2020, The CHICKEN Team
+; Copyright (c) 2008-2021, The CHICKEN Team
 ; Copyright (c) 2000-2007, Felix L. Winkelmann
 ; All rights reserved.
 ;
@@ -31,7 +31,7 @@
 #define ___CHICKEN
 
 #define C_MAJOR_VERSION   5
-#define C_MINOR_VERSION   2
+#define C_MINOR_VERSION   3
 
 #ifndef _ISOC99_SOURCE
 # define _ISOC99_SOURCE
@@ -467,6 +467,7 @@ void *alloca ();
 #define C_SIZEOF_CPLXNUM          3
 #define C_SIZEOF_STRUCTURE(n)     ((n)+1)
 #define C_SIZEOF_CLOSURE(n)       ((n)+1)
+#define C_SIZEOF_BYTEVECTOR       C_SIZEOF_STRING
 #define C_SIZEOF_INTERNAL_BIGNUM_VECTOR(n) (C_SIZEOF_VECTOR((n)+1))
 #define C_internal_bignum_vector(b)        (C_block_item(b,0))
 
@@ -663,6 +664,12 @@ void *alloca ();
 # define C_MACHINE_TYPE "ia64"
 #elif defined(__x86_64__)
 # define C_MACHINE_TYPE "x86-64"
+#elif defined(__riscv)
+# if defined(__LP64__) || defined(_LP64)
+#  define C_MACHINE_TYPE "riscv64"
+# else
+#  define C_MACHINE_TYPE "riscv"
+# endif
 #elif defined(__arm64__) || defined(__aarch64__)
 # define C_MACHINE_TYPE "arm64"
 #elif defined(__arm__)
@@ -1009,12 +1016,16 @@ typedef void (C_ccall *C_proc)(C_word, C_word *) C_noret;
 #define C_heaptop                  ((C_word **)(&C_fromspace_top))
 #define C_drop(n)                  (C_temporary_stack += (n))
 #define C_alloc(n)                 ((C_word *)C_alloca((n) * sizeof(C_word)))
-#if defined (__llvm__) && defined (__GNUC__)
+#if (defined (__llvm__) && defined (__GNUC__)) || defined (__TINYC__)
 # if defined (__i386__)
 #  define C_stack_pointer ({C_word *sp; __asm__ __volatile__("movl %%esp,%0":"=r"(sp):);sp;})
 # elif defined (__x86_64__)
 #  define C_stack_pointer ({C_word *sp; __asm__ __volatile__("movq %%rsp,%0":"=r"(sp):);sp;})
 # else
+/* Not alloca(0) because:
+ * - LLVM allocates anyways
+ * - TCC always returns NULL
+ */
 #  define C_stack_pointer ((C_word *)C_alloca(1))
 # endif
 #else
@@ -1163,7 +1174,7 @@ typedef void (C_ccall *C_proc)(C_word, C_word *) C_noret;
 #define C_u_fixnum_and(n1, n2)          ((n1) & (n2))
 #define C_fixnum_and(n1, n2)            (C_u_fixnum_and(n1, n2) | C_FIXNUM_BIT)
 #define C_u_fixnum_or(n1, n2)           ((n1) | (n2))
-#define C_fixnum_or(n1, n2)             (C_u_fixnum_or(n1, n2) | C_FIXNUM_BIT)
+#define C_fixnum_or(n1, n2)             C_u_fixnum_or(n1, n2)
 #define C_fixnum_xor(n1, n2)            (((n1) ^ (n2)) | C_FIXNUM_BIT)
 #define C_fixnum_not(n)                 ((~(n)) | C_FIXNUM_BIT)
 #define C_fixnum_shift_left(n1, n2)     (C_fix(((C_uword)C_unfix(n1) << (C_uword)C_unfix(n2))))
@@ -1483,17 +1494,17 @@ typedef void (C_ccall *C_proc)(C_word, C_word *) C_noret;
 #ifdef C_BIG_ENDIAN
 # ifdef C_SIXTY_FOUR
 #  define C_lihdr(x, y, z)              ((C_LAMBDA_INFO_TYPE >> 56) & 0xff), \
-                                        0, 0, 0, 0, (x), (y), (z)
+                                        0, 0, 0, 0, (x), (y), ((C_char)(z))
 # else
 #  define C_lihdr(x, y, z)              ((C_LAMBDA_INFO_TYPE >> 24) & 0xff), \
-                                        (x), (y), (z)
+                                        (x), (y), ((C_char)(z))
 # endif
 #else
 # ifdef C_SIXTY_FOUR
-#  define C_lihdr(x, y, z)              (z), (y), (x), 0, 0, 0, 0, \
+#  define C_lihdr(x, y, z)              ((C_char)(z)), (y), (x), 0, 0, 0, 0, \
                                         ((C_LAMBDA_INFO_TYPE >> 56) & 0xff)
 # else
-#  define C_lihdr(x, y, z)              (z), (y), (x), \
+#  define C_lihdr(x, y, z)              ((C_char)(z)), (y), (x), \
                                         ((C_LAMBDA_INFO_TYPE >> 24) & 0xff)
 # endif
 #endif
@@ -1624,7 +1635,9 @@ typedef void (C_ccall *C_proc)(C_word, C_word *) C_noret;
 #define C_u_i_flonum_infinitep(x)       C_mk_bool(C_isinf(C_flonum_magnitude(x)))
 #define C_u_i_flonum_finitep(x)         C_mk_bool(C_isfinite(C_flonum_magnitude(x)))
 
+/* DEPRECATED */
 #define C_a_i_current_milliseconds(ptr, c, dummy) C_uint64_to_num(ptr, C_milliseconds())
+#define C_a_i_current_process_milliseconds(ptr, c, dummy) C_uint64_to_num(ptr, C_current_process_milliseconds())
 
 #define C_i_noop1(dummy)               ((dummy), C_SCHEME_UNDEFINED)
 #define C_i_noop2(dummy1, dummy2)      ((dummy1), (dummy2), C_SCHEME_UNDEFINED)
@@ -2075,7 +2088,8 @@ C_fctexport C_word C_fcall C_i_persist_symbol(C_word sym) C_regparm;
 C_fctexport C_word C_fcall C_i_unpersist_symbol(C_word sym) C_regparm;
 C_fctexport C_word C_fcall C_i_get_keyword(C_word key, C_word args, C_word def) C_regparm;
 C_fctexport C_word C_fcall C_i_process_sleep(C_word n) C_regparm;
-C_fctexport C_u64 C_fcall C_milliseconds(void) C_regparm;
+C_fctexport C_u64 C_fcall C_milliseconds(void) C_regparm; /* DEPRECATED */
+C_fctexport C_u64 C_fcall C_current_process_milliseconds(void) C_regparm;
 C_fctexport C_u64 C_fcall C_cpu_milliseconds(void) C_regparm;
 C_fctexport double C_fcall C_bignum_to_double(C_word bignum) C_regparm;
 C_fctexport C_word C_fcall C_i_debug_modep(void) C_regparm;
@@ -3363,7 +3377,7 @@ inline static C_word C_a_i_list2(C_word **a, int n, C_word x1, C_word x2)
 
 inline static C_word C_a_i_list3(C_word **a, int n, C_word x1, C_word x2, C_word x3)
 {
-  C_word x = C_pair(a, x3, C_SCHEME_END_OF_LIST);
+  C_word x = C_a_pair(a, x3, C_SCHEME_END_OF_LIST);
 
   x = C_a_pair(a, x2, x);
   return C_a_pair(a, x1, x);
@@ -3372,7 +3386,7 @@ inline static C_word C_a_i_list3(C_word **a, int n, C_word x1, C_word x2, C_word
 
 inline static C_word C_a_i_list4(C_word **a, int n, C_word x1, C_word x2, C_word x3, C_word x4)
 {
-  C_word x = C_pair(a, x4, C_SCHEME_END_OF_LIST);
+  C_word x = C_a_pair(a, x4, C_SCHEME_END_OF_LIST);
 
   x = C_a_pair(a, x3, x);
   x = C_a_pair(a, x2, x);
@@ -3383,7 +3397,7 @@ inline static C_word C_a_i_list4(C_word **a, int n, C_word x1, C_word x2, C_word
 inline static C_word C_a_i_list5(C_word **a, int n, C_word x1, C_word x2, C_word x3, C_word x4,
 			    C_word x5)
 {
-  C_word x = C_pair(a, x5, C_SCHEME_END_OF_LIST);
+  C_word x = C_a_pair(a, x5, C_SCHEME_END_OF_LIST);
 
   x = C_a_pair(a, x4, x);
   x = C_a_pair(a, x3, x);
@@ -3395,7 +3409,7 @@ inline static C_word C_a_i_list5(C_word **a, int n, C_word x1, C_word x2, C_word
 inline static C_word C_a_i_list6(C_word **a, int n, C_word x1, C_word x2, C_word x3, C_word x4,
 			    C_word x5, C_word x6)
 {
-  C_word x = C_pair(a, x6, C_SCHEME_END_OF_LIST);
+  C_word x = C_a_pair(a, x6, C_SCHEME_END_OF_LIST);
 
   x = C_a_pair(a, x5, x);
   x = C_a_pair(a, x4, x);
@@ -3408,7 +3422,7 @@ inline static C_word C_a_i_list6(C_word **a, int n, C_word x1, C_word x2, C_word
 inline static C_word C_a_i_list7(C_word **a, int n, C_word x1, C_word x2, C_word x3, C_word x4,
 			    C_word x5, C_word x6, C_word x7)
 {
-  C_word x = C_pair(a, x7, C_SCHEME_END_OF_LIST);
+  C_word x = C_a_pair(a, x7, C_SCHEME_END_OF_LIST);
 
   x = C_a_pair(a, x6, x);
   x = C_a_pair(a, x5, x);
@@ -3422,7 +3436,7 @@ inline static C_word C_a_i_list7(C_word **a, int n, C_word x1, C_word x2, C_word
 inline static C_word C_a_i_list8(C_word **a, int n, C_word x1, C_word x2, C_word x3, C_word x4,
 			    C_word x5, C_word x6, C_word x7, C_word x8)
 {
-  C_word x = C_pair(a, x8, C_SCHEME_END_OF_LIST);
+  C_word x = C_a_pair(a, x8, C_SCHEME_END_OF_LIST);
 
   x = C_a_pair(a, x7, x);
   x = C_a_pair(a, x6, x);
@@ -3509,7 +3523,7 @@ inline static int C_stat(const char *path, struct stat *buf)
     goto dircheck;
 
   if(slash && errno == ENOENT) {
-    C_strlcpy((str = C_alloca(len + 1)), path, len + 1);
+    C_strlcpy((str = (char *)C_alloca(len + 1)), path, len + 1);
     while(len > 1 && C_strchr("\\/", path[--len]))
       str[len] = '\0';
     if(stat(str, buf) == 0)

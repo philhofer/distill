@@ -58,7 +58,7 @@
         (only (chicken port) make-broadcast-port)
         (only (chicken process-context) current-directory get-environment-variable)
         (only (chicken condition) print-error-message)
-        (only (chicken time) current-milliseconds)
+        (only (chicken time) current-process-milliseconds)
         (only (chicken bitwise) bitwise-and)
         (chicken process)
         (only (chicken sort) sort))))

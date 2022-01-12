@@ -1,6 +1,6 @@
 ;;; extras.scm - Optional non-standard extensions
 ;
-; Copyright (c) 2008-2020, The CHICKEN Team
+; Copyright (c) 2008-2021, The CHICKEN Team
 ; Copyright (c) 2000-2007, Felix L. Winkelmann
 ; All rights reserved.
 ;
@@ -90,11 +90,12 @@
 				(loop (fx+ i 1)) ] ) ) ) ) ) ) ) ) ) ) ) )
 
 (define read-lines
-  (lambda (#!optional (port ##sys#standard-input) (max most-positive-fixnum))
+  (lambda (#!optional (port ##sys#standard-input) max)
     (##sys#check-input-port port #t 'read-lines)
+    (when max (##sys#check-fixnum max 'read-lines))
     (let loop ((lns '())
-	       (n (or max 1000000000))) ; this is silly
-      (if (or (eq? n 0))
+	       (n (or max most-positive-fixnum)))
+      (if (eq? n 0)
 	  (##sys#fast-reverse lns)
 	  (let ((ln (read-line port)))
 	    (if (eof-object? ln)
@@ -164,8 +165,7 @@
 	   (let ([out (open-output-string)]
 		 (buf (make-string read-string-buffer-size)))
 	     (let loop ()
-	       (let ((c (peek-char p))
-		     (n (read-string!/port read-string-buffer-size buf p 0)))
+	       (let ((n (read-string!/port read-string-buffer-size buf p 0)))
 		 (cond ((eq? n 0)
 			(get-output-string out))
 		       (else
@@ -355,9 +355,9 @@
 					     (out (number->string code 16) col) ]
 					    [else (out (make-string 1 obj) col)] ) ) ) )
 	    ((##core#inline "C_undefinedp" obj) (out "#<unspecified>" col))
+	    ((##core#inline "C_unboundvaluep" obj) (out "#<unbound value>" col))
+	    ((##core#inline "C_immp" obj) (out "#<unprintable object>" col))
 	    ((##core#inline "C_anypointerp" obj) (out (##sys#pointer->string obj) col))
-	    ((##core#inline "C_unboundvaluep" obj)
-	     (out "#<unbound value>" col) )
 	    ((##sys#generic-structure? obj)
 	     (let ([o (open-output-string)])
 	       (##sys#user-print-hook obj #t o)

@@ -1,6 +1,6 @@
 ;;;; posix.scm - Platform-specific routines
 ;
-; Copyright (c) 2008-2020, The CHICKEN Team
+; Copyright (c) 2008-2021, The CHICKEN Team
 ; Copyright (c) 2000-2007, Felix L. Winkelmann
 ; All rights reserved.
 ;
@@ -35,8 +35,8 @@
 
 (declare
   (unit posix)
-  (uses #;scheduler pathname extras port lolevel
-		    )
+  ;; distill-specific: removed scheduler import
+  (uses pathname extras port lolevel)
   (disable-interrupts)
   (not inline ##sys#interrupt-hook ##sys#user-interrupt-hook))
 

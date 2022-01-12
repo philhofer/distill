@@ -1,6 +1,6 @@
 ;;;; file.scm - File operations
 ;
-; Copyright (c) 2008-2020, The CHICKEN Team
+; Copyright (c) 2008-2021, The CHICKEN Team
 ; Copyright (c) 2000-2007, Felix L. Winkelmann
 ; All rights reserved.
 ;
@@ -65,86 +65,8 @@
 # define C_mkdir(str)       C_fix(mkdir(C_c_string(str)))
 #endif
 
-#if !defined(_WIN32) || defined(__CYGWIN__)
-# include <sys/types.h>
-# include <dirent.h>
-#else
-struct dirent
-{
-    char *              d_name;
-};
-
-typedef struct
-{
-    struct _finddata_t  fdata;
-    int                 handle;
-    struct dirent       current;
-} DIR;
-
-static DIR * C_fcall
-opendir(const char *name)
-{
-    int name_len = strlen(name);
-    int what_len = name_len + 3;
-    DIR *dir = (DIR *)malloc(sizeof(DIR));
-    char *what;
-    if (!dir)
-    {
-	errno = ENOMEM;
-	return NULL;
-    }
-    what = (char *)malloc(what_len);
-    if (!what)
-    {
-	free(dir);
-	errno = ENOMEM;
-	return NULL;
-    }
-    C_strlcpy(what, name, what_len);
-    if (strchr("\\/", name[name_len - 1]))
-	C_strlcat(what, "*", what_len);
-    else
-	C_strlcat(what, "\\*", what_len);
-
-    dir->handle = _findfirst(what, &dir->fdata);
-    if (dir->handle == -1)
-    {
-	free(what);
-	free(dir);
-	return NULL;
-    }
-    dir->current.d_name = NULL; /* as the first-time indicator */
-    free(what);
-    return dir;
-}
-
-static int C_fcall
-closedir(DIR * dir)
-{
-    if (dir)
-    {
-	int res = _findclose(dir->handle);
-	free(dir);
-	return res;
-    }
-    return -1;
-}
-
-static struct dirent * C_fcall
-readdir(DIR * dir)
-{
-    if (dir)
-    {
-	if (!dir->current.d_name /* first time after opendir */
-	     || _findnext(dir->handle, &dir->fdata) != -1)
-	{
-	    dir->current.d_name = dir->fdata.name;
-	    return &dir->current;
-	}
-    }
-    return NULL;
-}
-#endif
+#include <sys/types.h>
+#include <dirent.h>
 
 #define C_opendir(s,h)      C_set_block_item(h, 0, (C_word) opendir(C_c_string(s)))
 #define C_readdir(h,e)      C_set_block_item(e, 0, (C_word) readdir((DIR *)C_block_item(h, 0)))
