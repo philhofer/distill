@@ -26,7 +26,7 @@
   (with-input-from-pipe cmdline read-string))
 
 (define (current-git-sha)
-  (string-chomp (sh->string "git show-ref HEAD | awk '{print $1}'")))
+  (string-chomp (sh->string "git log -1 --format='%H'")))
 
 ;; run 'git archive' on HEAD and
 ;; yield the artifact pointing at
@@ -67,7 +67,9 @@
                 ,(el= 'LDFLAGS= $LDFLAGS)
                 install))))
 
-(let* ((args    (command-line-arguments))
+(let* ((println (lambda args
+                  (for-each display args) (newline)))
+       (args    (command-line-arguments))
        (arch    (if (null? args) *this-machine* (string->symbol (car args))))
        (conf    (default-config arch))
        (build!  (config->builder conf))
@@ -75,7 +77,7 @@
        (archive (git-archive))
        (package (release-package sha archive))
        (out     (build! package)))
-  (display sha) (newline)
-  (display (artifact-hash archive)) (newline)
-  (display (artifact-hash (car out))) (newline)
+  (println "git " sha)
+  (println "tarball " (artifact-hash archive))
+  (println "binary " (artifact-hash (car out)))
   (exit 0))

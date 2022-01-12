@@ -91,7 +91,7 @@
 (defmod chicken.file)
 (defmod chicken.read-syntax)
 (defmod chicken.repl)
-(defmod chicken.tcp)
+#;(defmod chicken.tcp) ; distill edit: no (chicken tcp)
 (defmod srfi-4)
 
 (set! ##sys#import-library-hook

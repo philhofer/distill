@@ -40,9 +40,9 @@
 
 (define (%chicken-src name targets install)
   (cc-package
-   "chicken" "5.2.0"
+   "chicken" "5.3.0"
    "https://code.call-cc.org/releases/$version/$name-$version.tar.gz"
-   "M4edTDnvYOsgcWLxIoMpBTE0bXpG3wS3BmfiHiJ9_uA="
+   "mcCtvHz-Ii4cHdj4z9lz8ci___RXLETHX7F-IZRP7PM="
    build: (let* ((native  (lambda (kw)
                             (lambda (conf)
                               (kref (cc-toolchain-env ($native-toolchain conf)) kw))))
