@@ -292,9 +292,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define gawk
   (cmmi-package
-   "gawk" "5.1.0" ; fixme: update to 5.1.1
+   "gawk" "5.1.1" ; fixme: update to 5.1.1
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
-   "qPUwDbyEw75NjMOALy2nyYWv_LSMprTZEfAYjIos0-c="
+   "Y4zSltM6gbfzZNfhOBXg3atxxKnRAigKsuOwgYIDldE="
    cleanup: '(rm -f /out/usr/bin/awk)))
 
 (define libgmp
@@ -358,13 +358,13 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define skalibs
   (ska-cmmi-package
-   "skalibs" "2.11.0.0"
+   "skalibs" "2.11.0.0" ; fixme: upgrade to 2.11.1.0
    "wPDqmXfAncWrgLe-EOT8nAuVcTZ2btCKTOiZFgc5nGw="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define libexecline+tools
   (ska-cmmi-package
-   "execline" "2.8.1.0"
+   "execline" "2.8.1.0" ; fixme: upgrade to 2.8.2.0
    "WZOWlNlK-wWMD44KjGNAeM9vnopdlQWkBG5hOCiWgq8="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
@@ -376,9 +376,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define byacc
   (cmmi-package
-   "byacc" "20210808"
+   "byacc" "20220109"
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-   "KWkkb_YrnTmHra1UN7N86JLZ4qLpbir3haIM1nD0iQY="
+   "gpJawVBNTTaOvs_xix1tzVHmJp2Mu9f7LlCGdBTv6p4="
    extra-configure: '(--enable-btyacc)))
 
 (define reflex
@@ -617,8 +617,8 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    (cdn-artifact "eKDTI4zJ4jm7TrfB7gHkFntuMDwftgeBipnBkMp0y1w=" "/src/config" #o644)
    '()))
 
-(define *linux-version* "5.10.84")
-(define *linux-hash* "TwISm-xJ_12E006jvkV6We6EE3l1dkgLM4CqFpOUA88=")
+(define *linux-version* "5.10.91")
+(define *linux-hash* "zcdk_chzp4o8JsqOuvZW67OgNhWMJoKksTB9hgtDh-w=")
 
 (define (linux-source version hash)
   (remote-archive
@@ -821,7 +821,7 @@ EOF
                               "BUILD_"
                               (keyword->string kw))))))))
     (cmmi-package
-     "e2fsprogs" "1.46.3"
+     "e2fsprogs" "1.46.3" ; fixme: update to 1.46.5
      "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
      "a9wXTNQyxErxu4hNgWP21DyOHIXyywbJefD8W9hHAfA="
      patches: (include-patchfiles "patches/e2fsprogs/repro.patch")
