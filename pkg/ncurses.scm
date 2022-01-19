@@ -14,9 +14,9 @@
                              (string->keyword
                               (string-append "BUILD_" (keyword->string kw))))))))
     (cmmi-package
-     "ncurses" "6.2"
+     "ncurses" "6.3"
      "https://invisible-mirror.net/archives/$name/$name-$version.tar.gz"
-     "yMw83zJIGrC7h2uhSt_NgbUA2Rx8nn8gX6Wncy1NEek="
+     "oaG1hFTI_vJlkp3LO5TMJKtuIf6808u3BXgIqPhVSTw="
      ;; the ncurses installation process needs a runnable
      ;; ncurses binary, and we won't get that when cross-compiling
      cross: (list (lambda (conf)

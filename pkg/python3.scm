@@ -21,9 +21,9 @@
 
 (define python3
   (cmmi-package
-   "Python" "3.9.6"
+   "Python" "3.9.10"
    "https://www.python.org/ftp/python/$version/$name-$version.tar.xz"
-   "Orxtc7Mb8vFdp4nveaojbC7xpLlXs978TAjf55Iihwg="
+   "OtbPcL4f1b2vr6VHmwVgSUW3wbIwZ9nfLuBlBqJCUzE="
    extra-src: (list python-config)
    libs: (list ncurses libexpat libressl zlib libbz2 liblzma libffi
                linux-headers gdbm libreadline)

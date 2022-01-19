@@ -13,7 +13,7 @@
 ;; (easier than doing the go1.4 C bootstrap,
 ;; since it doesn't work on all architectures...)
 (define go-bootstrap-hashes
-  '((x86_64 .  "v9N75rm2W-sSWduJ0gxOI4_0X1mD-QGtx_UMikZZj_0=")
+  '((x86_64 .  "DU89FqXw0067qNva7CqXnO1wlsZOkwiue-9xQevDakY=")
     (aarch64 . "qSfxYsNiOH1i_2uBVBhI3oiqIWkoDG3MDJyiK4BYGfw=")
     (ppc64le . "SQ1xN4oI_wcqYeKKI3_HEYWD5wFIgpTbE0OJ6Pq02Is=")))
 
@@ -59,10 +59,10 @@
     (if extra (cons extra tail) tail)))
 
 (define *go-src*
-  (let ((ver "1.16.7"))
+  (let ((ver "1.17.6"))
     (remote-archive
      (conc "https://dl.google.com/go/go" ver ".src.tar.gz")
-     "Gn1ZtRbeN8R18FC4IotYX0WfTcVO1-6CIxYHgCJI_bw=")))
+     "G4dqM5pT9SwN92rq012IPA15hwJZ35jXB8DYDRENoUs=")))
 
 (define go
   (package-template
