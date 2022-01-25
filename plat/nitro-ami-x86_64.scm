@@ -53,7 +53,7 @@
 (define linux-ami-x86_64
   (linux/config-static
    "ami-x86_64"
-   (cdn-artifact "7QIo0Y7kSLUMeyWmL1f-jHmNsG_7iW04nwAhmJ_MTZc=" ".config" #o644)))
+   (cdn-artifact "DqJkb_vWTMFFmqHAi72-TozfhoeU1Rmptca9c8pCvjM=" ".config" #o644)))
 
 ;; write a script called ec2-meta
 ;; which is invoked like

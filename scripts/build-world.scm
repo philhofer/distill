@@ -93,6 +93,7 @@
      zstd
      squashfs-tools
      libarchive
+     bsdtar
      libressl
      s6
      s6-rc
