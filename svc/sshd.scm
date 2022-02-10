@@ -40,5 +40,5 @@
                                    ssh-keygen -t ed25519 -P "" -f /var/etc/ssh/ssh_host_ed25519_key)
                             ;; sshd needs to be invoked with an absolute path
                             ;; in order for privsep re-exec to work
-                            /usr/sbin/sshd -h /var/etc/ssh/ssh_host_ed25519_key
+                            /usr/sbin/sshd -e -h /var/etc/ssh/ssh_host_ed25519_key
                             -D -f ,confpath)))))
