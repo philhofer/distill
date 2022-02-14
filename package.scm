@@ -1,3 +1,6 @@
+;; *this-machine* is the architecture
+;; for which the currently-running program
+;; was compiled
 (: *this-machine* symbol)
 (define *this-machine*
   (cond-expand
@@ -9,7 +12,37 @@
    ((and ppc64 big-endian) 'ppc64)))
 
 ;; package-template is a helper
-;; for writing package definitions
+;; for writing package definitions.
+;;
+;; Typically, callers should prefer
+;; higher-level package constructors
+;; like cmmi-package.
+;;
+;; The 'label' argument should indicate
+;; the label for the package to be defined.
+;;
+;; The 'build' argument should specify
+;; the build script to run. (The build script
+;; will be expanded against the configuration.)
+;;
+;; The following keyword arguments are accepted:
+;;
+;;  - src: the list of source artifacts
+;;  - cross: the list of packages that should be
+;;  - expanded against the host architecture
+;;  but be unpacked into /
+;;  - tools: the list of packages that should
+;;  be expanded against the build architecture
+;;  and unpacked into /
+;;  - inputs: the list of packages that should
+;;  be expanded against the host architecture
+;;  and unpacked in its sysroot
+;;  - patches: a list of patch files (as artifacts)
+;;  to apply
+;;  - dir: the directory to switch into for building
+;;  - env: an alist of environment variables to set
+;;  - raw-output: either `#f` or the name of the output
+;;  file that should be treated as an output image
 (define (package-template
          #!key
          label
@@ -154,6 +187,20 @@
       (parameterize ((%current-expander memo))
         (memo obj host)))))
 
+;; subpackage takes a package definition
+;; and returns a subset of the output artifacts
+;; of that package.
+;;
+;; The prefix (string) argument indicates what prefix
+;; should be applied to the package label to
+;; produce the new output package label.
+;;
+;; The sub argument indicates the package to be
+;; used as the base package.
+;;
+;; The remaining arguments are string glob patterns
+;; that indicate which output files should be part
+;; of the returned package.
 (: subpackage (string * #!rest string -> (vector -> vector)))
 (define (subpackage prefix sub . globs)
   (lambda (conf)
@@ -172,9 +219,14 @@
                          (sub-archive art globs))))
        null-build: #t))))
 
-;; clibs wraps a package and yields
+;; libs wraps a package and yields
 ;; only the parts of its outputs that
-;; are in conventional locations for C library files
+;; are in conventional locations for C library files:
+;;  - /usr/lib
+;;  - /lib
+;;  - /usr/include
+;;  - /include
+;;  - /usr/share
 (define (libs pkg)
   (subpackage "lib-" pkg
               "./usr/lib/" "./lib/"
@@ -182,7 +234,15 @@
               "./usr/share/"))
 
 ;; binaries produces a subpackage
-;; by matching common binary directories
+;; by matching common binary directories:
+;;  - /usr/bin
+;;  - /bin
+;;  - /usr/sbin
+;;  - /sbin
+;;  - /usr/libexec
+;;  - /libexec
+;;  - /usr/share
+;;  - /share
 (define (binaries pkg)
   (subpackage "bin-" pkg
               "./usr/bin/" "./bin/"
@@ -190,27 +250,61 @@
               "./usr/libexec/" "./libexec/"
               "./usr/share/" "./share/"))
 
+;; url-translate takes a url string in urlfmt
+;; and a name and version string to substitute
+;; into the literal substrings "$name" and "$version"
+;; in urlfmt
 (define (url-translate urlfmt name version)
   (and urlfmt
        (string-translate* urlfmt `(("$name" . ,name)
                                    ("$version" . ,version)))))
 
-;; template for C/C++ packages
+;; cc-package is a template for C/C++ packages
 ;;
-;; the cc-package template picks suitable defaults
+;; The cc-package template picks suitable defaults
 ;; for the package source, inputs (libc), tools (toolchain)
 ;; and build directory; the additional keyword arguments
 ;; can be used to augment that package template with
-;; more libraries and tools
+;; more libraries and tools.
 ;;
-;; the 'build:' argument is mandatory; cc-package
-;; does not provide a default build script
+;; The primary formals for cc-package are as follows:
+;;
+;; - `name` is the name of the package (a string)
+;; - `version` is the version of the package (also a string)
+;; - `urlfmt` is the URL at which the source tarball for
+;; this package lives, optionally with "$name" and "$version"
+;; in the url string that will be automatically substituted;
+;; urlfmt can be `#f` if `hash-or-art` present an artifact object instead
+;; - `hash-or-art` is either a string indicating the expected
+;; hash of the output tarball, or an artifact value containing
+;; the source code
+;;
+;; The 'build:' keyword argument is mandatory; cc-package
+;; does not provide a default build script.
+;;
+;; The following additional keyword arguments are accepted:
+;;
+;;  - dir: overrides the build directory; by default
+;;  `(string-append name "-" version)` is used
+;;  - build: the build script for building the package
+;;  - no-libc: can be set to `#t` to disable pulling in the config's base libc
+;;  - use-native-cc: can be set to `#t` to pull in a C toolchain
+;;  that can be used for building binaries that run on the build architecture
+;;
+;; The following additional keyword arguments
+;; are accepted and passed to the inner call to `package-template`,
+;; along with the requisite items for C/C++ compilation:
+;;
+;;  - tools:
+;;  - cross:
+;;  - patches:
+;;  - env:
+;;
 (define (cc-package
          name version urlfmt hash-or-art
          #!key
          (dir #f) ;; directory override
          (build #f)
-         (prebuilt #f) ;; prebuilt function
          (no-libc #f)    ;; do not bring in a libc implicitly
          (use-native-cc #f)
          (raw-output #f)
@@ -251,7 +345,6 @@
          name version urlfmt hash
          #!key
          (dir #f) ;; directory override
-         (prebuilt #f) ;; prebuilt function
          (patches '()) ;; patches to apply
          (env '())     ;; extra environment
 
@@ -286,7 +379,6 @@
      name version urlfmt hash
      dir: dir
      patches: patches
-     prebuilt: prebuilt
      libs: libs
      tools: tools
      cross: cross

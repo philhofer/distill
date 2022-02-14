@@ -29,9 +29,15 @@ UNITS:=distill.fetch distill.hash distill.nproc \
 
 BUILTINS:=$(wildcard pkg/*.scm) $(wildcard plat/*.scm) $(wildcard svc/*.scm)
 
-.PHONY: test all install snapshot
+.PHONY: test all install snapshot doc
 all: distill ${UNITS:%=%.o}
 VERSION ?= $(shell git rev-parse --short HEAD)
+
+doc: README.md
+
+README.md: autodoc.scm $(wildcard *.sld) $(wildcard *.scm)
+	$(CSI) -ss autodoc.scm > README.tail.md
+	cat README.head.md README.tail.md > README.md
 
 libchicken/libchicken.a:
 	$(MAKE) -C libchicken/ libchicken.a

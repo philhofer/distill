@@ -1,5 +1,7 @@
 (foreign-declare "#include \"tai64.inc.h\"")
 
+;; tai64n-now produces the current time
+;; as a TAI64N timestamp
 (: tai64n-now (-> u8vector))
 (define (tai64n-now)
   (let ((out      (make-u8vector 12))
@@ -8,6 +10,8 @@
         out
         (error "clock_gettime() failed?"))))
 
+;; unix->tai64n converts a unix epoch timestamp
+;; (as an integer) into a TAI64N timestamp
 (: unix->tai64n (integer -> u8vector))
 (define (unix->tai64n secs)
   (let* ((out     (make-u8vector 12))
