@@ -5,7 +5,7 @@
  (distill base))
 
 (define libexpat
-  (let* ((ver "2.4.3")
+  (let* ((ver "2.4.6")
          (tag (string-intersperse
                (cons "R" (string-split ver ".")) "_"))
          (url (string-translate*
@@ -13,7 +13,7 @@
                `(("$tag" . ,tag)))))
     (cmmi-package
      "expat" ver url
-     "kwK5dQCzRJV1pJ0dgRaIkjgMdJzFqKek7EWAIpNTyEc="
+     "xDOfp7tQTQ4pyy89UzKs7zalWP_uhD828pZjwh5FOr0="
      extra-configure: '(--without-examples
                         --without-tests
                         --with-getrandom
