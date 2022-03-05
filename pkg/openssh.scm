@@ -12,9 +12,9 @@
 
 (define openssh
   (cmmi-package
-   "openssh" "8.8p1"
+   "openssh" "8.9p1"
    "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/$name-$version.tar.gz"
-   "O7hk1pY2F21xH0SI-2zO78KvvEcRg37ospiJ_brOFE8="
+   "zmITgL7_SllXCao-r046W1QtRrtr5ttul_ubHhhURcQ="
    patches: (list fix-dns.patch)
    libs: (list linux-headers libedit ncurses zlib libressl)
    extra-configure: '(--with-pid-dir=/run
