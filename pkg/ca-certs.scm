@@ -6,5 +6,5 @@
   (remote-file
    ;; FIXME: this (obviously) is not stable
    "https://curl.se/ca/cacert.pem"
-   "X-D1GgvJ1OaTrOWYOX4m8smzfqMZQ59ROguxsGnHpgw="
+   "mS2foynIlJ6B08LZmkOyQYd1NRtQl0w2spRFLuuWsdY="
    "/etc/ssl/cert.pem" #o644))
