@@ -5,9 +5,9 @@
 
 (define curl
   (cmmi-package
-   "curl" "7.81.0"
+   "curl" "7.82.0"
    "https://curl.haxx.se/download/$name-$version.tar.xz"
-   "8XxDL5PafTYAbk8Gvb31VeT3uOvwsSSuAQ62Th_wjng="
+   "pjt2yQG2ZCGpWr9wTt9OqFrEWwHcDq-s4ef-8zfthdc="
    tools: (list perl)
    libs:  (list libressl zlib)
    extra-configure: '(--with-openssl ; works with libressl

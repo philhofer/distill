@@ -5,7 +5,7 @@
 
 (define bison
   (cmmi-package
-   "bison" "3.7.6"
+   "bison" "3.8.2"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "Raz-R0d5nsU21jrF_WYNcZPzrHrnFRcSxaFxSk_x7kM="
+   "LeajJ9QabH7B1yZS0Ahmwx1bVPCFc9jKM4OC5zoJloU="
    tools: (list m4 perl)))

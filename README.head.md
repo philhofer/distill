@@ -13,6 +13,11 @@ on building immutable images that run *elsewhere* rather than
 trying to edit the configuration of ones own machine in a way
 that minimizes the interference bewteen installed software.
 
+The package recipes that come bundled with the `distill` tool
+go to great lengths to ensure that each build is reproducible
+and supports cross-compilation. (Build dependencies are structured
+so that there is a clear distinction between build and host dependencies.)
+
 ## High-level: Packages, Services, Systems, and Platforms
 
 ### System

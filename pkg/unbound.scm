@@ -8,9 +8,9 @@
 
 (define unbound
   (cmmi-package
-   "unbound" "1.14.0"
+   "unbound" "1.15.0"
    "https://unbound.net/downloads/$name-$version.tar.gz"
-   "lRrcBOhZPtN5a3i_1B54rx9BF4GidbY3P2BtNN3nxXg="
+   "iP_cqu9sLLGaxiF_2AO-AwwSRlGiM7x7y9BGsyPg-lo="
    libs: (list libressl libexpat libevent)
    extra-configure: `(--with-username=unbound
                       --with-run-dir=/etc/unbound

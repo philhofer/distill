@@ -35,7 +35,7 @@ VERSION ?= $(shell git rev-parse --short HEAD)
 
 doc: README.md
 
-README.md: autodoc.scm $(wildcard *.sld) $(wildcard *.scm)
+README.md: autodoc.scm $(wildcard *.sld) $(wildcard *.scm) README.head.md
 	$(CSI) -ss autodoc.scm > README.tail.md
 	cat README.head.md README.tail.md > README.md
 
