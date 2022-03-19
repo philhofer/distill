@@ -292,7 +292,7 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define gawk
   (cmmi-package
-   "gawk" "5.1.1" ; fixme: update to 5.1.1
+   "gawk" "5.1.1"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
    "Y4zSltM6gbfzZNfhOBXg3atxxKnRAigKsuOwgYIDldE="
    cleanup: '(rm -f /out/usr/bin/awk)))
@@ -358,14 +358,14 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define skalibs
   (ska-cmmi-package
-   "skalibs" "2.11.0.0" ; fixme: upgrade to 2.11.1.0
-   "wPDqmXfAncWrgLe-EOT8nAuVcTZ2btCKTOiZFgc5nGw="
+   "skalibs" "2.11.2.0"
+   "CuQbb_RZR4eAO2eSnRMmhqLkhxU9bgDcHoLWDiq7PSQ="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define libexecline+tools
   (ska-cmmi-package
-   "execline" "2.8.1.0" ; fixme: upgrade to 2.8.2.0
-   "WZOWlNlK-wWMD44KjGNAeM9vnopdlQWkBG5hOCiWgq8="
+   "execline" "2.8.3.0"
+   "iWsBP9gGN-QQ_LF9NuUZI_Ib1pB89Kb_3fpHxLplYo0="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-pedantic-posix
@@ -376,9 +376,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define byacc
   (cmmi-package
-   "byacc" "20220109"
+   "byacc" "20220128"
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-   "gpJawVBNTTaOvs_xix1tzVHmJp2Mu9f7LlCGdBTv6p4="
+   "nzx8cHlcSJoL03paszxg-VL0tx5y5UyJq0QvIeHOotA="
    extra-configure: '(--enable-btyacc)))
 
 (define reflex
@@ -425,13 +425,18 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
   (memoize-eq
    (lambda (target-triple)
      (cmmi-package
-      "binutils" "2.37"
+      "binutils" "2.38"
       "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-      "m29aXIuswEe57fzacV7oDPhxGayaCqH2Dy2NTU7lkxQ="
+      "fz3l6EYpV9VxmpK6eqqmm5Osw2ZPSp216DfUGn3UMIc="
       tools: (list byacc reflex)
       libs:  (list zlib)
       native-cc: $cc-env/for-build
-      prepare: '(sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in)
+      prepare: (elif*
+                '(sed "-i" -e "s/^SUBDIRS =.*/SUBDIRS =/" binutils/Makefile.in)
+                ;; starting in 2.38 this Makefile will spuriously
+                ;; try to update gas/doc/as.{1, info} even though we haven't
+                ;; modified anything, so we have to force it to ignore them
+                '(sed "-i" -e "/^man_MANS/d" -e "/^INFO_DEPS/d" gas/Makefile.in))
       override-configure: `(--disable-nls
                             --disable-shared --enable-static
                             --disable-multilib --enable-gold=yes --with-ppl=no
@@ -821,9 +826,9 @@ EOF
                               "BUILD_"
                               (keyword->string kw))))))))
     (cmmi-package
-     "e2fsprogs" "1.46.3" ; fixme: update to 1.46.5
+     "e2fsprogs" "1.46.5" ; fixme: update to 1.46.5
      "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
-     "a9wXTNQyxErxu4hNgWP21DyOHIXyywbJefD8W9hHAfA="
+     "Eip113QuNmftGCWS7lZQAKUJiO_UEjEw10vcqwMbOTM="
      patches: (include-patchfiles "patches/e2fsprogs/repro.patch")
      native-cc: $buildcc-env
      libs: (list linux-headers)
@@ -855,9 +860,9 @@ EOF
                       '(echo "Fri Apr 3 20:09:47 UTC 2020")
                       shebang: "#!/bin/execlineb -s0")))))
     (cc-package
-     "perl" "5.34.0"
+     "perl" "5.34.1"
      "https://www.cpan.org/src/5.0/$name-$version.tar.gz"
-     "JDhxLyTq0WGUTwwjAp6hebPCPRtXhK4_xLxKxnRzqDk="
+     "PsKqYrS5PK2EUe85Ssd97q10G0tbfuk-drc-1xPwut4="
      tools: (list samedate)
      libs:  (list libbz2 zlib)
      env:   `((BUILD_ZLIB . 0)
@@ -962,12 +967,12 @@ EOF
 
 (define %zstd
   (cc-package
-   "zstd" "1.5.0"
+   "zstd" "1.5.2"
    ;; note: this "release" tarball differs from the automated
    ;; github download release only in gzip timestamp
    ;; (decompressed content is identical)
    "https://github.com/facebook/zstd/releases/download/v$version/zstd-$version.tar.zst"
-   "6xGuojF9IrezHCPWKDFfEhIBz1qxniTEN3u3lIhklOo="
+   "sDh9PpHkoyz3iz9uCElhGyfqYwe-YejI1LszbUri3vs="
    build: (let ((makeflags '(HAVE_PTHREAD=1
                              HAVE_ZLIB=0
                              HAVE_LZMA=0
@@ -1016,16 +1021,16 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.4.2"
+   "libressl" "3.4.3"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "ERYgwxE3DnSRCw9VnJ5blMTxljnX2MUM6f6AaQM35bY="
+   "NyO2alBlQxXcsi2mkP4YL5OXV8nw4bHwAdyVM_SJISk="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
   (cmmi-package
-   "libarchive" "3.5.2"
+   "libarchive" "3.6.0"
    "https://libarchive.org/downloads/$name-$version.tar.gz"
-   "PTw4RAD0ld68diP_8vueOv0eP0mZz3KwyoYmhWXI724="
+   "MnfvhkCb-jgRJCxC7LEMCduMCKt02i9OgT-PnZAGofI="
    libs: (list libbz2 zlib liblzma liblz4 libressl libzstd)
    extra-configure: '(--without-xml2 --without-acl --without-attr --without-expat)))
 
@@ -1041,9 +1046,9 @@ EOF
 
 (define libnftnl
   (cmmi-package
-   "libnftnl" "1.2.0"
+   "libnftnl" "1.2.1"
    "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-   "J2UoEzmRmIwDXp055lfdO1-w73L1YMx_2KS44geRCbw="
+   "xi9ibi538JBHwTxx3zBmM5EKXOUoDdlWeTmRj6CGTCg="
    libs: (list linux-headers libmnl)
    extra-configure: '(LIBMNL_CFLAGS=-lmnl
                       LIBMNL_LIBS=-lmnl)))
@@ -1076,21 +1081,24 @@ EOF
                          "TC_CONFIG_IPSET:=y"
                          "TC_CONFIG_NO_XT:=y"
                          "HAVE_MNL:=y"
-                         "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL"
+                         "CFLAGS += -DHAVE_ELF -DHAVE_SETNS -DHAVE_LIBMNL -DHAVE_HANDLE_AT"
                          "LDLIBS += -lelf -lmnl -lz"
                          "%.o: %.c"
                          "\t$(CC) $(CFLAGS) -c -o $@ $<")))))))
     (cc-package
-     "iproute2" "5.13.0"
+     "iproute2" "5.16.0"
      "https://kernel.org/pub/linux/utils/net/$name/$name-$version.tar.xz"
-     "SFUdMngYxFuQR7fc4KPbW_TdtkMmTrfZFivHiStz_kQ="
-     patches: (include-patchfiles
-               "patches/iproute2/musl-fixes.patch")
+     "HCQC_zqjL1qA8mpncBHnIwZKFgpaSxzKkDN_eMVIaMY="
      cross: (list config.mk)
      libs:  (list linux-headers iptables libmnl libelf zlib)
      build: (elif*
              '(cp /src/config.mk config.mk)
-             '(sed "-i" -e "/^SUBDIRS/s: netem::" Makefile)
+             ;; turn of -Werror because of some ioctl redefinitions
+             ;; that happen due to aggressive #include-ing of linux headers
+             '(sed "-i" -e "/^SUBDIRS/s: netem::"
+                   -e "s/-Werror//" Makefile)
+             ;; use <linux/ax25.h> instead of <netax25/ax25.h>
+             '(sed "-i" -e "s:netax25/ax25.h:linux/ax25.h:" lib/ax25_ntop.c)
              `(make ,(el= 'CCOPTS= $CFLAGS) SHARED_LIBS=n PREFIX=/usr all)
              '(make SHARED_LIBS=n DESTDIR=/out PREFIX=/usr install)
              '(rm -rf /out/usr/share/bash-completion)
@@ -1100,8 +1108,8 @@ EOF
 
 (define libs6+tools
   (ska-cmmi-package
-   "s6" "2.11.0.0"
-   "oSVPiQwoBfEoL6Vj6Rac-8lnehNoThNfvmyI_hu11FA="
+   "s6" "2.11.1.0"
+   "s5EmIXy4VejeGMwPeDlKo0iZgw-f5jgXWjUpVK4Hw6Y="
    libs: (list skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-static-libc)))
@@ -1111,8 +1119,8 @@ EOF
 
 (define libs6rc+tools
   (ska-cmmi-package
-   "s6-rc" "0.5.2.3"
-   "pMapqPgXMblKqtnog-AMtFD49IR777C9b3XIoVKT1-Q="
+   "s6-rc" "0.5.3.0"
+   "JmC858qd9fwxj3rEZC_wnZ9-tZIcR6B7VhrbvPFs7TE="
    libs: (list libs6 skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-static-libc)))
