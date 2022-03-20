@@ -6,9 +6,9 @@
 
 (define pcre2
   (cmmi-package
-   "pcre2" "10.37"
-   "https://ftp.pcre.org/pub/pcre/$name-$version.tar.gz"
-   "LxMxFsAM7PGZw1RkNNIsJpMCKESjMGcl5mInkzqNR5E="
+   "pcre2" "10.39"
+   "https://github.com/PhilipHazel/$name/releases/download/$name-$version/$name-$version.tar.gz"
+   "hNbA-qLBCvua54FBvqWv28a6qSnGyp7udmdXkFrBGKg="
    libs: (list libedit zlib libbz2)
    extra-configure: '(--disable-dependency-tracking
                       --enable-pcre2-16

@@ -4,6 +4,6 @@
 
 (define jansson
   (cmmi-package
-   "jansson" "2.13.1"
-   "https://digip.org/jansson/releases/$name-$version.tar.gz"
-   "KjlNqNjgMQ-LC47KwidsGWBvPoq-t6-cFRdqTKjusCE="))
+   "jansson" "2.14"
+   "https://github.com/akheron/jansson/releases/download/v2.14/jansson-2.14.tar.gz"
+   "oxKfOetEvU3jJgBQRUlnVv5MXE19r7sU16TZSeU9Dcw="))

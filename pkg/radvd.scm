@@ -6,9 +6,9 @@
 
 (define radvd
   (cmmi-package
-   "radvd" "2.18"
-   "http://www.litech.org/radvd/dist/$name-$version.tar.gz"
-   "gW8OC5o88wIBD9PJYCDtUIG0bX4Zn_VTkkjO2KlLGpI="
+   "radvd" "2.19"
+   "http://radvd.litech.org/dist/$name-$version.tar.gz"
+   "tl0TxVd1tDPDPpG78PU4lBUCLGdKJtnsQELgr0tuPhY="
    tools: (list byacc reflex)
    libs: (list linux-headers)
    ;; fix compat issues with byacc:

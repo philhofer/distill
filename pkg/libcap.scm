@@ -11,9 +11,9 @@
          ($my-cflags        (config+= $CFLAGS '(-D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64)))
          ($cflags-for-build (config+= $build-CFLAGS '("-I./include" "-I./include/uapi"))))
     (cc-package
-     "libcap" "2.52"
+     "libcap" "2.63"
      "https://kernel.org/pub/linux/libs/security/linux-privs/$name2/$name-$version.tar.gz"
-     "7Xeifn64k0DlSlS9lsRkzOtTqvggNMVv0hBKjT8Gjfs="
+     "dGd7bOfWuSIHG_ruOpy19R9y1I7eMIP9T9UXP0dQryc="
      use-native-cc: #t
      tools: (list perl linux-headers)
      libs:  (list linux-headers)
