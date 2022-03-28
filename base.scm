@@ -396,9 +396,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define zlib
   (cmmi-package
-   "zlib" "1.2.11"
+   "zlib" "1.2.12"
    "https://zlib.net/$name-$version.tar.gz"
-   "K3Q8ig9qMtClPdpflHwS8OkSMrLVItBzEu5beP_szJA="
+   "LBnkZG7COLk4c08FH4Kr7JJ2GbLEJgGxUYofBKcmgVA="
    ;; not autoconf
    override-configure: '(--static --prefix=/usr --libdir=/lib)))
 
