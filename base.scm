@@ -622,8 +622,8 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    (cdn-artifact "eKDTI4zJ4jm7TrfB7gHkFntuMDwftgeBipnBkMp0y1w=" "/src/config" #o644)
    '()))
 
-(define *linux-version* "5.10.103")
-(define *linux-hash* "Aw8PDfRPsAIFSic8LaaJc1AdIr7W5eU3Cecd2Xkt9fM=")
+(define *linux-version* "5.10.110")
+(define *linux-hash* "LBjF-cOyE0fNRkS3MqGvb1WCcCIH4SmODy37Cbts87Y=")
 
 (define (linux-source version hash)
   (remote-archive
