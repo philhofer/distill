@@ -947,7 +947,12 @@ EOF
   (cmmi-package
    "xz" "5.2.5"
    "https://tukaani.org/$name/$name-$version.tar.xz"
-   "-jw6foy_zDVKZ8pXQV2O2i1_6Zcs3efYVg31jflUtcQ="))
+   "-jw6foy_zDVKZ8pXQV2O2i1_6Zcs3efYVg31jflUtcQ="
+   patches: (list
+             (remote-file
+              "https://tukaani.org/xz/xzgrep-ZDI-CAN-16587.patch"
+              "cR1qEV_ROOSD7HTzd2HCaHb0pGOwdjq1VQRpPvCvRvg="
+              "/src/xzgrep-ZDI-CAN-16587.patch" #o644))))
 
 (define xz-tools (binaries xz-utils))
 (define liblzma (libs xz-utils))
