@@ -1,5 +1,6 @@
 (import
  scheme
+ matchable
  (srfi 69)
  (chicken eval)
  (chicken process-context)
@@ -120,7 +121,7 @@
                     (for-each
                      (lambda (form)
                        (when (form? 'import form)
-                         (scan-imports form)))
+                         (scan-imports (cdr form))))
                      forms)
                     (real-eval
                      `(module (,kind ,sym)
@@ -129,19 +130,24 @@
                   (fatal "couldn't locate" fullname))))))))
 
 (define (scan-imports lst)
-  (for-each
-   (lambda (im)
-     (and-let* ((_ (pair? im))
-                (h (car im))
-                (_ (memq h '(pkg svc plat))))
-               (push-exception-wrapper
-                (lambda (exn)
-                  (print-error-message exn)
-                  (info "couldn't load" im exn)
-                  exn)
-                (lambda ()
-                  (load-builtin h (cadr im))))))
-   lst))
+  (let* ((special? (lambda (x)
+                     (memq x '(pkg svc plat))))
+         (prefix?  (lambda (x)
+                     (memq x '(rename only prefix except))))
+         (%load    (lambda (h in)
+                     (push-exception-wrapper
+                      (lambda (exn)
+                        (print-error-message exn)
+                        (info "couldn't load" in exn))
+                      (lambda ()
+                        (load-builtin h in)))))
+         (scan!    (match-lambda
+                    (((? special? h) im)
+                     (%load h im))
+                    (((? prefix?) ((? special? h) im) . rest)
+                     (%load h im))
+                    (else #f))))
+    (for-each scan! lst)))
 
 (define (%load file)
   (with-input-from-file file
