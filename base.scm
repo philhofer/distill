@@ -208,8 +208,8 @@
 
 (define *musl-url*
   "https://www.musl-libc.org/releases/musl-$version.tar.gz")
-(define *musl-version* "1.2.2")
-(define *musl-hash* "VyzTwxxNZsDuAOvNXjEfgdTTE78k0mslq9QnfbpXgLA=")
+(define *musl-version* "1.2.3")
+(define *musl-hash* "eouPWWIATwr25CKhvQdjHPWR8izi_1U0IieVLSK8-T8=")
 
 (define (musl-arch-name triple)
   (let ((arch (triple->arch triple)))
@@ -622,8 +622,8 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    (cdn-artifact "eKDTI4zJ4jm7TrfB7gHkFntuMDwftgeBipnBkMp0y1w=" "/src/config" #o644)
    '()))
 
-(define *linux-version* "5.10.110")
-(define *linux-hash* "LBjF-cOyE0fNRkS3MqGvb1WCcCIH4SmODy37Cbts87Y=")
+(define *linux-version* "5.10.115")
+(define *linux-hash* "vAgSU2CFzkQuhGlxdOpZDt1hIWtdbjR8s4hW8jqG92E=")
 
 (define (linux-source version hash)
   (remote-archive
@@ -826,7 +826,7 @@ EOF
                               "BUILD_"
                               (keyword->string kw))))))))
     (cmmi-package
-     "e2fsprogs" "1.46.5" ; fixme: update to 1.46.5
+     "e2fsprogs" "1.46.5"
      "https://kernel.org/pub/linux/kernel/people/tytso/$name/v$version/$name-$version.tar.xz"
      "Eip113QuNmftGCWS7lZQAKUJiO_UEjEw10vcqwMbOTM="
      patches: (include-patchfiles "patches/e2fsprogs/repro.patch")
@@ -1026,16 +1026,16 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.4.3"
+   "libressl" "3.5.2"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "NyO2alBlQxXcsi2mkP4YL5OXV8nw4bHwAdyVM_SJISk="
+   "l6Vir3-d3_8OUACazBIhTjhjVL7VzLkz0vtoTKUek48="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
   (cmmi-package
-   "libarchive" "3.6.0"
+   "libarchive" "3.6.1"
    "https://libarchive.org/downloads/$name-$version.tar.gz"
-   "MnfvhkCb-jgRJCxC7LEMCduMCKt02i9OgT-PnZAGofI="
+   "o14SamhHgNxq7EKKydMAw11vLXpF3bi59zNCtLDqroY="
    libs: (list libbz2 zlib liblzma liblz4 libressl libzstd)
    extra-configure: '(--without-xml2 --without-acl --without-attr --without-expat)))
 
@@ -1044,9 +1044,9 @@ EOF
 
 (define libmnl
   (cmmi-package
-   "libmnl" "1.0.4"
+   "libmnl" "1.0.5"
    "https://netfilter.org/projects/$name/files/$name-$version.tar.bz2"
-   "kUOLXuIdscWD_5WHBvAIuytyuy-gGm_LXen3TWodgNs="
+   "gJgmdhcxD97hhDcRj_A75dXY83ar2eZKZ5941c5QCRM="
    libs: (list linux-headers)))
 
 (define libnftnl
