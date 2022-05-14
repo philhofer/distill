@@ -59,10 +59,10 @@
     (if extra (cons extra tail) tail)))
 
 (define *go-src*
-  (let ((ver "1.17.6"))
+  (let ((ver "1.18.2"))
     (remote-archive
      (conc "https://dl.google.com/go/go" ver ".src.tar.gz")
-     "G4dqM5pT9SwN92rq012IPA15hwJZ35jXB8DYDRENoUs=")))
+     "bRkwOtHRDEF36WxWNTyb4VMdMUCDxQO5KOmpc_U7J-M=")))
 
 (define go
   (package-template
