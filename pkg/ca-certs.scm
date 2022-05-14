@@ -4,6 +4,6 @@
 
 (define ca-certs
   (remote-file
-   "https://curl.se/ca/cacert-2022-02-01.pem"
-   "mS2foynIlJ6B08LZmkOyQYd1NRtQl0w2spRFLuuWsdY="
+   "https://curl.se/ca/cacert-2022-04-26.pem"
+   "NB5IiqcOSglBeFfDd1xW95TkNFMPH_q1f_zAZlSDJ7M="
    "/etc/ssl/cert.pem" #o644))
