@@ -70,14 +70,15 @@ archive_link(const char *abs, const char *rel, struct archive *dst)
     if (!ent)
         err(1, "archive_entry_new");
     archive_entry_copy_pathname(ent, rel);
+    archive_entry_set_filetype(ent, AE_IFLNK);
     archive_entry_copy_symlink(ent, linkbuf);
-
     archive_entry_unset_atime(ent);
     archive_entry_unset_mtime(ent);
     archive_entry_unset_ctime(ent);
     archive_entry_set_uid(ent, 0);
     archive_entry_set_gid(ent, 0);
     archive_write_header(dst, ent);
+
     archive_entry_free(ent);
     return 0;
 }
@@ -127,7 +128,29 @@ static int
 archive_dir(const char *abs, const char *rel, struct archive *dst)
 {
     int n, rc, i;
+    struct stat stbuf;
     struct dirent **namelist;
+    struct archive_entry *ent;
+
+    if (stat(abs, &stbuf) < 0)
+        err(1, "stat %s", abs);
+    if (!S_ISDIR(stbuf.st_mode))
+        errx(1, "stat %s is not a directory?", abs);
+    ent = archive_entry_new();
+    if (!ent)
+        err(1, "archive_entry_new");
+    archive_entry_copy_pathname(ent, rel);
+    archive_entry_set_filetype(ent, AE_IFDIR);
+    archive_entry_set_mode(ent, stbuf.st_mode);
+    archive_entry_unset_atime(ent);
+    archive_entry_unset_mtime(ent);
+    archive_entry_unset_ctime(ent);
+    archive_entry_set_uid(ent, 0);
+    archive_entry_set_gid(ent, 0);
+    archive_write_header(dst, ent);
+
+    archive_entry_free(ent);
+
     n = scandir(abs, &namelist, &can_archive, &namecmp);
     if (n < 0)
         return n;
