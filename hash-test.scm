@@ -1,8 +1,10 @@
 (import
  scheme
  (distill hash)
+ (distill archive)
  (chicken base)
  (chicken port)
+ (chicken file)
  (chicken io))
 
 (include "test-helpers.scm")
@@ -41,4 +43,19 @@
    strs))
 
 (test-same-file-hashes "hash.scm")
+
+(let ((tmpfile "pkgs.tar.zst"))
+  (delete-file* tmpfile)
+  (let ((outhash (dir->tar.zst "pkg" tmpfile)))
+    (test string=? outhash (hash-file tmpfile))
+    (delete-file tmpfile)
+    (display "archive test OK.\n")))
+
+(let ((tmpfile "fork.pkgs.tar.zst"))
+  (delete-file* tmpfile)
+  (let ((outhash (fork+dir->tar.zst "pkg" tmpfile)))
+    (test string=? outhash (hash-file tmpfile))
+    (delete-file tmpfile)
+    (display "archive fork test OK.\n")))
+
 (display "hash test OK.\n")

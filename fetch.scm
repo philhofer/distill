@@ -95,15 +95,17 @@
 (define *hash-unavailable*
   (make-hash-table test: string=? hash: string-hash))
 
-(: fetch-artifact ((or false string) string string -> *))
-(define (fetch-artifact src dstdir hash #!optional (on-failure (lambda ()
-                                                                 (fatal "download failed"))))
+(: fetch-artifact ((or false string) string string #!optional (or false (-> *)) -> *))
+(define (fetch-artifact src dstdir hash #!optional (on-failure #f))
   (let* ((fetchit  (fetcher src hash))
          (download (lambda (dst)
-                     (fetchit dst)
-                     (hash-file dst)))
+                     (and (fetchit dst)
+                          (hash-file dst))))
          (dst      (filepath-join dstdir hash))
-         (tmp      (string-append dst ".tmp")))
+         (tmp      (string-append dst ".tmp"))
+         (fail     (or on-failure
+                       (lambda ()
+                         (fatal "download from" src "failed")))))
     (with-locked-hash
      hash
      (lambda ()
@@ -113,13 +115,13 @@
        (delete-file* tmp)
        (or (file-exists? dst)
            (if (hash-table-ref/default *hash-unavailable* hash #f)
-               (on-failure)
+               (fail)
                (let ((h (download tmp)))
                  (cond
                   ((not h)
                    (begin
                      (hash-table-set! *hash-unavailable* hash #t)
-                     (on-failure)))
+                     (fail)))
                   ((string=? h hash)
                    (rename-file tmp dst #t))
                   (else

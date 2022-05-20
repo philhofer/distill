@@ -27,6 +27,7 @@
 ;; in the binding environment
 (let ()
   (import
+   (distill archive)
    (distill service)
    (distill fs)
    (distill image)

@@ -1,5 +1,6 @@
 (import
  scheme
+ (distill base)
  (distill plan)
  (distill package)
  (distill execline)
@@ -27,6 +28,7 @@
       "https://b2cdn.sunfi.sh/file/pub-cdn/" hash)
      hash
      tools:  (list chicken)
+     inputs: (list libzstd libarchive)
      build:  `(make DESTDIR=/out
                 PREFIX=/usr
                 CSI=/usr/bin/csi

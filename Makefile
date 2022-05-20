@@ -14,7 +14,7 @@ export CFLAGS ?= -ffunction-sections -fdata-sections -static-pie -O2
 export CHICKEN_FEATURES
 export CHICKEN_FLAGS := -optimize-level 3 -disable-interrupts -clustering -setup-mode \
 		-include-path libchicken/ -consult-types-file libchicken/types.db
-export LDFLAGS ?= -Wl,-gc-sections
+export LDFLAGS ?= -larchive -lzstd -Wl,-gc-sections
 
 SLDS:=$(wildcard *.sld)
 MODS:=$(SLDS:%.sld=%.mod.scm)
@@ -25,7 +25,8 @@ UNITS:=distill.fetch distill.hash distill.nproc \
 	distill.image distill.unix distill.tai64 \
 	distill.service distill.sysctl distill.fs \
 	distill.net distill.kvector distill.contract \
-	distill.coroutine distill.sandbox srfi-69 matchable
+	distill.coroutine distill.sandbox distill.archive \
+	srfi-69 matchable
 
 BUILTINS:=$(wildcard pkg/*.scm) $(wildcard plat/*.scm) $(wildcard svc/*.scm)
 
@@ -57,7 +58,8 @@ include Makefile.dep
 distill.plan.c: copy-sparse.c
 distill.hash.c: blake2b-ref.c blake2.h blake2-impl.h
 distill.tai64.c: tai64.inc.h
-distill.coroutine.c: coroutine.inc.h 
+distill.coroutine.c: coroutine.inc.h
+distill.archive.c: archive.h
 
 %.c %.import.scm: vendor/%.scm
 	$(CHICKEN) $< -unit $* -static $(CHICKEN_FEATURES) $(CHICKEN_FLAGS) \
