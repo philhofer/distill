@@ -54,18 +54,19 @@
      #f
      archive
      dir: "/distill"
-     tools:  (list chicken)
-     build:  `(make DESTDIR=/out
-                PREFIX=/usr
-                CSI=/usr/bin/csi
-                CHICKEN=/usr/bin/chicken
-                ,(el= 'VERSION= git-sha)
-                ,(el= 'CHICKEN_FEATURES= $chicken-features)
-                ,(el= 'AR= $AR)
-                ,(el= 'CC= $CC)
-                ,(el= 'CFLAGS= $cflags)
-                ,(el= 'LDFLAGS= $LDFLAGS)
-                install))))
+     tools: (list chicken)
+     libs:  (list libarchive libzstd)
+     build: `(make DESTDIR=/out
+               PREFIX=/usr
+               CSI=/usr/bin/csi
+               CHICKEN=/usr/bin/chicken
+               ,(el= 'VERSION= git-sha)
+               ,(el= 'CHICKEN_FEATURES= $chicken-features)
+               ,(el= 'AR= $AR)
+               ,(el= 'CC= $CC)
+               ,(el= 'CFLAGS= $cflags)
+               ,(el= 'LDFLAGS= $LDFLAGS)
+               install))))
 
 (let* ((println (lambda args
                   (for-each display args) (newline)))

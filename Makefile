@@ -14,7 +14,8 @@ export CFLAGS ?= -ffunction-sections -fdata-sections -static-pie -O2
 export CHICKEN_FEATURES
 export CHICKEN_FLAGS := -optimize-level 3 -disable-interrupts -clustering -setup-mode \
 		-include-path libchicken/ -consult-types-file libchicken/types.db
-export LDFLAGS ?= -larchive -lzstd -Wl,-gc-sections
+export LDFLAGS ?= -Wl,-gc-sections
+LDLIBS ?= -larchive -lzstd
 
 SLDS:=$(wildcard *.sld)
 MODS:=$(SLDS:%.sld=%.mod.scm)
@@ -83,7 +84,7 @@ distill.c: distill.scm ${UNITS:%=%.import.scm} $(BUILTINS)
 	$(CC) $(NEEDED_CFLAGS) $(CFLAGS) -I./libchicken -c $^ -o $@
 
 distill: distill.o ${UNITS:%=%.o} libchicken/libchicken.a
-	$(CC) $(NEEDED_CFLAGS) $(CFLAGS) -I./libchicken -o $@ $^ $(LDFLAGS) libchicken/libchicken.a
+	$(CC) $(NEEDED_CFLAGS) $(CFLAGS) -I./libchicken -o $@ $^ $(LDLIBS) $(LDFLAGS) libchicken/libchicken.a
 
 TESTS:=$(wildcard *-test.scm)
 test: distill $(TESTS)
