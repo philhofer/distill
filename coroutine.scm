@@ -77,19 +77,20 @@
        (else (error "fdwrite: errno:" (- ret)))))))
 
 (: fdread (fixnum (or string u8vector) #!rest * -> integer))
-(define (fdread fd buf #!optional size)
-  (let* ((%raw-read  (foreign-lambda* long ((int fd) (scheme-pointer mem) (size_t sz))
-                       "long out; out=read(fd,mem,sz); C_return(out>=0?out:-errno);"))
+(define (fdread fd buf #!optional size offset)
+  (let* ((%raw-read  (foreign-lambda* long ((int fd) (scheme-pointer mem) (size_t sz) (size_t off))
+                       "long out; out=read(fd,((char *)mem)+off,sz); C_return(out>=0?out:-errno);"))
          (buflen (cond
                   ((string? buf) (string-length buf))
                   ((u8vector? buf) (u8vector-length buf))
                   (else (error "bad buf argument to fdread:" buf))))
-         (size   (or size buflen)))
-    (let loop ((ret (%raw-read fd buf size)))
+         (offset (or offset 0))
+         (size   (or size (- buflen offset))))
+    (let loop ((ret (%raw-read fd buf size offset)))
       (cond
        ((>= ret 0) ret)
        ((= ret (- eintr))
-        (loop (%raw-read fd buf size)))
+        (loop (%raw-read fd buf size offset)))
        ((= ret (- eagain))
         (begin
           (queue-wait!
@@ -98,8 +99,22 @@
             fd
             identity
             (cons '() '())))
-          (loop (%raw-read fd buf size))))
+          (loop (%raw-read fd buf size offset))))
        (else (error "fdread: errno:" (- ret)))))))
+
+;; fdread-exact reads 'size' bytes (or until #!eof)
+;; from fd and returns a string containing the consumed data
+(: fdread-exact (fixnum fixnum -> string))
+(define (fdread-exact fd size)
+  (let ((buf (make-string size)))
+    (let loop ((offset 0)
+               (remain size))
+      (if (= remain 0)
+          buf
+          (let ((rc (fdread fd buf remain offset)))
+            (if (= rc 0)
+                (substring buf 0 offset)
+                (loop (+ offset rc) (- remain rc))))))))
 
 (define (%poll-fds)
   (let ((%raw-poll (foreign-lambda int do_poll s32vector int s32vector int bool))

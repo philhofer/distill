@@ -483,6 +483,10 @@
       (and (plan-resolved? p)
            (let* ((h   (with-interned-output
                         (lambda ()
+                          ;; the nonce comment here needs to get bumped
+                          ;; each time we change the data included in plans
+                          ;; or the way archives are produced
+                          (display ";; version-nonce v0.0.1\n")
                           (write (canonicalize! (plan-inputs p))))))
                   (dir (filepath-join (plan-dir) h))
                   (lfd (string-append dir "/label")))
@@ -681,9 +685,9 @@
 ;; and returns its hash;
 ;; the interning operation may rename the file,
 ;; or it will copy the file while preserving holes
-(: intern! (string -> string))
-(define (intern! fp)
-  (let ((h (hash-file fp)))
+(: intern! (string (or string false) -> string))
+(define (intern! fp h)
+  (let ((h (or h (hash-file fp))))
     (unless h (error "couldn't find file" fp))
     (let ((dst (filepath-join (artifact-dir) h)))
       (if (and (file-exists? dst) (string=? (hash-file dst) h))
@@ -699,7 +703,7 @@
 (: file->artifact (string string -> artifact))
 (define (file->artifact f abspath)
   (let ((perm (file-permissions f))
-        (h    (intern! f)))
+        (h    (intern! f #f)))
     (vector
      `#(file ,abspath ,perm)
      h
@@ -707,30 +711,11 @@
 
 (: dir->artifact (string -> artifact))
 (define (dir->artifact dir)
-  (let* ((suffix ".tar.zst")
-         (format 'tar.zst)
-         (tmp    (create-temporary-file suffix)))
-    ;; producing a fully-reproducible tar archive
-    ;; is, unfortunately, a minefield
-    (run
-     "env"
-     (list
-      "LC_ALL=C.UTF-8" ;; necessary for --sort=name to be stable
-      "tar"
-      ;; TODO: make sure zstd is invoked with explicit
-      ;; compression-level and threading arguments to keep
-      ;; that from being a possible source of reproducibility issues,
-      ;; _or_ calculate the checksum on the uncompressed archive
-      "-Izstd"
-      "-cf" (abspath tmp)
-      "--format=ustar"
-      "--sort=name"
-      "--owner=0"
-      "--group=0"
-      "--mtime=@0"
-      "--numeric-owner"
-      "-C" dir "."))
-    (local-archive format (intern! tmp))))
+  (let* ((suffix  ".tar.zst")
+         (format  'tar.zst)
+         (tmp     (create-temporary-file suffix))
+         (outhash (fork+dir->tar.zst dir tmp)))
+    (local-archive format (intern! tmp outhash))))
 
 ;; plan->outputs! builds a plan and yields
 ;; the list of interned file handles that are installed

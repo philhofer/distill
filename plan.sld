@@ -82,5 +82,6 @@
     (distill tai64)
     (distill hash)
     (distill sandbox)
+    (distill archive)
     (distill fetch))
   (include "plan.scm"))

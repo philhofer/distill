@@ -9,6 +9,7 @@
     with-spawn
     fdwrite
     fdread
+    fdread-exact
     fdpipe
     fdclose
     join/value
@@ -29,6 +30,7 @@
                (chicken condition)
                (chicken foreign)
                (chicken fixnum)
+               (only (chicken port) make-input-port)
                (only (chicken base) include error when call/cc identity
                      define-constant unless)
                (only (chicken process) process-wait))))
