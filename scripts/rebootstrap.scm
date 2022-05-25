@@ -19,7 +19,10 @@
        (leaf    ($leaf conf))
        (ctools  (o cc-toolchain-tools $cc-toolchain))
        (expn    (expander conf))
-       (tools   (ctools conf))
+       (tools   (append
+                 (%execline conf)
+                 (%archive-tools conf)
+                 (ctools conf)))
        (boots   (ctools leaf))
        (plans   (map expn tools))
        (_       (build-graph! plans))

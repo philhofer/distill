@@ -15,7 +15,6 @@
     make-input
     input-link
     input-basedir
-    input-wrap
     input?
 
     for-each-anchor
@@ -82,6 +81,5 @@
     (distill tai64)
     (distill hash)
     (distill sandbox)
-    (distill archive)
     (distill fetch))
   (include "plan.scm"))

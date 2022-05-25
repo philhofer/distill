@@ -99,6 +99,7 @@
     libzstd
     libarchive
     bsdtar
+    tar
 
     ; ssl
     libressl

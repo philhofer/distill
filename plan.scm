@@ -260,17 +260,12 @@
   ;; link points to the actual input value
   ;; (either an artifact or a plan)
   (input-link    link:    #f  vector?)
-  ;; wrap is applied to the output of link
-  ;; when the plan is resolved; after that
-  ;; it is set to #f
-  (input-wrap    wrap:    #f  (perhaps procedure?))
   ;; input-saved is set to the original
   ;; value of link when link is edited
   ;; to point to the output of an artifact
   (input-saved   saved:   #f  (perhaps vector?)))
 
 (define input-set-link!  (kvector-setter <input> link:))
-(define input-set-wrap!  (kvector-setter <input> wrap:))
 (define input-set-saved! (kvector-setter <input> saved:))
 
 (define-kvector-type
@@ -298,12 +293,10 @@
      ((plan? link)
       (let ((art (plan-outputs link)))
         (and art
-             (let* ((wr  (or (input-wrap in) identity))
-                    (val (wr art)))
-               (input-set-link! in val)
-               (input-set-wrap! in #f)
+             (begin
+               (input-set-link! in art)
                (input-set-saved! in link)
-               val))))
+               art))))
      (else (error "unexpected <input> link value" link)))))
 
 (define *hash-unavailable* (make-hash-table hash: string-hash))
@@ -709,17 +702,14 @@
      h
      #f)))
 
-(: dir->artifact (string -> artifact))
-(define (dir->artifact dir)
+(: result->artifact (string -> artifact))
+(define (result->artifact f)
   (let* ((suffix  ".tar.zst")
-         (format  'tar.zst)
-         (tmp     (create-temporary-file suffix))
-         (outhash (fork+dir->tar.zst dir tmp)))
-    (local-archive format (intern! tmp outhash))))
+         (format  'tar.zst))
+    (local-archive format (intern! f #f))))
 
 ;; plan->outputs! builds a plan and yields
-;; the list of interned file handles that are installed
-;; into the /out directory in the jail
+;; the result of the build
 ;;
 ;; all of the input plan's dependencies must
 ;; have been built (i.e. have plan-outputs)
@@ -761,9 +751,9 @@
 
      ;; now save the actual build outputs
      (let ((raw (plan-raw-output p)))
-       (if raw
+       (if (and raw (not (equal? raw "/result.tar.zst")))
            (file->artifact (filepath-join outdir raw) raw)
-           (dir->artifact outdir))))))
+           (result->artifact (filepath-join root "result.tar.zst")))))))
 
 ;; live-artifact-hashes walks a list of
 ;; plans and artifacts and produces a hash table

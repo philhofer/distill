@@ -108,7 +108,6 @@
                  (binutils-for-triple triple)
                  exportall
                  make
-                 execline-tools
                  busybox-core))
      ;; it must be possible to build these with only 'tools:'
      libc: (list musl libssp-nonshared)
@@ -186,6 +185,10 @@
      triple:       triple
      build:        build
      bootstrap:    bootstrap
+     ;; FIXME: we could be more specific with
+     ;; the required prebuilts here...
+     archive:      (or prebuilt (list tar zstd))
+     execline:     (or prebuilt (list execline-tools))
      cc-toolchain: (gcc+musl-toolchain triple CFLAGS: cflags CXXFLAGS: cflags prebuilt: prebuilt)
      native-cc-toolchain: (gcc-native-toolchain triple))))
 
@@ -993,6 +996,14 @@ EOF
 
 (define zstd (binaries %zstd))
 (define libzstd (libs %zstd))
+
+(define tar
+  (cmmi-package
+   "tar" "1.34"
+   "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
+   "ghz7FwomEuqMQMrc9I6ryBMNwSmMIM3XiqSe9rcl5Y0="
+   env: '((gl_cv_func_gettimeofday_clobber . no)
+          (gl_cv_func_tzset_clobber . no))))
 
 (define squashfs-tools
   (let ((ver "4.5"))

@@ -15,7 +15,6 @@ export CHICKEN_FEATURES
 export CHICKEN_FLAGS := -optimize-level 3 -disable-interrupts -clustering -setup-mode \
 		-include-path libchicken/ -consult-types-file libchicken/types.db
 export LDFLAGS ?= -Wl,-gc-sections
-LDLIBS ?= -larchive -lzstd
 
 SLDS:=$(wildcard *.sld)
 MODS:=$(SLDS:%.sld=%.mod.scm)
@@ -26,7 +25,7 @@ UNITS:=distill.fetch distill.hash distill.nproc \
 	distill.image distill.unix distill.tai64 \
 	distill.service distill.sysctl distill.fs \
 	distill.net distill.kvector distill.contract \
-	distill.coroutine distill.sandbox distill.archive \
+	distill.coroutine distill.sandbox \
 	srfi-69 matchable
 
 BUILTINS:=$(wildcard pkg/*.scm) $(wildcard plat/*.scm) $(wildcard svc/*.scm)
@@ -60,7 +59,6 @@ distill.plan.c: copy-sparse.c
 distill.hash.c: blake2b-ref.c blake2.h blake2-impl.h
 distill.tai64.c: tai64.inc.h
 distill.coroutine.c: coroutine.inc.h
-distill.archive.c: archive.h
 
 %.c %.import.scm: vendor/%.scm
 	$(CHICKEN) $< -unit $* -static $(CHICKEN_FEATURES) $(CHICKEN_FLAGS) \
@@ -84,7 +82,7 @@ distill.c: distill.scm ${UNITS:%=%.import.scm} $(BUILTINS)
 	$(CC) $(NEEDED_CFLAGS) $(CFLAGS) -I./libchicken -c $^ -o $@
 
 distill: distill.o ${UNITS:%=%.o} libchicken/libchicken.a
-	$(CC) $(NEEDED_CFLAGS) $(CFLAGS) -I./libchicken -o $@ $^ $(LDLIBS) $(LDFLAGS) libchicken/libchicken.a
+	$(CC) $(NEEDED_CFLAGS) $(CFLAGS) -I./libchicken -o $@ $^ $(LDFLAGS) libchicken/libchicken.a
 
 TESTS:=$(wildcard *-test.scm)
 test: distill $(TESTS)

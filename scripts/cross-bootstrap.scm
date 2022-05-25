@@ -23,7 +23,8 @@
 (define conf (default-config arch))
 (define build! (config->builder conf))
 
-(let* ((alist (build! make exportall execline-tools busybox-core
+(let* ((alist (build! make exportall execline-tools
+                      tar zstd
                       (binutils-for-triple ($triple conf))
                       (gcc-for-triple ($triple conf))))
        (with-urls (map

@@ -43,6 +43,11 @@
 ;;  - env: an alist of environment variables to set
 ;;  - raw-output: either `#f` or the name of the output
 ;;  file that should be treated as an output image
+;;
+;; If raw-output is not specified, then the package-template
+;; automatically adds tar and zstd to the list of tools
+;; and produces the final result at "/result.tar.zst" by
+;; archiving the directory "/out".
 (define (package-template
          #!key
          label
@@ -60,18 +65,31 @@
            (bld       ($build host))
            (strap     (%bootstrap bld))
            (ex        (%current-expander))
-           (boot      ($cc-tools bld))
+           (boot      ($boot-tools bld))
+           (output    (or raw-output "/result.tar.zst"))
+           (build     (if raw-output build `(if ,(if (list? build) build (list build))
+                                                ;; note: the sandbox sets LC_ALL=C.UTF-8,
+                                                ;; so the sort order should be stable here:
+                                                tar -Izstd -cf "/result.tar.zst"
+                                                --format=ustar --sort=name
+                                                --owner=0 --group=0 "--mtime=@0"
+                                                --numeric-owner -C /out ".")))
+           (tools    (if raw-output
+                         ;; just inject execline for raw output:
+                         (append (%execline bld) tools)
+                         ;; inject execline *and* archival tools:
+                         (append (%execline bld) (%archive-tools bld) tools)))
            ;; tools are built with the 'build' config,
-           ;; unless they are part of the build config toolchain,
-           ;; in which case they are built with the bootstrap config
+           ;; unless they are part of bootcc or boottar,
+           ;; in which case they are built with the boostrap config
            (exp/build (lambda (item)
                         (cond
                          ((artifact? item) item)
                          ((plan? item) item)
                          ((memq item boot)
                           (if strap
-                              (ex item strap)
-                              (error "cannot expand item (no bootstrap in <config>)" item)))
+                            (ex item strap)
+                            (error "cannot expand item (no bootstrap in <config>)" item)))
                          (else (ex item bld)))))
            (uncross   (lambda (item)
                         (cond
@@ -198,26 +216,30 @@
 ;; The sub argument indicates the package to be
 ;; used as the base package.
 ;;
-;; The remaining arguments are string glob patterns
-;; that indicate which output files should be part
-;; of the returned package.
+;; The remaining arguments are directories
+;; (relative to ".") that should be included.
 (: subpackage (string * #!rest string -> (vector -> vector)))
-(define (subpackage prefix sub . globs)
+(define (subpackage prefix sub . dirs)
+  (define the-package
+    (package-template
+     label: "overwrite-me"
+     build: `(pipeline (tar -cf -
+                            --ignore-failed-read ;; don't blow up if a glob doesn't match
+                            --format=ustar --sort=name
+                            --owner=0 --group=0 "--mtime=@0"
+                            --numeric-owner -C ,$sysroot ,@dirs)
+                       zstd - -o "/result.tar.zst")
+     tools:  (list %archive-tools) ; explicit due to raw-output
+     inputs: (list sub)
+     no-libc: #t
+     raw-output: "/result.tar.zst"))
   (lambda (conf)
-    (let ((child (configure sub conf)))
-      (make-plan
-       name: (string-append
-              prefix
-              (if (plan? child)
-                  (plan-name child)
-                  "unknown"))
-       inputs: (list
-                (make-input
-                 basedir: "/out"
-                 link: child
-                 wrap: (lambda (art)
-                         (sub-archive art globs))))
-       null-build: #t))))
+    ;; during expansion, fiddle with the
+    ;; name of the returned package just a bit:
+    (let* ((child (configure sub conf))
+           (name  (string-append prefix (plan-name child)))
+           (self  (configure the-package conf)))
+      (kupdate self name: name))))
 
 ;; libs wraps a package and yields
 ;; only the parts of its outputs that
@@ -305,13 +327,13 @@
          #!key
          (dir #f) ;; directory override
          (build #f)
-         (no-libc #f)    ;; do not bring in a libc implicitly
+         (no-libc #f)  ;; do not bring in a libc implicitly
          (use-native-cc #f)
          (raw-output #f)
          (patches '()) ;; patches to apply
          (env '())     ;; extra environment
          (libs '())    ;; extra libraries beyond libc
-         (tools '())     ;; extra tools beyond a C toolchain
+         (tools '())   ;; extra tools beyond a C toolchain
          (cross '())
          (extra-src '()))
   (let* ((url (url-translate urlfmt name version))
@@ -323,7 +345,6 @@
          ($native-tools (o cc-toolchain-tools $native-toolchain)))
     (package-template
      raw-output: raw-output
-     cc-tools: #t
      patches: patches
      label:   (conc name "-" version)
      src:     (cons src (append patches extra-src))
@@ -456,6 +477,10 @@
   ($native-toolchain native-cc-toolchain: #f cc-toolchain?)
   ;; config for tool prerequisites:
   (%build         build:        #f (perhaps config?))
+  ;; tools for archiving results (need tar and zstd)
+  (%archive-tools archive:      '() list?)
+  ;; tools supplying execline (required everywhere)
+  (%execline      execline:     '() list?)
   ;; config for toolchain prerequisites:
   (%bootstrap     bootstrap:    #f (perhaps config?)))
 
@@ -480,6 +505,10 @@
 
 (define $cc-tools (o cc-toolchain-tools $cc-toolchain))
 (define $libc     (o cc-toolchain-libc $cc-toolchain))
+
+(define $boot-tools
+  (lambda (conf)
+    (append (%archive-tools conf) (%execline conf) ($cc-tools conf))))
 
 (define (triple->sysroot trip)
   (string-append "/sysroot/" (symbol->string trip)))

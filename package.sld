@@ -62,6 +62,8 @@
     $cc-toolchain
     $cc-tools
     $native-toolchain
+    %archive-tools
+    %execline
     make-cc-toolchain
     cc-toolchain-env
     make-cc-env

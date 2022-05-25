@@ -2,7 +2,6 @@
  scheme
  (distill package)
  (distill base)
- (pkg tar)
  (pkg pcre2)
  (pkg libexpat)
  (pkg python3))
