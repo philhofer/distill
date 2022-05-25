@@ -536,7 +536,7 @@ are in conventional locations for C library files:
 ### subpackage
 ```
 (: subpackage (string * #!rest string -> (vector -> vector)))
-(define (subpackage prefix sub . globs) ...)
+(define (subpackage prefix sub . dirs) ...)
 ```
 subpackage takes a package definition
 and returns a subset of the output artifacts

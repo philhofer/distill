@@ -58,35 +58,48 @@
 ;; fetcher returns a function of one argument
 ;; that loads the given src+hash into the destination
 ;; filepath
+;;
+;; if no user-fetch-hook has been provided,
+;; then the returned procedure will simply use
+;;   (fetch src dst)
+;;
+;; if a user-fetch-hook is set and the src is set,
+;; then the returned procedure will first attempt
+;;   (fetch src dst)
+;; followed by the user-fetch-hook
+;;
+;; if src is #f and no user-fetch-hook is set,
+;; then fetcher will exit unrecoverably
 (: fetcher ((or string false) string -> (string -> *)))
 (define (fetcher src hash)
-  (cond
-   (src
-    (lambda (dst)
-      (fetch src dst)))
-   ((user-fetch-hook) =>
-    (lambda (hook)
-      (let ((ret (hook hash)))
-        (cond
-         ;; if (hook hash) returns a url,
-         ;; then use that as the fetch url
-         ((string? ret)
-          (lambda (dst)
-            (call/cc
-             (lambda (return)
-               (parameterize ((current-exception-handler
-                               (lambda (exn)
-                                 (info "couldn't fetch" ret)
-                                 (return #f))))
-                 (fetch ret dst))))))
-         ;; if (hook hash) returns a prodcedure,
-         ;; then it should accept the destination path
-         ((procedure? ret)
-          ret)
-         (else
-          (error "unexpected return value from user-fetch-hook" ret))))))
-   (else
-    (fatal "artifact" hash "has src #f and no user-fetch-hook is set"))))
+  (define (hook-fetcher hook src hash)
+    (let ((ret (hook hash)))
+      (cond
+       ;; if (hook hash) returns a url,
+       ;; then use that as the fetch url
+       ((string? ret)
+        (lambda (dst)
+          (call/cc
+           (lambda (return)
+             (parameterize ((current-exception-handler
+                             (lambda (exn)
+                               (info "couldn't fetch" ret)
+                               (return #f))))
+               (fetch ret dst))))))
+       ;; if (hook hash) returns a prodcedure,
+       ;; then it should accept the destination path
+       ((procedure? ret)
+        ret)
+       (else
+        (error "unexpected return value from user-fetch-hook" ret)))))
+  (let ((hook (user-fetch-hook)))
+    (cond
+     (src
+      (lambda (dst)
+        (or (fetch src dst)
+            (and hook (hook-fetcher hook src hash)))))
+     (hook (hook-fetcher hook src hash))
+     (else (fatal "artifact" hash "has src #f and no user-fetch-hook is set")))))
 
 ;; we track hashes that have failed to fetch
 ;; so that we don't try them more than once
