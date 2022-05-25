@@ -625,8 +625,8 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    (cdn-artifact "eKDTI4zJ4jm7TrfB7gHkFntuMDwftgeBipnBkMp0y1w=" "/src/config" #o644)
    '()))
 
-(define *linux-version* "5.10.115")
-(define *linux-hash* "vAgSU2CFzkQuhGlxdOpZDt1hIWtdbjR8s4hW8jqG92E=")
+(define *linux-version* "5.10.118")
+(define *linux-hash* "dQqXdsvISqlrjEKgIbNPOVZzEYRf__FfjLVVOtMmGmQ=")
 
 (define (linux-source version hash)
   (remote-archive
@@ -1109,7 +1109,7 @@ EOF
      libs:  (list linux-headers iptables libmnl libelf zlib)
      build: (elif*
              '(cp /src/config.mk config.mk)
-             ;; turn of -Werror because of some ioctl redefinitions
+             ;; turn off -Werror because of some ioctl redefinitions
              ;; that happen due to aggressive #include-ing of linux headers
              '(sed "-i" -e "/^SUBDIRS/s: netem::"
                    -e "s/-Werror//" Makefile)
