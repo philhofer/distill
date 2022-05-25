@@ -5,6 +5,7 @@
     hash-finalize
     hash-of
     hash-file
+    zero-hash
 
     copy-port+hash
     with-output-to-hash

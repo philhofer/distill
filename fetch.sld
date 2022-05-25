@@ -35,5 +35,5 @@
 	    (only (chicken file) file-exists? delete-file delete-file* rename-file)
         (only (chicken file posix) create-symbolic-link)
 	    (only (chicken process) process-run)
-	    (only (chicken base) include receive delay-force error call/cc))))
+	    (only (chicken base) include receive delay-force error call/cc when))))
   (include "fetch.scm"))

@@ -57,11 +57,14 @@
 
 ;; fetcher returns a function of one argument
 ;; that loads the given src+hash into the destination
-;; filepath
+;; filepath and returns either #t if the file was
+;; downloaded successfully (and the hash matches)
+;; or otherwise #f
 ;;
 ;; if no user-fetch-hook has been provided,
 ;; then the returned procedure will simply use
-;;   (fetch src dst)
+;;   (and (fetch src dst)
+;;        (equal? (hash-file dst) hash))
 ;;
 ;; if a user-fetch-hook is set and the src is set,
 ;; then the returned procedure will first attempt
@@ -70,7 +73,7 @@
 ;;
 ;; if src is #f and no user-fetch-hook is set,
 ;; then fetcher will exit unrecoverably
-(: fetcher ((or string false) string -> (string -> *)))
+(: fetcher ((or string false) string -> (string -> boolean)))
 (define (fetcher src hash)
   (define (hook-fetcher hook src hash)
     (let ((ret (hook hash)))
@@ -85,19 +88,26 @@
                              (lambda (exn)
                                (info "couldn't fetch" ret)
                                (return #f))))
-               (fetch ret dst))))))
+               (and (fetch ret dst)
+                    (equal? (hash-file dst) hash)))))))
        ;; if (hook hash) returns a prodcedure,
        ;; then it should accept the destination path
        ((procedure? ret)
-        ret)
+        (lambda (dst)
+          (and (ret dst)
+               (equal? (hash-file dst) hash))))
        (else
         (error "unexpected return value from user-fetch-hook" ret)))))
   (let ((hook (user-fetch-hook)))
     (cond
      (src
       (lambda (dst)
-        (or (fetch src dst)
-            (and hook (hook-fetcher hook src hash)))))
+        (or (and (fetch src dst)
+                 (equal? (hash-file dst) hash))
+            (and hook
+                 (begin
+                   (info "falling back to user-fetch-hook for" src)
+                   ((hook-fetcher hook src hash) dst))))))
      (hook (hook-fetcher hook src hash))
      (else (fatal "artifact" hash "has src #f and no user-fetch-hook is set")))))
 
@@ -110,10 +120,7 @@
 
 (: fetch-artifact ((or false string) string string #!optional (or false (-> *)) -> *))
 (define (fetch-artifact src dstdir hash #!optional (on-failure #f))
-  (let* ((fetchit  (fetcher src hash))
-         (download (lambda (dst)
-                     (and (fetchit dst)
-                          (hash-file dst))))
+  (let* ((download (fetcher src hash))
          (dst      (filepath-join dstdir hash))
          (tmp      (string-append dst ".tmp"))
          (fail     (or on-failure
@@ -129,16 +136,11 @@
        (or (file-exists? dst)
            (if (hash-table-ref/default *hash-unavailable* hash #f)
                (fail)
-               (let ((h (download tmp)))
-                 (cond
-                  ((not h)
+               (if (download tmp)
+                   (rename-file tmp dst #t)
                    (begin
+                     (when src
+                       (info "for" src "unexpected content hash" (hash-file tmp)))
+                     (delete-file* tmp)
                      (hash-table-set! *hash-unavailable* hash #t)
-                     (fail)))
-                  ((string=? h hash)
-                   (rename-file tmp dst #t))
-                  (else
-                   (begin
-                     (info "deleting file" tmp)
-                     (delete-file tmp)
-                     (error "fetched artifact has the wrong hash" h "not" hash)))))))))))
+                     (fail)))))))))

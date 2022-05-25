@@ -103,6 +103,10 @@ assert(err == 0); hash_to_base64(dst, buf); C_return(0);
      rest)
     (hash-finalize h)))
 
+;; zero-hash is the hash of zero bytes of data
+(: zero-hash string)
+(define zero-hash (hash-of ""))
+
 ;; hash-file returns the hash of a file
 ;; (if the file exists), or #f if the file
 ;; doesn't exist, or it throws an error if
