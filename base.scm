@@ -361,14 +361,14 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define skalibs
   (ska-cmmi-package
-   "skalibs" "2.11.2.0"
-   "CuQbb_RZR4eAO2eSnRMmhqLkhxU9bgDcHoLWDiq7PSQ="
+   "skalibs" "2.12.0.1"
+   "Jypw9f97dbxuEJkvv5Yn7djgSwylihx6cURdDn-pKPU="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define libexecline+tools
   (ska-cmmi-package
-   "execline" "2.8.3.0"
-   "iWsBP9gGN-QQ_LF9NuUZI_Ib1pB89Kb_3fpHxLplYo0="
+   "execline" "2.9.0.0"
+   "f0jL019tXaOUaKScTh6dyNFSqWRQPWeC4Cp1YL5FViw="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-pedantic-posix)))
