@@ -351,7 +351,7 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    prepare:  '(sed "-i" -e "/^tryflag.*-fno-stack/d" -e "s/^CFLAGS=.*$/CFLAGS=/g" configure)
    override-configure: `(--prefix=/
                          --libdir=/usr/lib
-                         --disable-shared --enable-static
+                         --disable-shared
                          --target ,$triple
                          ,(elconc '--with-include= $sysroot '/include)
                          ,(elconc '--with-include= $sysroot '/usr/include)
@@ -371,8 +371,7 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    "iWsBP9gGN-QQ_LF9NuUZI_Ib1pB89Kb_3fpHxLplYo0="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
-                      --enable-pedantic-posix
-                      --enable-static-libc)))
+                      --enable-pedantic-posix)))
 
 (define execline-tools (binaries libexecline+tools))
 (define libexecline (libs libexecline+tools))
@@ -508,10 +507,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
                        (list (fake-musl-for-triple triple)
                              (musl-headers-for-triple triple)))))
        (cmmi-package
-        "gcc" "9.4.0"
+        "gcc" "12.1.0"
         "https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
-        "rL94uba7wDwZ432zSGmyrOQboRdwa0l0eEf9qxFlGNI="
-        patches: (include-patchfiles "patches/gcc/pie-gcc.patch")
+        "DFVEEJm_x4rz167GCydIvNEL6V18F8232bWmFCqSPQk="
         tools: (list byacc reflex gawk)
         ;; we depend on cc-for-build automatically,
         ;; so we only need additional target tools
@@ -604,9 +602,11 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    build:   (elif*
              '(mv /src/config.head .config)
              `(make V=1
+                "CONFIG_STATIC=y"
                 ,(elconc 'CROSS_COMPILE= $cross-compile)
                 ,(elconc 'CONFIG_SYSROOT= $sysroot)
                 ,(el= 'CONFIG_EXTRA_CFLAGS= $CFLAGS)
+                ,(el= 'CONFIG_EXTRA_LDLAGS= $LDFLAGS)
                 ,$cc-env/for-kbuild
                 busybox)
              '(make V=1 busybox.links)
@@ -622,11 +622,11 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 ;; linux headers
 (define busybox-core
   (busybox/config
-   (cdn-artifact "eKDTI4zJ4jm7TrfB7gHkFntuMDwftgeBipnBkMp0y1w=" "/src/config" #o644)
+   (cdn-artifact  "Ehn0UUjdTzgdg4EuXHdsTftWfwQYLzjEPKxQ7BjgLYc=" "/src/config" #o644)
    '()))
 
-(define *linux-version* "5.10.118")
-(define *linux-hash* "dQqXdsvISqlrjEKgIbNPOVZzEYRf__FfjLVVOtMmGmQ=")
+(define *linux-version* "5.15.50")
+(define *linux-hash* "NGgy2e6wjzjsEbEprsIoMLHJUmYEHSVv8jIkgmTOHok=")
 
 (define (linux-source version hash)
   (remote-archive
@@ -1127,8 +1127,7 @@ EOF
    "s6" "2.11.1.0"
    "s5EmIXy4VejeGMwPeDlKo0iZgw-f5jgXWjUpVK4Hw6Y="
    libs: (list skalibs libexecline)
-   extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
-                      --enable-static-libc)))
+   extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps))))
 
 (define s6 (binaries libs6+tools))
 (define libs6 (libs libs6+tools))
@@ -1138,8 +1137,7 @@ EOF
    "s6-rc" "0.5.3.0"
    "JmC858qd9fwxj3rEZC_wnZ9-tZIcR6B7VhrbvPFs7TE="
    libs: (list libs6 skalibs libexecline)
-   extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
-                      --enable-static-libc)))
+   extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps))))
 
 (define s6-rc (binaries libs6rc+tools))
 (define libs6rc (libs libs6rc+tools))
@@ -1158,7 +1156,7 @@ EOF
 ;; busybox with additional stuff built in
 (define busybox-full
   (busybox/config
-   (cdn-artifact "mxH_lkBbfTDWJ-w_Ukyc6bVSPpcLXPdAjx7OGJte2rE=" "/src/config" #o644)
+   (cdn-artifact "IMJCb8EZIZZT7ax9X_jBvuoBy9N0ZrvOBArPDhLWt7w=" "/src/config" #o644)
    (list linux-headers)))
 
 ;; keep everything down here at the bottom of the file;

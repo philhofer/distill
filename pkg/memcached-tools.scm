@@ -10,4 +10,12 @@
    "https://memcached.org/files/$name-$version.tar.gz"
    "LTGs2eylvdYFC3P2DoUug_PiYvhYYLDnmpsBPoMs64Q="
    libs: (list libevent libseccomp)
-   extra-configure: '(--with-seccomp --enable-static)))
+   env: (list '(ac_cv_search_pthread_create . ""))
+   override-configure: `(--disable-shared
+                         ;; cannot include --enable-static
+                         ;; since it implies -static in CFLAGS
+                         --prefix=/usr
+                         --sysconfdir=/etc
+                         --build ,$build-triple
+                         --host ,$triple
+                         --with-seccomp)))

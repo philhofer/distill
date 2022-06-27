@@ -14,7 +14,6 @@
    override-configure: `(,(el= '--build= $build-triple)
                          ,(el= '--host= $triple)
                          --prefix=/usr
-                         --enable-static
                          --disable-debug
                          --enable-ipv4
                          --enable-ipv6
