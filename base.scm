@@ -1124,8 +1124,8 @@ EOF
 
 (define libs6+tools
   (ska-cmmi-package
-   "s6" "2.11.1.0"
-   "s5EmIXy4VejeGMwPeDlKo0iZgw-f5jgXWjUpVK4Hw6Y="
+   "s6" "2.11.1.1"
+   "892l0A8KrXddmL9gRfFxhZx76yBXOOcnVnLpXOvqW2s="
    libs: (list skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps))))
 
@@ -1134,8 +1134,8 @@ EOF
 
 (define libs6rc+tools
   (ska-cmmi-package
-   "s6-rc" "0.5.3.0"
-   "JmC858qd9fwxj3rEZC_wnZ9-tZIcR6B7VhrbvPFs7TE="
+   "s6-rc" "0.5.3.2"
+   "bJh1pjnoMM7WDKVkEFDqgXkgdEHbBnRJWO6gVS_AIlM="
    libs: (list libs6 skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps))))
 
