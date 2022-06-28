@@ -13,8 +13,9 @@
        (string-translate*
         "https://packages.timber.io/vector/$version/vector-$arch-unknown-linux-musl.tar.gz"
         `(("$arch" . ,(symbol->string arch))
-          ("$version" . "0.16.1")))
-       "wworxlIXwfsCDeSH0sxNkZbx9z7LK_E0yiwa6Br27Bc="))))
+          ("$version" . "0.22.2")))
+       "k-McBdbA1RbzF_ma9tVMXLlh3_NovxwTAsg-ycBWBZQ="))))
+
 
 (define vector-prebuilt
   (package-template
