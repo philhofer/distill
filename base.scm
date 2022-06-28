@@ -100,7 +100,7 @@
          ;; so it should automatically use the right one anyway
          (sysf   (conc "--sysroot=" (triple->sysroot triple)))
          (lflags (cons sysf '(-static-pie "-Wl,--gc-sections")))
-         (cflags (append lflags '(-fPIE -ffunction-sections -fdata-sections -pipe))))
+         (cflags (append lflags '(-fPIE -ffunction-sections -fdata-sections -ftrivial-auto-var-init=zero -pipe))))
     (make-cc-toolchain
      tools: (or prebuilt
                 (list
@@ -137,9 +137,9 @@
          CBUILD:   #f
          CHOST:    #f
          CC:       "gcc"
-         CFLAGS:   '(-fPIE -static-pie -pipe -O2)
+         CFLAGS:   '(-fPIE -static-pie -pipe -O2 -ftrivial-auto-var-init=zero)
          CXX:      "g++"
-         CXXFLAGS: '(-fPIE -static-pie -pipe -O2)
+         CXXFLAGS: '(-fPIE -static-pie -pipe -O2 -ftrivial-auto-var-init=zero)
          LD:       "ld"
          LDFLAGS:  '(-static-pie)
          AS:       "as"
