@@ -431,9 +431,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
   (memoize-eq
    (lambda (target-triple)
      (cmmi-package
-      "binutils" "2.38"
+      "binutils" "2.39"
       "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-      "fz3l6EYpV9VxmpK6eqqmm5Osw2ZPSp216DfUGn3UMIc="
+      "g5Q75hfCrKvFhSp2oIF1DFidZVlgxPlrAIPx__Mzc3Q="
       tools: (list byacc reflex)
       libs:  (list zlib)
       native-cc: $cc-env/for-build
@@ -443,7 +443,7 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
                 ;; try to update gas/doc/as.{1, info} even though we haven't
                 ;; modified anything, so we have to force it to ignore them
                 '(sed "-i" -e "/^man_MANS/d" -e "/^INFO_DEPS/d" gas/Makefile.in))
-      override-configure: `(--disable-nls
+      override-configure: `(--disable-nls --disable-gprofng
                             --disable-shared --enable-static
                             --disable-multilib --enable-gold=yes --with-ppl=no
                             --disable-install-libiberty --enable-relro
