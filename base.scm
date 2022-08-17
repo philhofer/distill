@@ -403,7 +403,7 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    ;; because an official one has not been released yet
    ;; to address CVE-2022-37434
    ;;"https://zlib.net/$name-$version.tar.gz"
-   "https://b2cdn.sunfi.sh/pub-cdn/5O7UFXGnM9RQfVR8AL6MHTA_ZngCQhIKr1d_5bSf02M="
+   "https://b2cdn.sunfi.sh/file/pub-cdn/5O7UFXGnM9RQfVR8AL6MHTA_ZngCQhIKr1d_5bSf02M="
    "5O7UFXGnM9RQfVR8AL6MHTA_ZngCQhIKr1d_5bSf02M="
    ;; not autoconf
    override-configure: '(--static --prefix=/usr --libdir=/lib)))
