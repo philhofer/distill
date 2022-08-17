@@ -398,9 +398,13 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define zlib
   (cmmi-package
-   "zlib" "1.2.12"
-   "https://zlib.net/$name-$version.tar.gz"
-   "LBnkZG7COLk4c08FH4Kr7JJ2GbLEJgGxUYofBKcmgVA="
+   "zlib" "1.2.12.1"
+   ;; FIXME: we are using a vendored 1.2.12.1 tarball
+   ;; because an official one has not been released yet
+   ;; to address CVE-2022-37434
+   ;;"https://zlib.net/$name-$version.tar.gz"
+   "https://b2cdn.sunfi.sh/pub-cdn/5O7UFXGnM9RQfVR8AL6MHTA_ZngCQhIKr1d_5bSf02M="
+   "5O7UFXGnM9RQfVR8AL6MHTA_ZngCQhIKr1d_5bSf02M="
    ;; not autoconf
    override-configure: '(--static --prefix=/usr --libdir=/lib)))
 
@@ -625,8 +629,8 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    (cdn-artifact  "Ehn0UUjdTzgdg4EuXHdsTftWfwQYLzjEPKxQ7BjgLYc=" "/src/config" #o644)
    '()))
 
-(define *linux-version* "5.15.50")
-(define *linux-hash* "NGgy2e6wjzjsEbEprsIoMLHJUmYEHSVv8jIkgmTOHok=")
+(define *linux-version* "5.15.61")
+(define *linux-hash* "KEaUn-JJ_yr0_hoJGN7vaRu82G3TcA01PxoXBeozBUE=")
 
 (define (linux-source version hash)
   (remote-archive
