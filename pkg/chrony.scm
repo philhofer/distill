@@ -10,9 +10,9 @@
 
 (define chrony
   (cmmi-package
-   "chrony" "4.2"
+   "chrony" "4.3"
    "https://download.tuxfamily.org/$name/$name-$version.tar.gz"
-   "tTvRRiiUAfcfX-XAozzwptSE9kzkrPY_CG73EUn_zY8="
+   "8u0oACiIBN4h3WcxA2OxWo7azfwVoZw6t7hZdmKQHo8="
    libs: (list libcap libseccomp linux-headers)
    tools: '()
    ;; not standard autotools
