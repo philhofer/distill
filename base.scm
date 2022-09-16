@@ -295,6 +295,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define gawk
   (cmmi-package
+   ;; NOTE: 5.2.0 is available, but it crashes
+   ;; when compiling linux (5.15.68), so we're stuck on 5.1.1
+   ;; until things are sorted out
    "gawk" "5.1.1"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.xz"
    "Y4zSltM6gbfzZNfhOBXg3atxxKnRAigKsuOwgYIDldE="
@@ -511,9 +514,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
                        (list (fake-musl-for-triple triple)
                              (musl-headers-for-triple triple)))))
        (cmmi-package
-        "gcc" "12.1.0"
+        "gcc" "12.2.0"
         "https://ftp.gnu.org/gnu/$name/$name-$version/$name-$version.tar.gz"
-        "DFVEEJm_x4rz167GCydIvNEL6V18F8232bWmFCqSPQk="
+        "qbJ7S9k3DzOJD9488ENKWjCPTyT7mfvv_EycHX3us-w="
         tools: (list byacc reflex gawk)
         ;; we depend on cc-for-build automatically,
         ;; so we only need additional target tools
@@ -952,24 +955,19 @@ EOF
 
 (define xz-utils
   (cmmi-package
-   "xz" "5.2.5"
+   "xz" "5.2.6"
    "https://tukaani.org/$name/$name-$version.tar.xz"
-   "-jw6foy_zDVKZ8pXQV2O2i1_6Zcs3efYVg31jflUtcQ="
-   patches: (list
-             (remote-file
-              "https://tukaani.org/xz/xzgrep-ZDI-CAN-16587.patch"
-              "cR1qEV_ROOSD7HTzd2HCaHb0pGOwdjq1VQRpPvCvRvg="
-              "/src/xzgrep-ZDI-CAN-16587.patch" #o644))))
+   "pjf3Rvq-EHKuYC2y_-dSoEsjP2a7LiNhP_xK8ujBQv8="))
 
 (define xz-tools (binaries xz-utils))
 (define liblzma (libs xz-utils))
 
 (define %lz4
   (cc-package
-   "lz4" "1.9.3"
+   "lz4" "1.9.4"
    ;; TODO: github release tarballs are not stable
    "https://github.com/lz4/$name/archive/v$version.tar.gz"
-   "W4pQ75Y5v-fFfBPnLBgOuskxo7zF9NN69eKg1MicPZc="
+   "6ksi30XAVK0ZionQAcraH9JY0yprIs-Wz8xqXkWQaBo="
    build: (elif*
            `(make DESTDIR=/out PREFIX=/usr ,$cc-env ,$make-overrides install)
            (list $strip-cmd))))
@@ -1041,9 +1039,9 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.5.2"
+   "libressl" "3.5.3"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "l6Vir3-d3_8OUACazBIhTjhjVL7VzLkz0vtoTKUek48="
+   "pUx4_BcL1P44avi9ALtSABMpkTez-BOxwc8-GeO4ObE="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
