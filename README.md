@@ -106,6 +106,16 @@ more prerequisite packages that contain the tools
 necessary to run the service, plus the actual
 script for executing the service.
 
+The primary entrypoint for defining services is
+via `make-service` in `(distill service)`.
+Distill images use [s6-rc](https://skarnet.org/software/s6-rc)
+for service management and [s6](https://skarnet.org/software/s6)
+for process management.
+
+The `distill` tool comes with a number of built-in
+services that can be imported via `(svc ...)`; they live
+in `svc/*.scm` in the source tree.
+
 TODO: document `make-service`
 (For now read examples in `svc/*.scm`)
 
@@ -148,13 +158,14 @@ definition indicates that this package depends on `libgmp`
 in order to build. (The `cmmi-package` function takes care
 of pulling in a C compiler and libc.)
 
-See the docs for `(distill package)` for more details.
+See the docs for `(distill package)` for more details,
+and core packages in `base.scm` and `pkg/*.scm`.
 
 ## Conventions
 
 ### Execline
 
-Build scripts in distill are written in the execline language.
+Build scripts in distill are written in the [execline](https://skarnet.org/software/execline) language.
 The execline language is particularly easy to manipulate in
 Scheme because it has almost zero syntax. We represent
 an execline program as a simple list of scheme datums,
@@ -201,6 +212,10 @@ There are a variety of helper functions in `(distill execline)`
 for constructing execline scripts that require special configuration expansion.
 For example, `(elconc "foo" $CC "bar")`, which concatenates its expanded
 arguments into a string, would expand to `"foogccbar"` when `$CC` expands to `"gcc"`.
+Under the hood, config "variables" are just procedures, and "Config Expansion"
+is simply the process of traversing a script and calling any procedures in the
+script with the current configuration as the only argument, taking care to splice
+the result of the procedure into the script as the final result.
 
 ### Config Expansion
 
@@ -654,6 +669,13 @@ hash-file returns the hash of a file
 (if the file exists), or #f if the file
 doesn't exist, or it throws an error if
 an I/O error is encountered
+
+### zero-hash
+```
+(: zero-hash string)
+(define zero-hash (hash-of ""))
+```
+zero-hash is the hash of zero bytes of data
 
 ### copy-port+hash
 ```
