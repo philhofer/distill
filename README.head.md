@@ -18,6 +18,26 @@ go to great lengths to ensure that each build is reproducible
 and supports cross-compilation. (Build dependencies are structured
 so that there is a clear distinction between build and host dependencies.)
 
+## Building From Source
+
+You'll need:
+
+ - [Chicken Scheme](https://call-cc.org) version 5.3.
+   Often this will be available from your distro package manager.
+ - GCC (versions 9 and later have been tested).
+   Other C compilers and toolchains may work, but they have
+   not been tested.
+
+Note that the makefile assumes the `chicken` binary is available
+as `chicken-5.3` and the `csi` binary is available as `csi-5.3`.
+You can of course override those names with `CHICKEN=...` and `CSI=...` provided
+to your `make` invocation.
+
+Running `make distill` should build the distill binary from
+source (non-hermetically). You can then use `./distill run scripts/release.scm`
+to perform a hermetic re-bootstrap of the tool using the source code
+from the most recent git commit.
+
 ## High-level: Packages, Services, Systems, and Platforms
 
 ### System
