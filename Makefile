@@ -7,14 +7,14 @@ export CHICKEN:=chicken-5.3
 
 export CC := gcc
 export NEEDED_CFLAGS = -D_GNU_SOURCE -DHAVE_CHICKEN_CONFIG_H -DC_ENABLE_PTABLES \
-		-fwrapv -fno-strict-aliasing -Wno-unused -fno-stack-protector
+		-fwrapv -fno-strict-aliasing -Wno-unused -fno-stack-protector -fPIE
 export CFLAGS ?= -ffunction-sections -fdata-sections -static-pie -O2
 
 # TODO: set CHICKEN_FEATURES automagically?
 export CHICKEN_FEATURES
 export CHICKEN_FLAGS := -optimize-level 3 -disable-interrupts -clustering -setup-mode \
 		-include-path libchicken/ -consult-types-file libchicken/types.db
-export LDFLAGS ?= -Wl,-gc-sections
+export LDFLAGS ?= -Wl,-gc-sections -lm
 
 SLDS:=$(wildcard *.sld)
 MODS:=$(SLDS:%.sld=%.mod.scm)
