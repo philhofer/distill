@@ -315,10 +315,10 @@
           (interned-dir "/home" #o755)
           ;; TODO: vendor these:
           (remote-file
-           "https://salsa.debian.org/md/netbase/-/raw/master/etc/services"
+           "https://salsa.debian.org/md/netbase/-/raw/46bc8e299e3af70721a4c4d6d281f0d32785c088/etc/services"
            "14CskWLv_71RLWwcMAe2GbqVQx2VsHTxPR1I8OPtcD4="
            "/etc/services" #o644)
           (remote-file
-           "https://salsa.debian.org/md/netbase/-/raw/master/etc/protocols"
-           "gykO3waWpzCvDqGEFidDstWolF4YoIjMyvOkG16y1b4="
+           "https://salsa.debian.org/md/netbase/-/raw/46bc8e299e3af70721a4c4d6d281f0d32785c088/etc/protocols"
+           "9kRs6dlDltdi21jdhLmQcgzDQkehmNR0Y1TzALaDKBE="
            "/etc/protocols" #o644))))
