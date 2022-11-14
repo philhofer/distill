@@ -401,13 +401,13 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define zlib
   (cmmi-package
-   "zlib" "1.2.12.1"
+   "zlib" "1.2.13"
    ;; FIXME: we are using a vendored 1.2.12.1 tarball
    ;; because an official one has not been released yet
    ;; to address CVE-2022-37434
    ;;"https://zlib.net/$name-$version.tar.gz"
-   "https://b2cdn.sunfi.sh/file/pub-cdn/5O7UFXGnM9RQfVR8AL6MHTA_ZngCQhIKr1d_5bSf02M="
-   "5O7UFXGnM9RQfVR8AL6MHTA_ZngCQhIKr1d_5bSf02M="
+   "https://www.zlib.net/$name-$version.tar.gz"
+   "7xnn8kOtBNbM2WEVBFMheAHXF9POYXe0uMysWN0PjHI="
    ;; not autoconf
    override-configure: '(--static --prefix=/usr --libdir=/lib)))
 
@@ -632,8 +632,8 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    (cdn-artifact  "Ehn0UUjdTzgdg4EuXHdsTftWfwQYLzjEPKxQ7BjgLYc=" "/src/config" #o644)
    '()))
 
-(define *linux-version* "5.15.68")
-(define *linux-hash* "DbyBAPJFyRz9mhW69KQ-9MPdqRSrRpIhXd6DH5LgQtU=")
+(define *linux-version* "5.15.78")
+(define *linux-hash* "VgFDYkDtjXgrtlIIv8ayvO0wVNNISDZZIZNCB7d7O3M=")
 
 (define (linux-source version hash)
   (remote-archive
@@ -955,9 +955,9 @@ EOF
 
 (define xz-utils
   (cmmi-package
-   "xz" "5.2.6"
+   "xz" "5.2.8"
    "https://tukaani.org/$name/$name-$version.tar.xz"
-   "pjf3Rvq-EHKuYC2y_-dSoEsjP2a7LiNhP_xK8ujBQv8="))
+   "nlS6d2D8Jnz6a5CqOuJISQcQbLXYkVuVjcDrmv8fcd4="))
 
 (define xz-tools (binaries xz-utils))
 (define liblzma (libs xz-utils))
@@ -1039,9 +1039,9 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.5.3"
+   "libressl" "3.6.1"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "pUx4_BcL1P44avi9ALtSABMpkTez-BOxwc8-GeO4ObE="
+   "xCqFeU8S_koMlfkApEhDGJF0S-cYx4YQb9unp7iUJ7Y="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
