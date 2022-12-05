@@ -145,17 +145,61 @@
 
 ;; esp-image produces an EFI-bootable image
 (define (efi-image name #!key (uuid #f))
-(lambda (plat rootpkgs chown)
-  (let ((esp   (linux-esp (platform-kernel plat) (platform-cmdline plat)))
-        (root  (squashfs rootpkgs chown))
-        (efile (elpath $sysroot "esp.img"))
-        (rfile (elpath $sysroot "rootfs.img")))
+  (lambda (plat rootpkgs chown)
+    (let ((esp   (linux-esp (platform-kernel plat) (platform-cmdline plat)))
+          (root  (squashfs rootpkgs chown))
+          (efile (elpath $sysroot "esp.img"))
+          (rfile (elpath $sysroot "rootfs.img")))
+      (package-template
+       label:  (string-append name "-efi-image")
+       raw-output: "/img"
+       tools:  (list imgtools execline-tools busybox-core)
+       inputs: (list esp root)
+       build:  `(gptimage
+                 -d ,@(if uuid '(-u ,uuid) '())
+                 /out/img (,efile U ,rfile L)
+                 true)))))
+
+;; see mtree(5)
+(define (chown->mtree chown)
+  (map-lines
+   (lambda (lst)
+     (let ((name (car lst))
+           (mode (cadr lst))
+           (uid  (caddr lst))
+           (gid  (cadddr lst))
+           (normalize (lambda (name)
+                        (if (eqv? (string-ref name 0) #\/)
+                            (string-append "." name) ;; abs -> relative
+                            name)))
+           (typeof (lambda (name)
+                     (let ((last-char (string-ref name (- (string-length name) 1))))
+                       (if (eqv? last-char #\/) "dir" "file")))))
+       (list (normalize name)
+             "time=0"
+             (string-append "type=" (typeof name))
+             (string-append "mode=" (number->string mode 8))
+             (string-append "uid=" (number->string uid))
+             (string-append "gid=" (number->string gid)))))
+   chown))
+
+;; container-rootfs-image produces a tarball
+;; with the provided name
+(define (container-rootfs-image name)
+  (lambda (plat rootpkgs chown)
     (package-template
-     label:  (string-append name "-efi-image")
-     raw-output: "/img"
-     tools:  (list imgtools execline-tools busybox-core)
-     inputs: (list esp root)
-     build:  `(gptimage
-               -d ,@(if uuid '(-u ,uuid) '())
-               /out/img (,efile U ,rfile L)
-               true)))))
+     label:  name
+     tools:  (list execline-tools busybox-core bsdtar
+                   (interned "/adj.mtree" #o644 (chown->mtree chown)))
+     raw-output: "img.tar.zst"
+     inputs: rootpkgs
+     ;; TODO: figure out how to respect chown
+     build:  `(cd ,$sysroot
+                  ;; force mtime=0
+                  if (find "." -mindepth 1 -exec touch -hcd "@0" "{}" ";")
+                  pipeline (find "." -mindepth 1 -print0)
+                  pipeline (sort -z)
+                  pipeline (bsdtar --null --numeric-owner --uid=0 --gid=0 -vcnf - -T -)
+                  ;; we're relying here on the later items being picked up
+                  ;; as the "true" values of the files
+                  bsdtar --format=ustar --zstd -cf /out/img.tar.gz "@-" "@/adj.mtree"))))

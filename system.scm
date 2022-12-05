@@ -67,6 +67,9 @@
   ;; and permissions overrides
   ;; note: these only apply to the root filesystem,
   ;; and not any additional mountpoints
+  ;;
+  ;; by convention, directories that need to be modified
+  ;; should have a trailing / character
   (system-perms    perms:    '() (list-of perm?)))
 
 ;; unpack-filemodes takes a list of filemode specs like
@@ -121,5 +124,10 @@
                       users groups))
            (newimg   (platform-mkimage plat))
            (expand   (expander (platform-config plat)))
-           (rootpkgs (union/eq? (services->packages svcs users groups) pkgs)))
+           (rootpkgs (union/eq? (services->packages
+                                 services: svcs
+                                 extra-users: users
+                                 extra-groups: groups
+                                 ;; for now just assume no kernel means we're in a container
+                                 container?: (not (platform-kernel plat))) pkgs)))
       (expand (newimg plat rootpkgs perms)))))

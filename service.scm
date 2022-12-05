@@ -153,8 +153,14 @@
 ;; into all of the packages and artifacts
 ;; that the services depend upon, including
 ;; the necessary init scripts and binaries
-(: services->packages ((list-of vector) (list-of vector) (list-of vector) -> (list-of procedure)))
-(define (services->packages all extra-users extra-groups)
+;;
+;; if container? is true, then the boot scripts
+;; are adjusted slightly to behave well when containerized
+(define (services->packages #!key
+                            (services '())
+                            (extra-users '())
+                            (extra-groups '())
+                            (container? #f))
   (let* ((fold     (lambda (proc init lst)
                      (let loop ((out init)
                                 (lst lst))
@@ -171,24 +177,26 @@
                                       (if (memq i lst) lst (cons i lst)))))))
                            init
                            lst)))
-         (reqpkgs  (list s6 s6-rc busybox-full execline-tools hard))
-         (tail     (sublists all service-inputs reqpkgs))
+         (reqpkgs  (let ((base (list s6 s6-rc busybox-full execline-tools)))
+                     ;; we only need hard(8) if we actually expect to shutdown/reboot
+                     (if container? base (cons hard base))))
+         (tail     (sublists services service-inputs reqpkgs))
          (default  (make-service
                     name: 'default
                     spec: (%make-bundle
                            type: 'bundle
-                           contents: (map-lines service-name all))))
+                           contents: (map-lines service-name services))))
          (arts     (fold
                     (lambda (svc lst)
-                      (prepend-service-artifacts svc all lst))
-                    '() (cons default all)))
+                      (prepend-service-artifacts svc services lst))
+                    '() (cons default services)))
          (db       (s6-rc-db arts)))
     (append
      (cons db tail)
      (groups+users->artifacts
-      (sublists all service-groups extra-groups)
-      (sublists all service-users extra-users))
-     (boot-scripts))))
+      (sublists services service-groups extra-groups)
+      (sublists services service-users extra-users))
+     (boot-scripts container?))))
 
 (define *service-dir* "/run/service")
 (define *catchall-fifo* "/run/service/s6-svscan-log/fifo")
@@ -248,7 +256,7 @@
     fdmove -c 2 1
     s6-svscan -d 4 -t0 ,*service-dir*))
 
-(define (boot-scripts)
+(define (boot-scripts container?)
   (let* ((script*  (lambda (path body)
                      (interned path #o744
                                (with-output-to-string
@@ -260,38 +268,43 @@
                                         foreground (s6-svscanctl -t -b /run/service))))))
          (init     (script* "/sbin/init" (init-script)))
          (reboot   (script* "/sbin/reboot"
-                            '(background
-                              (s6-setsid
-                               foreground (s6-rc -v2 -bad -t 10000 change)
-                               foreground (kill -15 -1)
-                               foreground (sleep 1)
-                               foreground (sync)
-                               hard reboot))))
+                            (if container?
+                                '(kill -15 1)
+                                '(background
+                                  (s6-setsid
+                                   foreground (s6-rc -v2 -bad -t 10000 change)
+                                   foreground (kill -15 -1)
+                                   foreground (sleep 1)
+                                   foreground (sync)
+                                   hard reboot)))))
          (poweroff (scanctl* "/sbin/poweroff"))
          (halt     (scanctl* "/sbin/halt"))
          (crash    (script* "/etc/early-services/.s6-svscan/crash"
-                            '(foreground
-                              (redirfd -w 1 /dev/console
-                                       fdmove -c 2 1
-                                       echo "pid 1 is crashing!")
-                              foreground (kill -15 -1)
-                              foreground (sleep 1)
-                              foreground (kill -9 -1)
-                              foreground (sleep 1)
-                              foreground (sync)
-                              hard reboot)))
+                            (if container?
+                                '(exit 1)
+                                '(foreground
+                                  (redirfd -w 1 /dev/console
+                                           fdmove -c 2 1
+                                           echo "pid 1 is crashing!")
+                                  foreground (kill -15 -1)
+                                  foreground (sleep 1)
+                                  foreground (kill -9 -1)
+                                  foreground (sleep 1)
+                                  foreground (sync)
+                                  hard reboot))))
          (finish   (script* "/etc/early-services/.s6-svscan/finish"
                             ;; note: at this point it is expected that
                             ;; everything under process supervision is already dead,
                             ;; but there still may be other processes running
-                            '(redirfd
+                            `(redirfd
                               -w 1 /dev/console
                               fdmove -c 2 1
                               foreground (kill -15 -1)
                               foreground (sleep 1)
                               foreground (kill -9 -1)
                               foreground (sync)
-                              hard poweroff)))
+                              ;; if we're in a container, just exit 0
+                              ,(if container? '(exit 0) '(hard poweroff)))))
          (logger   (interned "/etc/early-services/s6-svscan-log/run"
                              #o744
                              (with-output-to-string

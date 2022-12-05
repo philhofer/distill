@@ -27,7 +27,7 @@
   (let ((conf (interned "/etc/chrony.conf" #o644 (lines config))))
     (make-service
      name: 'chronyd
-     inputs: (list chrony-binaries conf)
+     inputs: (list chrony-binaries conf ip-wait)
      users:  (list (adduser 'chrony group: 'chrony home: "/var/empty"))
      groups: (list (addgroup 'chrony '(chrony)))
      after:  (list var-mounted-rw)

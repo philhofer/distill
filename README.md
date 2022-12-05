@@ -725,6 +725,13 @@ and produces an output port that calls
 hash-write! when data is sent to the port
 
 ## module `(distill image)`
+### container-rootfs-image
+```
+(define (container-rootfs-image name) ...)
+```
+container-rootfs-image produces a tarball
+with the provided name
+
 ### efi-image
 ```
 (define (efi-image name #!key (uuid #f)) ...)

@@ -5,7 +5,8 @@
     ext2fs
     linux-esp
     mbr-image
-    efi-image)
+    efi-image
+    container-rootfs-image)
   (import
     scheme
     (distill kvector)
