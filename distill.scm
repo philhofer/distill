@@ -7,7 +7,8 @@
  (chicken repl)
  (chicken file)
  (only (chicken string) string-split)
- (only (chicken condition) print-error-message)
+ (only (chicken condition)
+       print-error-message with-exception-handler condition-predicate)
  (only (chicken io) read-list write-string)
  (only (chicken port) with-input-from-string)
 
@@ -91,6 +92,16 @@
 
 (define *preload-alist* (loaded-files))
 
+(define (fatal-exn-handler ctx)
+  (let ((exn? (condition-predicate 'exn)))
+    (lambda (exn)
+      (info "exception in context" ctx)
+      (cond
+       ((exn? exn)
+        (print-error-message exn (current-error-port)))
+       (else (fatal "fatal error:" exn)))
+      (exit 1))))
+
 ;; load-builtin loads a module with the given symbol
 ;; from (search-dirs)/<kind>/<sym>.scm, taking care to load
 ;; its dependencies in advance by walking the import table
@@ -123,10 +134,13 @@
                        (when (form? 'import form)
                          (scan-imports (cdr form))))
                      forms)
-                    (real-eval
-                     `(module (,kind ,sym)
-                              (,sym)
-                              ,@forms)))
+                    (with-exception-handler
+                     (fatal-exn-handler (list kind sym))
+                     (lambda ()
+                       (real-eval
+                        `(module (,kind ,sym)
+                                 (,sym)
+                                 ,@forms)))))
                   (fatal "couldn't locate" fullname))))))))
 
 (define (scan-imports lst)
