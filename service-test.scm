@@ -42,7 +42,10 @@
        (have-line-prefix "unpriv:x:1000:" str)))
 
 ;; test that 'foo is in /etc/fstab
-(let ((pkgs (services->packages (list my-service) (list my-user) (list my-group))))
+(let ((pkgs (services->packages
+             services: (list my-service)
+             extra-users: (list my-user)
+             extra-groups: (list my-group))))
   (define (check-etc-passwd str)
     (or (has-prefixes str)
         (error "etc/passwd doesn't have user foo:" str)))
