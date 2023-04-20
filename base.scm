@@ -316,16 +316,16 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define libmpfr
   (cmmi-package
-   "mpfr" "4.1.0"
+   "mpfr" "4.2.0"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.bz2"
-   "72Rb7WvnPA9a0c4r-UdkHoHqzubqlKae8x40RrGulfM="
+   "xHSMh30rTGsHtlLGA0bXDvGf0Jv55BZhUAf93N65ok4="
    libs: (list libgmp)))
 
 (define libmpc
   (cmmi-package
-   "mpc" "1.2.1"
+   "mpc" "1.3.1"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "saUnptee8zIjJt904UoCTh2kFrWdR0R-NpGEc8x3p1U="
+   "ZMJ87yRKe2gnj4Jiu3KI8ffs0C8XlVHLdUX0dJfodA0="
    libs: (list libgmp libmpfr)))
 
 (define %bzip2
@@ -364,14 +364,14 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define skalibs
   (ska-cmmi-package
-   "skalibs" "2.12.0.1"
-   "Jypw9f97dbxuEJkvv5Yn7djgSwylihx6cURdDn-pKPU="
+   "skalibs" "2.13.1.1"
+   "20tgymWu6w6rBe_rk28k9MY9jGruCQ5Is_mK_rOQ0cY="
    extra-configure: '(--with-sysdep-devurandom=yes)))
 
 (define libexecline+tools
   (ska-cmmi-package
-   "execline" "2.9.0.0"
-   "f0jL019tXaOUaKScTh6dyNFSqWRQPWeC4Cp1YL5FViw="
+   "execline" "2.9.3.0"
+   "C6Mawr1yKkZ6H25_Y0TmmSF1JXLOyphd_GctZrObwSQ="
    libs: (list skalibs)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps)
                       --enable-pedantic-posix)))
@@ -381,16 +381,16 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define byacc
   (cmmi-package
-   "byacc" "20220128"
+   "byacc" "20230219"
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-   "nzx8cHlcSJoL03paszxg-VL0tx5y5UyJq0QvIeHOotA="
+   "W-Q-Yw02wxjXCqqPB2gyDC6SAIUDD0yz2EIDlvhkzfk="
    extra-configure: '(--enable-btyacc)))
 
 (define reflex
   (cmmi-package
-   "reflex" "20210808"
+   "reflex" "20230206"
    "https://invisible-mirror.net/archives/$name/$name-$version.tgz"
-   "zwuklONPxFh-JcsxOy-w9KzfSkUZOs20rncYNQhtSWM="
+   "x8krZTESkEFFyQcgWVGkkESY3hKRpmmjQKFHDL7-xg4="
    tools: (list byacc)
    ;; install flex(1) and lex(1) symlinks
    cleanup: (elif*
@@ -402,10 +402,6 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 (define zlib
   (cmmi-package
    "zlib" "1.2.13"
-   ;; FIXME: we are using a vendored 1.2.12.1 tarball
-   ;; because an official one has not been released yet
-   ;; to address CVE-2022-37434
-   ;;"https://zlib.net/$name-$version.tar.gz"
    "https://www.zlib.net/$name-$version.tar.gz"
    "7xnn8kOtBNbM2WEVBFMheAHXF9POYXe0uMysWN0PjHI="
    ;; not autoconf
@@ -423,9 +419,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
 
 (define make
   (cmmi-package
-   "make" "4.3"
+   "make" "4.4.1"
    "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-   "HaL2VGA5mzktijZa2L_IyOv2OTKTGkf8D-AVI_wvARc="
+   "jEFZ5Yh-9NXctqobEiWv6HQWmbV7CaVsPObSe9cKckM="
    ;; can't call exit(3) inside a procedure registered with atexit(3);
    ;; just exit promptly
    prepare: '(sed "-i" -e "s/ exit (MAKE/ _exit (MAKE/g" src/output.c)))
@@ -434,9 +430,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
   (memoize-eq
    (lambda (target-triple)
      (cmmi-package
-      "binutils" "2.39"
+      "binutils" "2.40"
       "https://ftp.gnu.org/gnu/$name/$name-$version.tar.gz"
-      "g5Q75hfCrKvFhSp2oIF1DFidZVlgxPlrAIPx__Mzc3Q="
+      "H_u7A3tuky4UR1_B2tvtJZA1QjUvxSO26kWz57u37QY="
       tools: (list byacc reflex)
       libs:  (list zlib)
       native-cc: $cc-env/for-build
@@ -632,8 +628,9 @@ void __attribute__((visibility (\"hidden\"))) __stack_chk_fail_local(void) { __s
    (cdn-artifact  "Ehn0UUjdTzgdg4EuXHdsTftWfwQYLzjEPKxQ7BjgLYc=" "/src/config" #o644)
    '()))
 
-(define *linux-version* "5.15.78")
-(define *linux-hash* "VgFDYkDtjXgrtlIIv8ayvO0wVNNISDZZIZNCB7d7O3M=")
+(define *linux-version* "5.15.107")
+(define *linux-hash* "m8RXYGixLld8UidVa47iAFRW6ow7RAcRjM3uZl7fWhc=")
+
 
 (define (linux-source version hash)
   (remote-archive
@@ -955,9 +952,9 @@ EOF
 
 (define xz-utils
   (cmmi-package
-   "xz" "5.2.8"
+   "xz" "5.4.2"
    "https://tukaani.org/$name/$name-$version.tar.xz"
-   "nlS6d2D8Jnz6a5CqOuJISQcQbLXYkVuVjcDrmv8fcd4="))
+   "zp3nXWOB1EEHxahme7uekOsMj2mKcylR1mbF5z8t3B0="))
 
 (define xz-tools (binaries xz-utils))
 (define liblzma (libs xz-utils))
@@ -977,12 +974,12 @@ EOF
 
 (define %zstd
   (cc-package
-   "zstd" "1.5.2"
+   "zstd" "1.5.5"
    ;; note: this "release" tarball differs from the automated
    ;; github download release only in gzip timestamp
    ;; (decompressed content is identical)
    "https://github.com/facebook/zstd/releases/download/v$version/zstd-$version.tar.zst"
-   "sDh9PpHkoyz3iz9uCElhGyfqYwe-YejI1LszbUri3vs="
+   "-wcn3AZDSP7tdYtQDAS8aAx1O7pYar33EQzciqIqnf8="
    build: (let ((makeflags '(HAVE_PTHREAD=1
                              HAVE_ZLIB=0
                              HAVE_LZMA=0
@@ -1039,9 +1036,9 @@ EOF
 
 (define libressl
   (cmmi-package
-   "libressl" "3.6.1"
+   "libressl" "3.7.2"
    "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/$name-$version.tar.gz"
-   "xCqFeU8S_koMlfkApEhDGJF0S-cYx4YQb9unp7iUJ7Y="
+   "bEMWKRY2sPWrqVtTFBWzaoA14pu0M3PbS9fO-xO1kSc="
    cleanup: '(ln -s openssl /out/usr/bin/libressl)))
 
 (define libarchive+tools
@@ -1126,8 +1123,8 @@ EOF
 
 (define libs6+tools
   (ska-cmmi-package
-   "s6" "2.11.1.1"
-   "892l0A8KrXddmL9gRfFxhZx76yBXOOcnVnLpXOvqW2s="
+   "s6" "2.11.3.2"
+   "0c_472wgz4WMUN8iMAzAD3NUzqsPsvvrjStDxEgUU8U="
    libs: (list skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps))))
 
@@ -1136,8 +1133,8 @@ EOF
 
 (define libs6rc+tools
   (ska-cmmi-package
-   "s6-rc" "0.5.3.2"
-   "bJh1pjnoMM7WDKVkEFDqgXkgdEHbBnRJWO6gVS_AIlM="
+   "s6-rc" "0.5.4.1"
+   "zfFw-NPBnBKjke_gO5lDCFZbUO-4uuhrFA3IM94_Cfo="
    libs: (list libs6 skalibs libexecline)
    extra-configure: `(,(elconc '--with-sysdeps= $sysroot '/lib/skalibs/sysdeps))))
 
