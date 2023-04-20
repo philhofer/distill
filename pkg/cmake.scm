@@ -63,9 +63,9 @@
 
 (define cmake
   (cc-package
-   "cmake" "3.22.3"
+   "cmake" "3.26.3"
    "https://github.com/Kitware/CMake/releases/download/v$version/$name-$version.tar.gz"
-   "6wjHvPSak94KhxnddxOpVa9jLGMSzTNyvtQb9Ya7uok="
+   "nNfLQrotkR6SQuEZRYIG6P3Ebvh7oddP3sRy2i5SPyw="
    use-native-cc: #t ;; for bootstrap
    libs: (list linux-headers zlib libexpat libressl libzstd libbz2)
    cross: (list cmake-toolchain-file)
